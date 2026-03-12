@@ -856,7 +856,7 @@ const socket = io('http://localhost:3000', {
 | `JWT_SECRET` | JWT 签名密钥 | - |
 | `PORT` | API Server 端口 | `3000` |
 | `SLOCK_SERVER_URL` | WebSocket 地址 | - |
-| `OBSIDIAN_ROOT` | Obsidian Vault 根目录 | - |
+| `OBSIDIAN_ROOT` | 当前 Doc 页面读取的根目录，建议设为 `/home/jwt/JwtVault/slock-clone` | - |
 | `UPLOADS_DIR` | 文件上传目录 | `/var/redshrimp/uploads` |
 | `ANTHROPIC_API_KEY` | Claude API Key | - |
 | `MOONSHOT_API_KEY` | Kimi API Key | - |
