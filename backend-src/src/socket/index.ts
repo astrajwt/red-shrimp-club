@@ -1,111 +1,88 @@
-/**
- * Socket.io WebSocket 配置与事件处理
- *
- * 文件位置: backend-src/src/socket/index.ts
- * 核心功能:
- *   1. WebSocket 连接认证: 使用 JWT (HS256) 验证连接身份
- *   2. 频道房间管理: 客户端加入/离开频道房间，实现消息隔离
- *   3. Agent 心跳转发: 将 Agent 的心跳 ping 转发给 ProcessManager
- *   4. Daemon 日志桥接: 将 ProcessManager 的日志事件广播给所有客户端
- *
- * 事件协议:
- *   客户端 → 服务端: join:channel, leave:channel, agent:heartbeat
- *   服务端 → 客户端: message:new, task:updated, agent:activity, agent:log,
- *                    doc:writing, doc:ready, agent:rate_limited, subagent:action
- */
+// Socket.io setup — real-time message delivery
+// Events:
+//   client→server: join:channel, leave:channel, agent:heartbeat
+//   server→client: message:new, task:updated, agent:activity, agent:log,
+//                  doc:writing, doc:ready, agent:rate_limited, subagent:action
 
 import type { Server, Socket } from 'socket.io'
-import { createHmac } from 'crypto'
-
-/**
- * 轻量 JWT 验证（仅支持 HS256）
- * 与 @fastify/jwt 生成的 token 格式兼容
- * 不依赖完整的 JWT 库，减少 Socket.io 中间件的开销
- *
- * @param token  JWT 字符串 (header.payload.signature)
- * @param secret JWT 密钥
- * @returns 解析后的 payload，包含 sub (用户/Agent ID)
- * @throws 签名不匹配时抛出错误
- */
-function verifyJwt(token: string, secret: string): { sub: string } {
-  const parts = token.split('.')
-  if (parts.length !== 3) throw new Error('Invalid JWT')
-  const [header, payload, sig] = parts
-  // 用相同密钥重新计算签名并比对
-  const expected = createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url')
-  if (expected !== sig) throw new Error('Invalid signature')
-  return JSON.parse(Buffer.from(payload, 'base64url').toString())
-}
-import { queryOne } from '../db/client.js'
+// Singleton io reference — set once in index.ts, used by broadcastMessage
+let _io: Server | null = null
+export function setIo(io: Server) { _io = io }
+import { query, queryOne } from '../db/client.js'
 import { processManager } from '../daemon/process-manager.js'
 
-/** 扩展 Socket 类型，附加认证信息 */
 interface AuthSocket extends Socket {
-  userId?:  string   // 用户 UUID（人类或 Agent）
-  agentId?: string   // 如果连接者是 Agent，记录其 UUID
-  serverId?: string  // 客户端传入的 server UUID
+  userId?:  string
+  agentId?: string
+  serverId?: string
 }
 
-/**
- * 初始化 Socket.io 服务
- * @param io Socket.io Server 实例
- *
- * 设置内容:
- *   1. 连接认证中间件 (JWT 验证 + 身份识别)
- *   2. 频道房间事件处理
- *   3. Agent 心跳处理
- *   4. Daemon 日志 → WebSocket 桥接
- */
+function getChannelId(payload: string | { channelId?: string }): string | null {
+  if (typeof payload === 'string') return payload
+  if (payload && typeof payload.channelId === 'string') return payload.channelId
+  return null
+}
+
 export function setupSocketIO(io: Server): void {
-  // 认证中间件：每个 WebSocket 连接建立时验证 JWT
+  // Auth middleware — local mode accepts anonymous browser clients.
   io.use(async (socket: AuthSocket, next) => {
     const token    = socket.handshake.auth?.token as string
     const serverId = socket.handshake.auth?.serverId as string
-
-    if (!token) return next(new Error('No token'))
+    const localUserId = process.env.REDSHRIMP_LOCAL_USER_ID
+    if (!token) {
+      socket.userId = localUserId
+      socket.serverId = serverId
+      return next()
+    }
 
     try {
-      const payload = verifyJwt(token, process.env.JWT_SECRET!)
-      socket.userId  = payload.sub
+      socket.userId  = localUserId
       socket.serverId = serverId
 
-      // 查询数据库判断连接者是普通用户还是 Agent
+      // Check if it's a user or agent
       const agent = await queryOne<{ id: string }>(
-        'SELECT id FROM agents WHERE id = $1', [payload.sub]
+        'SELECT id FROM agents WHERE id = $1', [token]
       )
-      if (agent) socket.agentId = payload.sub
+      if (agent) socket.agentId = token
 
       next()
     } catch {
-      next(new Error('Invalid token'))
+      socket.userId = localUserId
+      next()
     }
   })
 
   io.on('connection', (socket: AuthSocket) => {
-    // 加入频道房间：客户端进入某个频道时调用，后续该频道的消息只推送给房间内的 socket
-    socket.on('join:channel', (channelId: string) => {
+    // Join channel rooms
+    socket.on('join:channel', (payload: string | { channelId?: string }) => {
+      const channelId = getChannelId(payload)
+      if (!channelId) return
       socket.join(`channel:${channelId}`)
     })
 
-    // 离开频道房间
-    socket.on('leave:channel', (channelId: string) => {
+    socket.on('leave:channel', (payload: string | { channelId?: string }) => {
+      const channelId = getChannelId(payload)
+      if (!channelId) return
       socket.leave(`channel:${channelId}`)
     })
 
-    // Agent 心跳：Agent 进程通过 WebSocket 发送心跳，转发给 ProcessManager 更新时间戳
-    // 安全校验: 只有 socket 对应的 agentId 才能更新自己的心跳
+    // Agent heartbeat — update both in-memory and DB
     socket.on('agent:heartbeat', ({ agentId }: { agentId: string }) => {
       if (socket.agentId === agentId) {
         processManager.updateHeartbeat(agentId)
+        query(
+          `UPDATE agents SET last_heartbeat_at = NOW(), status = 'online' WHERE id = $1`,
+          [agentId]
+        ).catch(() => {})
       }
     })
 
     socket.on('disconnect', () => {
-      // 预留：可在此追踪在线状态
+      // Could track online status here
     })
   })
 
-  // 日志桥接：将 ProcessManager 收集的 Agent 日志广播给所有连接的客户端
+  // Bridge: forward daemon log events to relevant sockets
   processManager.logEmitter.on((entry) => {
     io.emit('agent:log', {
       agentId:   entry.agentId,
@@ -118,13 +95,7 @@ export function setupSocketIO(io: Server): void {
   })
 }
 
-/**
- * 向指定频道房间广播新消息
- * 由消息路由在新消息入库后调用
- * @param io        Socket.io Server 实例
- * @param channelId 频道 UUID
- * @param message   消息对象
- */
-export function broadcastMessage(io: Server, channelId: string, message: unknown): void {
-  io.to(`channel:${channelId}`).emit('message:new', message)
+// Helper: broadcast a new message to a channel room (uses singleton io)
+export function broadcastMessage(channelId: string, message: unknown): void {
+  _io?.to(`channel:${channelId}`).emit('message', { channelId, message })
 }

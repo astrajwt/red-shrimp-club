@@ -1,56 +1,85 @@
-/**
- * @file TasksBoard.tsx — 任务看板页面
- * @description 看板视图展示所有任务，按状态分为三列：
- *   - Open（待处理）→ Doing（进行中/已认领）→ Done（已完成）
- *
- * 核心功能：
- *   1. 三列看板布局，每列显示对应状态的任务卡片
- *   2. 实时更新 — 监听 task:updated 和 task:completed WebSocket 事件自动刷新
- *   3. 任务卡片展示：序列号、标题、认领 agent、关联文档（含读取状态）、技能标签
- *   4. 文档状态标记 — 点击未读文档可标记为已读
- *
- * 组件结构：
- *   - TasksBoard（主组件）— 看板布局 + 数据加载
- *   - TaskCard — 单个任务卡片
- *   - DocStatusDot — 文档状态指示点（writing=黄色脉冲, unread=蓝色, read=灰色）
- */
+// Red Shrimp Lab — Tasks Board (connected to backend)
 
-import { useEffect, useState } from 'react'
-import { tasksApi, type Task, type TaskDoc } from '../lib/api'
+import { useEffect, useRef, useState } from 'react'
+import { agentsApi, tasksApi, channelsApi, type Task, type TaskDoc, type Channel, type Agent } from '../lib/api'
 import { socketClient } from '../lib/socket'
 
-/** 看板列定义：状态 key、显示标签、背景色和文字色 */
 const columns = [
   { key: 'open',      label: 'Open',  color: '#2a2622', textColor: '#9a8888' },
   { key: 'claimed',   label: 'Doing', color: '#1a2535', textColor: '#6bc5e8' },
+  { key: 'reviewing', label: 'Reviewing', color: '#352515', textColor: '#f0b35e' },
   { key: 'completed', label: 'Done',  color: '#1e2e26', textColor: '#7ecfa8' },
 ] as const
 
 type ColKey = typeof columns[number]['key']
 
 export default function TasksBoard() {
-  const [tasks, setTasks] = useState<Task[]>([])                  // 所有任务
-  const [channelId, setChannelId] = useState<string | undefined>() // 可选频道过滤
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [channelId, setChannelId] = useState<string | undefined>()
+  const [channels, setChannels] = useState<Channel[]>([])
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [showNew, setShowNew] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [newChannelId, setNewChannelId] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [todoSummary, setTodoSummary] = useState('')
+  const [subtasksText, setSubtasksText] = useState('')
+  const [todoOwnerAgentId, setTodoOwnerAgentId] = useState('')
+  const [todoCleanLevel, setTodoCleanLevel] = useState('待确认')
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  /** 从后端重新加载任务列表 */
   const reload = () =>
-    tasksApi.list(channelId).then(({ tasks: t }) => setTasks(t))
+    tasksApi.list(channelId).then(({ tasks: t }) => setTasks(t)).catch(() => {})
 
-  // 初始加载 + 监听实时任务变更事件
   useEffect(() => {
     reload()
+    channelsApi.list().then(chs => {
+      setChannels(chs)
+      if (!newChannelId && chs.length > 0) setNewChannelId(chs[0].id)
+    }).catch(() => {})
+    agentsApi.list().then(setAgents).catch(() => {})
 
     const unsub = socketClient.on('task:updated', () => reload())
     const unsub2 = socketClient.on('task:completed', () => reload())
     return () => { unsub(); unsub2() }
   }, [channelId])
 
-  /**
-   * 标记任务关联文档为已读
-   * 调用 API 后乐观更新本地状态（不等待刷新列表）
-   * @param taskId - 任务 ID
-   * @param docId - 文档 ID
-   */
+  useEffect(() => {
+    if (showNew) setTimeout(() => inputRef.current?.focus(), 50)
+  }, [showNew])
+
+  const handleCreate = async () => {
+    const title = newTitle.trim()
+    if (!title || !newChannelId) return
+    setCreating(true)
+    try {
+      const subtasks = subtasksText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => ({ title: line }))
+      await tasksApi.intake({
+        channelId: newChannelId,
+        title,
+        summary: todoSummary.trim() || undefined,
+        ownerAgentId: todoOwnerAgentId || undefined,
+        cleanLevel: todoCleanLevel.trim() || undefined,
+        subtasks,
+      })
+      setNewTitle('')
+      setTodoSummary('')
+      setSubtasksText('')
+      setTodoOwnerAgentId('')
+      setTodoCleanLevel('待确认')
+      setShowNew(false)
+      reload()
+    } catch (e) {
+      console.error('Failed to create task:', e)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const markDocRead = async (taskId: string, docId: string) => {
     await tasksApi.markDocRead(taskId, docId)
     setTasks(prev => prev.map(t => {
@@ -78,21 +107,92 @@ export default function TasksBoard() {
           <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-1"># all</div>
           <div className="text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-1">task board</div>
         </div>
-        <div className="flex gap-2">
-          <button className="border-[3px] border-black bg-[#1a2535] text-[#6bc5e8] text-[12px] uppercase px-4 py-2 hover:bg-[#243548]">
-            filter ▾
-          </button>
-          <button
-            className="border-[3px] border-black bg-[#c0392b] text-black text-[12px] uppercase px-4 py-2 hover:bg-[#e04050]"
-            style={{ transform: 'rotate(0.2deg)' }}
-          >
-            + new task
-          </button>
-        </div>
+        <button
+          onClick={() => setShowNew(v => !v)}
+          className="border-[3px] border-black bg-[#c0392b] text-black text-[12px] uppercase px-4 py-2 hover:bg-[#e04050]"
+          style={{ transform: 'rotate(0.2deg)' }}
+        >
+          + new task
+        </button>
       </div>
 
+      {/* New task form */}
+      {showNew && (
+        <div
+          className="border-[3px] border-black bg-[#1e1a20] mb-5 p-4 flex flex-col gap-3"
+          style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.85)' }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleCreate()
+              if (e.key === 'Escape') setShowNew(false)
+            }}
+            placeholder="task title..."
+            className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[13px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048] w-full"
+          />
+          <textarea
+            value={todoSummary}
+            onChange={e => setTodoSummary(e.target.value)}
+            placeholder="todo summary / user request..."
+            rows={3}
+            className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[12px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048] w-full resize-none"
+          />
+          <textarea
+            value={subtasksText}
+            onChange={e => setSubtasksText(e.target.value)}
+            placeholder={"subtasks, one per line...\nread code\nwrite plan\nprepare review summary"}
+            rows={4}
+            className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[12px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048] w-full resize-none"
+          />
+          <div className="flex items-center gap-3">
+            <select
+              value={newChannelId}
+              onChange={e => setNewChannelId(e.target.value)}
+              className="bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-1 outline-none flex-1"
+            >
+              {channels.map(ch => (
+                <option key={ch.id} value={ch.id}>#{ch.name}</option>
+              ))}
+            </select>
+            <select
+              value={todoOwnerAgentId}
+              onChange={e => setTodoOwnerAgentId(e.target.value)}
+              className="bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-1 outline-none flex-1"
+            >
+              <option value="">unassigned</option>
+              {agents.map(agent => (
+                <option key={agent.id} value={agent.id}>{agent.name}</option>
+              ))}
+            </select>
+            <input
+              value={todoCleanLevel}
+              onChange={e => setTodoCleanLevel(e.target.value)}
+              placeholder="memory clean level"
+              className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[11px] px-2 py-1 outline-none flex-1"
+            />
+            <button
+              onClick={handleCreate}
+              disabled={creating || !newTitle.trim()}
+              className="border-[3px] border-black bg-[#c0392b] text-black text-[12px] uppercase px-4 py-1 hover:bg-[#e04050] disabled:opacity-40"
+            >
+              {creating ? '...' : 'intake'}
+            </button>
+            <button
+              onClick={() => setShowNew(false)}
+              className="text-[#4a4048] text-[12px] hover:text-[#9a8888]"
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Kanban columns */}
-      <div className="grid grid-cols-3 gap-4 items-start">
+      <div className="grid grid-cols-4 gap-4 items-start">
         {columns.map((col) => {
           const colTasks = tasks.filter(t => t.status === col.key)
           return (
@@ -118,8 +218,9 @@ export default function TasksBoard() {
                 <TaskCard
                   key={task.id}
                   task={task}
-                  rotate={i % 2 === 0 ? '-0.25deg' : '0.25deg'}
+                  cardIndex={i}
                   onMarkDocRead={markDocRead}
+                  onAddMemoryNote={reload}
                 />
               ))}
             </div>
@@ -130,26 +231,57 @@ export default function TasksBoard() {
   )
 }
 
-/**
- * TaskCard — 单个任务卡片组件
- * @param task - 任务数据
- * @param rotate - CSS 旋转角度（交替 +/- 0.25deg，模拟手工贴纸效果）
- * @param onMarkDocRead - 标记文档已读的回调
- * 卡片结构：标题栏 → 认领状态 → 关联文档列表 → 技能标签
- */
+// Deterministic wobble values per card index — wide range for handmade scattered look
+const WOBBLE = [
+  { rotate: '-2.1deg',  tx: '-1px', ty: '1px',  shadow: '4px 5px 0 rgba(0,0,0,0.9)' },
+  { rotate:  '1.4deg',  tx:  '2px', ty: '-1px', shadow: '3px 5px 0 rgba(0,0,0,0.85)' },
+  { rotate: '-0.8deg',  tx: '-2px', ty:  '2px', shadow: '5px 4px 0 rgba(0,0,0,0.9)' },
+  { rotate:  '2.5deg',  tx:  '1px', ty:  '1px', shadow: '3px 6px 0 rgba(0,0,0,0.8)' },
+  { rotate: '-1.6deg',  tx:  '2px', ty: '-2px', shadow: '4px 4px 0 rgba(0,0,0,0.88)' },
+  { rotate:  '0.6deg',  tx: '-1px', ty:  '2px', shadow: '5px 5px 0 rgba(0,0,0,0.85)' },
+  { rotate: '-2.8deg',  tx:  '1px', ty: '-1px', shadow: '3px 5px 0 rgba(0,0,0,0.9)' },
+  { rotate:  '1.9deg',  tx: '-2px', ty:  '1px', shadow: '4px 6px 0 rgba(0,0,0,0.82)' },
+]
+
 function TaskCard({
-  task, rotate, onMarkDocRead,
+  task, cardIndex, onMarkDocRead, onAddMemoryNote,
 }: {
   task: Task
-  rotate: string
+  cardIndex: number
   onMarkDocRead: (taskId: string, docId: string) => void
+  onAddMemoryNote: () => void
 }) {
+  const [showNoteForm, setShowNoteForm] = useState(false)
+  const [noteTitle, setNoteTitle] = useState('')
+  const [noteContent, setNoteContent] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const wobble = WOBBLE[cardIndex % WOBBLE.length]
+
+  const submitNote = async () => {
+    const title = noteTitle.trim()
+    const content = noteContent.trim()
+    if (!title || !content || savingNote) return
+
+    setSavingNote(true)
+    try {
+      await tasksApi.addMemoryNote(task.id, { title, content })
+      setNoteTitle('')
+      setNoteContent('')
+      setShowNoteForm(false)
+      onAddMemoryNote()
+    } catch (err) {
+      console.error('Failed to append memory note:', err)
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
   return (
     <div
-      className="border-[3px] border-black bg-[#191619]"
+      className="border-[3px] border-black bg-[#191619] transition-transform hover:rotate-0"
       style={{
-        transform: `rotate(${rotate})`,
-        boxShadow: '3px 4px 0 rgba(0,0,0,0.85), 0 0 10px rgba(50,120,220,0.10)',
+        transform: `rotate(${wobble.rotate}) translate(${wobble.tx}, ${wobble.ty})`,
+        boxShadow: `${wobble.shadow}, 0 0 10px rgba(50,120,220,0.10)`,
       }}
     >
       {/* Title bar */}
@@ -162,7 +294,7 @@ function TaskCard({
       {task.claimed_by_agent_id ? (
         <div className="border-b-[3px] border-black px-3 py-1 bg-[#120f13] flex items-center gap-2">
           <span className="w-2 h-2 bg-[#c0392b] border border-black" />
-          <span className="text-[12px] text-[#6bc5e8]">@ agent</span>
+          <span className="text-[12px] text-[#6bc5e8]">@ shrimp</span>
         </div>
       ) : (
         <div className="border-b-[3px] border-black px-3 py-1 bg-[#120f13]">
@@ -202,15 +334,55 @@ function TaskCard({
           ))}
         </div>
       )}
+
+      <div className="border-t-[3px] border-black px-3 py-2 bg-[#141018]">
+        <button
+          onClick={() => setShowNoteForm(v => !v)}
+          className="w-full border-[2px] border-black bg-[#1a2535] text-[#6bc5e8] text-[10px] uppercase px-2 py-1 hover:bg-[#243548] transition-colors"
+        >
+          {showNoteForm ? 'hide memory note' : '+ memory note'}
+        </button>
+        {showNoteForm && (
+          <div className="mt-2 space-y-2">
+            <input
+              value={noteTitle}
+              onChange={e => setNoteTitle(e.target.value)}
+              placeholder="note title..."
+              className="w-full bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[11px] px-2 py-1.5 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048]"
+            />
+            <textarea
+              value={noteContent}
+              onChange={e => setNoteContent(e.target.value)}
+              rows={4}
+              placeholder="plan, summary, reading note..."
+              className="w-full bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[11px] px-2 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048] resize-none"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={submitNote}
+                disabled={savingNote || !noteTitle.trim() || !noteContent.trim()}
+                className="border-[2px] border-black bg-[#c0392b] text-black text-[10px] uppercase px-3 py-1 hover:bg-[#e04050] disabled:opacity-40"
+              >
+                {savingNote ? '...' : 'append'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowNoteForm(false)
+                  setNoteTitle('')
+                  setNoteContent('')
+                }}
+                className="text-[10px] text-[#4a4048] hover:text-[#9a8888] uppercase"
+              >
+                cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-/**
- * DocStatusDot — 文档状态指示点
- * @param status - 文档状态：writing（黄色脉冲）/ unread（蓝色）/ read（灰色）
- * writing 状态带脉冲动画，提示 agent 正在写入
- */
 function DocStatusDot({ status }: { status: TaskDoc['status'] }) {
   if (status === 'writing') {
     return (

@@ -1,81 +1,57 @@
-/**
- * 红虾俱乐部 — LLM 统一客户端
- *
- * 文件位置: backend-src/src/daemon/llm-client.ts
- * 核心功能:
- *   1. 多 LLM 提供商统一抽象: Claude (Anthropic) / Kimi (Moonshot) / GPT (OpenAI)
- *   2. 根据模型名前缀自动路由到对应提供商
- *   3. 429/529 限流自动重试: 指数退避 (3s → 6s → 12s → ... → 60s 上限)
- *   4. 每次请求 120s 超时保护
- *   5. 按 run 记录累计 token 用量到数据库
- *
- * 设计说明:
- *   - Anthropic 使用官方 SDK（支持流式，但此处用同步 messages.create）
- *   - Moonshot / OpenAI 共用 OpenAI 兼容接口，仅 baseURL 和 apiKey 不同
- *   - 重试逻辑优先使用 Retry-After 响应头
- */
+// Red Shrimp Lab — LLM Client
+// Unified provider abstraction for Claude / Kimi / Codex (OpenAI-compatible)
+//
+// Key features:
+//   - Provider routing by model name prefix
+//   - 429 rate-limit: exponential backoff (3s → 6s → 12s → ... → max 60s)
+//   - Timeout: 120s per request
+//   - Per-run token usage reporting back to DB
 
 import Anthropic from '@anthropic-ai/sdk'
 import { query } from '../db/client.js'
 
-// ─── 类型定义 ─────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-/** LLM 补全请求参数 */
 export interface CompletionRequest {
-  prompt: string              // 用户提示词
-  model?: string              // 模型 ID，不指定则使用默认 Claude 模型
-  systemPrompt?: string       // 系统提示词（设定角色/行为）
-  agentId?: string            // 关联的 Agent UUID
-  runId?: string              // 关联的 run UUID，用于 token 用量追踪
-  maxTokens?: number          // 最大输出 token 数
-  temperature?: number        // 温度参数（0~1，越高越随机）
+  prompt: string
+  model?: string            // defaults to CLAUDE_DEFAULT_MODEL
+  systemPrompt?: string
+  agentId?: string
+  runId?: string
+  maxTokens?: number
+  temperature?: number
 }
 
-/** LLM 补全响应 */
 export interface CompletionResponse {
-  text: string                // 生成的文本
-  tokensUsed: number          // 消耗的总 token 数（输入+输出）
-  model: string               // 实际使用的模型 ID
-  provider: Provider          // 提供商标识
+  text: string
+  tokensUsed: number
+  model: string
+  provider: Provider
 }
 
-/** 支持的 LLM 提供商 */
 type Provider = 'anthropic' | 'moonshot' | 'openai'
 
-// ─── 提供商默认配置 ──────────────────────────────────────────────────────────
+// ─── Provider config ──────────────────────────────────────────────────────────
 
 const CLAUDE_DEFAULT_MODEL  = 'claude-sonnet-4-6'
 const KIMI_DEFAULT_MODEL    = 'moonshot-v1-8k'
 const OPENAI_DEFAULT_MODEL  = 'gpt-4o'
 
-/** 退避重试参数 */
-const BACKOFF_BASE_MS  = 3_000    // 初始等待 3 秒
-const BACKOFF_MAX_MS   = 60_000   // 最大等待 60 秒
-const BACKOFF_RETRIES  = 6        // 最多重试 6 次
+// Backoff config
+const BACKOFF_BASE_MS  = 3_000
+const BACKOFF_MAX_MS   = 60_000
+const BACKOFF_RETRIES  = 6
 
-// ─── 根据模型名前缀识别提供商 ────────────────────────────────────────────────
+// ─── Resolve provider from model string ──────────────────────────────────────
 
-/**
- * 通过模型 ID 前缀判断所属提供商
- * @param model 模型 ID，如 "claude-sonnet-4-6", "moonshot-v1-8k", "gpt-4o"
- * @returns 提供商标识
- */
 function resolveProvider(model: string): Provider {
   if (model.startsWith('claude'))     return 'anthropic'
   if (model.startsWith('moonshot'))   return 'moonshot'
-  return 'openai'  // gpt-*, o1-*, codex-* 等
+  return 'openai'  // gpt-*, o1-*, codex-*
 }
 
-// ─── 指数退避重试包装器 ────────────────────────────────────────────────────
+// ─── Exponential backoff retry ───────────────────────────────────────────────
 
-/**
- * 带指数退避的重试包装器
- * 仅对 429 (限流) 和 529 (过载) 错误进行重试
- * 如果响应包含 Retry-After 头，优先使用该值作为等待时间
- *
- * @param fn 需要重试的异步函数
- * @returns fn 的返回值
- */
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   let attempt = 0
   let delay = BACKOFF_BASE_MS
@@ -86,9 +62,9 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
     } catch (err: any) {
       const status = err?.status ?? err?.response?.status
 
-      // 仅对限流 (429) 和服务器过载 (529) 进行重试
+      // Rate limited (429) or server overload (529) — retry with backoff
       if ((status === 429 || status === 529) && attempt < BACKOFF_RETRIES) {
-        // 优先使用 Retry-After 响应头
+        // Respect Retry-After header if present
         const retryAfter = err?.headers?.['retry-after']
         const waitMs = retryAfter
           ? Number(retryAfter) * 1000
@@ -97,7 +73,6 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
         console.warn(`[llm] ${status} rate limit — retrying in ${waitMs}ms (attempt ${attempt + 1}/${BACKOFF_RETRIES})`)
         await sleep(waitMs)
 
-        // 退避时间翻倍，但不超过上限
         delay = Math.min(delay * 2, BACKOFF_MAX_MS)
         attempt++
         continue
@@ -108,38 +83,43 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** 延迟辅助函数 */
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-// ─── LLM 客户端类 ─────────────────────────────────────────────────────────────
+// ─── LLM Client class ─────────────────────────────────────────────────────────
 
-/**
- * LLM 统一客户端
- * 职责: 封装多提供商的 LLM 调用差异，提供统一的 complete() 接口
- * 全局单例，由 llmClient 导出
- */
 class LLMClient {
-  /** Anthropic 官方 SDK 实例 */
   private anthropic: Anthropic
 
   constructor() {
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
-      timeout: 120_000,  // 120 秒超时
+      timeout: 120_000,
     })
   }
 
-  // ── 统一入口 ──────────────────────────────────────────────────
+  // ── Streaming entry point (yields text chunks) ─────────────────────────────
 
-  /**
-   * 发送 LLM 补全请求
-   * @param req 请求参数
-   * @returns 补全响应（含生成文本和 token 用量）
-   *
-   * 流程: 解析模型 → 路由到对应提供商 → 带重试调用 → 持久化 token 用量
-   */
+  async *streamComplete(req: CompletionRequest): AsyncGenerator<string> {
+    const model = req.model ?? CLAUDE_DEFAULT_MODEL
+    const provider = resolveProvider(model)
+
+    switch (provider) {
+      case 'anthropic':
+        yield* this.streamClaude(model, req)
+        break
+      case 'moonshot':
+        yield* this.streamOpenAICompat(model, req, 'moonshot')
+        break
+      case 'openai':
+        yield* this.streamOpenAICompat(model, req, 'openai')
+        break
+    }
+  }
+
+  // ── Main entry point ───────────────────────────────────────────────────────
+
   async complete(req: CompletionRequest): Promise<CompletionResponse> {
     const model = req.model ?? CLAUDE_DEFAULT_MODEL
     const provider = resolveProvider(model)
@@ -158,7 +138,7 @@ class LLMClient {
         break
     }
 
-    // 如果关联了 run，将 token 用量累加到数据库
+    // Persist token usage to the run record if runId provided
     if (req.runId) {
       await this.updateRunTokens(req.runId, result!.tokensUsed)
     }
@@ -166,14 +146,8 @@ class LLMClient {
     return result!
   }
 
-  // ── Anthropic Claude 调用（使用官方 SDK） ──────────────────────
+  // ── Claude (Anthropic SDK) ─────────────────────────────────────────────────
 
-  /**
-   * 调用 Anthropic Claude API
-   * @param model 模型 ID (如 claude-sonnet-4-6)
-   * @param req   请求参数
-   * @returns 标准化的补全响应
-   */
   private async callClaude(
     model: string,
     req: CompletionRequest
@@ -185,7 +159,6 @@ class LLMClient {
       messages: [{ role: 'user', content: req.prompt }],
     })
 
-    // 从响应内容块中提取文本部分
     const text = msg.content
       .filter(b => b.type === 'text')
       .map(b => (b as { type: 'text'; text: string }).text)
@@ -199,17 +172,9 @@ class LLMClient {
     }
   }
 
-  // ── OpenAI 兼容接口调用（Moonshot / OpenAI） ──────────────────
+  // ── OpenAI-compatible (Moonshot / OpenAI) ─────────────────────────────────
+  // Both use the same chat completions interface; differentiated by base URL.
 
-  /**
-   * 调用 OpenAI 兼容的 chat completions 接口
-   * Moonshot (Kimi) 和 OpenAI 共用同一接口格式，仅 baseURL 和 apiKey 不同
-   *
-   * @param model    模型 ID
-   * @param req      请求参数
-   * @param provider 提供商标识（决定 baseURL 和 apiKey）
-   * @returns 标准化的补全响应
-   */
   private async callOpenAICompat(
     model: string,
     req: CompletionRequest,
@@ -225,7 +190,6 @@ class LLMClient {
         ? process.env.MOONSHOT_API_KEY!
         : process.env.OPENAI_API_KEY!
 
-    // 构建消息数组（可选系统提示 + 用户提示）
     const messages: Array<{ role: string; content: string }> = []
     if (req.systemPrompt) {
       messages.push({ role: 'system', content: req.systemPrompt })
@@ -244,10 +208,9 @@ class LLMClient {
         max_tokens:  req.maxTokens ?? 4096,
         temperature: req.temperature ?? 0.7,
       }),
-      signal: AbortSignal.timeout(120_000),  // 120 秒超时
+      signal: AbortSignal.timeout(120_000),
     })
 
-    // 非 2xx 响应转换为 Error 对象（保留 status 和 headers 供重试逻辑使用）
     if (!res.ok) {
       const err: any = new Error(`HTTP ${res.status}`)
       err.status = res.status
@@ -268,12 +231,92 @@ class LLMClient {
     }
   }
 
-  // ── 辅助方法 ──────────────────────────────────────────────────
+  // ── Claude streaming ──────────────────────────────────────────────────────
 
-  /**
-   * 累加 token 用量到 agent_runs 记录
-   * 使用 += 而非 = ，因为一个 run 可能包含多次 LLM 调用
-   */
+  private async *streamClaude(
+    model: string,
+    req: CompletionRequest
+  ): AsyncGenerator<string> {
+    const stream = this.anthropic.messages.stream({
+      model,
+      max_tokens: req.maxTokens ?? 8192,
+      system:     req.systemPrompt,
+      messages: [{ role: 'user', content: req.prompt }],
+    })
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yield event.delta.text
+      }
+    }
+  }
+
+  // ── OpenAI-compatible streaming ──────────────────────────────────────────
+
+  private async *streamOpenAICompat(
+    model: string,
+    req: CompletionRequest,
+    provider: 'moonshot' | 'openai'
+  ): AsyncGenerator<string> {
+    const baseURL = provider === 'moonshot'
+      ? 'https://api.moonshot.cn/v1'
+      : 'https://api.openai.com/v1'
+
+    const apiKey = provider === 'moonshot'
+      ? process.env.MOONSHOT_API_KEY!
+      : process.env.OPENAI_API_KEY!
+
+    const messages: Array<{ role: string; content: string }> = []
+    if (req.systemPrompt) messages.push({ role: 'system', content: req.systemPrompt })
+    messages.push({ role: 'user', content: req.prompt })
+
+    const res = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: req.maxTokens ?? 4096,
+        temperature: req.temperature ?? 0.7,
+        stream: true,
+      }),
+      signal: AbortSignal.timeout(120_000),
+    })
+
+    if (!res.ok || !res.body) {
+      const err: any = new Error(`HTTP ${res.status}`)
+      err.status = res.status
+      throw err
+    }
+
+    const decoder = new TextDecoder()
+    const reader = res.body.getReader()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6)
+        if (data === '[DONE]') return
+        try {
+          const json = JSON.parse(data)
+          const delta = json.choices?.[0]?.delta?.content
+          if (delta) yield delta
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
   private async updateRunTokens(runId: string, tokensUsed: number) {
     await query(
       `UPDATE agent_runs
@@ -283,13 +326,9 @@ class LLMClient {
     ).catch(err => console.error('[llm] Failed to update run tokens:', err.message))
   }
 
-  // ── 模型列表 ──────────────────────────────────────────────────
+  // ── Model listing ──────────────────────────────────────────────────────────
+  // Returns available models grouped by provider — used by SettingsPage
 
-  /**
-   * 返回按提供商分组的可用模型列表
-   * 前端设置页面用于展示模型选择下拉框
-   * tier 字段用于 UI 中的标签显示（premium/standard/fast）
-   */
   availableModels() {
     return {
       anthropic: [
@@ -311,6 +350,6 @@ class LLMClient {
   }
 }
 
-// ─── 全局单例导出 ─────────────────────────────────────────────────────────────
+// ─── Singleton export ─────────────────────────────────────────────────────────
 
 export const llmClient = new LLMClient()

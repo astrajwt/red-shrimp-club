@@ -1,30 +1,9 @@
-/**
- * @file ActivityPage.tsx — 实时活动日志页面
- * @description Agent 运行日志的实时监控界面，两栏布局：
- *   左侧 — 日志流（时间 | Agent 名称 | 级别标签 | 日志内容）
- *   右侧 — Agent 状态树（名称、运行时、状态、context 用量百分比）
- *
- * 核心功能：
- *   1. 初始加载每个 agent 最近 50 条历史日志，合并排序后显示最新 200 条
- *   2. WebSocket 实时接收 agent:log 事件，追加到日志流（保持最近 500 条）
- *   3. 按 agent 过滤日志
- *   4. 自动滚动到最新日志
- *   5. 不同日志级别有不同的颜色样式（ACTION/FILE/SPAWN/WARN/ERROR）
- *
- * 组件结构：
- *   - ActivityPage — 主组件（头部筛选栏 + 两栏内容）
- *   - toRow() — 将 AgentLog API 数据转为统一的 LogRow 格式
- */
+// Red Shrimp Lab — Activity / Agent Logs Page (connected to backend)
 
 import { useEffect, useRef, useState } from 'react'
 import { agentsApi, type Agent, type AgentLog } from '../lib/api'
 import { socketClient, type AgentLogEvent, type AgentStatusEvent } from '../lib/socket'
 
-/**
- * 根据日志级别返回颜色配置
- * @param level - 日志级别字符串
- * @returns { bg: 背景色, text: 文字色, border: 边框色 }
- */
 const levelStyle = (level: string) => {
   if (level === 'ACTION') return { bg: '#3a1520', text: '#e04050', border: '#c0392b' }
   if (level === 'FILE')   return { bg: '#0f1a18', text: '#3abfa0', border: '#1e3d30' }
@@ -34,41 +13,38 @@ const levelStyle = (level: string) => {
   return                         { bg: '#1e1a20', text: '#9a8888', border: '#2a2228' }
 }
 
-/** Agent 颜色调色板 — 按索引循环分配，确保同一 agent 颜色一致 */
 const agentColors = ['#c0392b', '#6bc5e8', '#3abfa0', '#d4a017', '#a08cd8']
 
-/** 统一的日志行数据结构（兼容 API 历史日志和 WebSocket 实时日志） */
 interface LogRow {
   id: string
-  time: string        // ISO 时间戳
+  time: string
   agentId: string
-  agentName: string   // Agent 显示名称
-  level: string       // 日志级别
-  content: string     // 日志内容
-  runId?: string      // 关联的 run ID
-  isLive?: boolean    // 是否为实时推送的日志（区别于历史加载）
+  agentName: string
+  level: string
+  content: string
+  runId?: string
+  isLive?: boolean
 }
 
 export default function ActivityPage() {
-  const [agents, setAgents] = useState<Agent[]>([])                         // Agent 列表
-  const [logs, setLogs] = useState<LogRow[]>([])                            // 日志行列表
-  const [filterAgentId, setFilterAgentId] = useState<string | null>(null)   // 当前过滤的 agent ID（null=全部）
-  const [agentColors_, setAgentColors_] = useState<Record<string, string>>({})  // agentId → 颜色映射
-  const bottomRef = useRef<HTMLDivElement>(null)                            // 日志列表底部锚点
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [logs, setLogs] = useState<LogRow[]>([])
+  const [filterAgentId, setFilterAgentId] = useState<string | null>(null)
+  const [agentColors_, setAgentColors_] = useState<Record<string, string>>({})
+  const bottomRef = useRef<HTMLDivElement>(null)
 
-  /** 获取指定 agent 的颜色，未分配时返回灰色 */
+  // Assign consistent colors per agent
   const getColor = (agentId: string) => agentColors_[agentId] ?? '#9a8888'
 
-  // 初始化：加载 agent 列表 → 为每个 agent 分配颜色 → 加载历史日志
+  // Load agents + recent logs
   useEffect(() => {
-    agentsApi.list().then(({ agents: a }) => {
+    agentsApi.list().then((a) => {
       setAgents(a)
-      // 按顺序分配循环颜色
       const colorMap: Record<string, string> = {}
       a.forEach((ag, i) => { colorMap[ag.id] = agentColors[i % agentColors.length] })
       setAgentColors_(colorMap)
 
-      // 并行加载每个 agent 的最近 50 条日志，合并后按时间排序，保留最新 200 条
+      // Load last 100 logs for each agent
       Promise.all(a.map(ag =>
         agentsApi.logs(ag.id, 50).then(({ logs: ls }) =>
           ls.map(l => toRow(l, ag.name))
@@ -82,7 +58,7 @@ export default function ActivityPage() {
     })
   }, [])
 
-  // WebSocket 实时日志流：收到 agent:log 事件后追加到日志列表（最多保留 500 条）
+  // Live log stream via WebSocket
   useEffect(() => {
     const unsub = socketClient.on('agent:log', (evt: AgentLogEvent) => {
       const agentName = agents.find(a => a.id === evt.agentId)?.name ?? evt.agentId.slice(0, 8)
@@ -96,12 +72,12 @@ export default function ActivityPage() {
         runId: evt.runId,
         isLive: true,
       }
-      setLogs(prev => [...prev.slice(-499), row])  // 滑动窗口保留最新 500 条
+      setLogs(prev => [...prev.slice(-499), row])
     })
     return unsub
   }, [agents])
 
-  // 新日志到来时自动滚动到底部
+  // Auto-scroll to bottom on new live logs
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
@@ -212,7 +188,7 @@ export default function ActivityPage() {
           }}
         >
           <div className="border-b-[3px] border-black px-4 py-2 bg-[#1e1a20]">
-            <div className="text-[13px] uppercase text-[#4a4048]">agent tree</div>
+            <div className="text-[13px] uppercase text-[#4a4048]">shrimp</div>
           </div>
           <div className="px-3 py-3 space-y-2">
             {agents.map(agent => {
@@ -224,7 +200,7 @@ export default function ActivityPage() {
                     <span
                       className="w-3 h-3 border border-black shrink-0"
                       style={{
-                        background: agent.status === 'running' ? color : '#3a3535',
+                        background: agent.status === 'running' ? '#3abfa0' : '#3a3535',
                         animation: agent.status === 'running' ? 'pulse 1.2s ease-in-out infinite' : 'none',
                       }}
                     />
@@ -241,7 +217,7 @@ export default function ActivityPage() {
               )
             })}
             {agents.length === 0 && (
-              <div className="text-[12px] text-[#4a4048] text-center py-4">no agents</div>
+              <div className="text-[12px] text-[#4a4048] text-center py-4">暂无shrimp</div>
             )}
           </div>
         </div>
@@ -250,12 +226,6 @@ export default function ActivityPage() {
   )
 }
 
-/**
- * 将 API 返回的 AgentLog 转为统一的 LogRow 格式
- * @param log - 后端返回的日志条目
- * @param agentName - Agent 显示名称（API 日志中不含 agent 名称，需外部传入）
- * @returns LogRow 格式的日志行
- */
 function toRow(log: AgentLog, agentName: string): LogRow {
   return {
     id: log.id,

@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS messages (
   sender_name  VARCHAR(100) NOT NULL,
   content      TEXT NOT NULL,
   seq          BIGINT NOT NULL,  -- per-channel sequence number
+  attachments  JSONB NOT NULL DEFAULT '[]',   -- [{file_id, filename, mime_type, url}]
+  mentions     JSONB NOT NULL DEFAULT '[]',   -- [{id, name, type}]
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX ON messages (channel_id, seq DESC);
@@ -98,6 +100,7 @@ CREATE TABLE IF NOT EXISTS machines (
   server_id       UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
   name            VARCHAR(100) NOT NULL,
   api_key_hash    TEXT NOT NULL UNIQUE,
+  api_key         TEXT,                        -- raw key (shown on connect page)
   status          VARCHAR(20) NOT NULL DEFAULT 'offline',  -- online/offline
   hostname        TEXT,
   os              TEXT,
@@ -128,6 +131,9 @@ CREATE TABLE IF NOT EXISTS agents (
   last_heartbeat_at           TIMESTAMPTZ,
   -- Workspace
   workspace_path              TEXT,         -- e.g. ~/JwtVault/slock-clone/
+  -- Role / hierarchy
+  role                        VARCHAR(20) DEFAULT 'general',       -- general/developer/tester/pm/ops
+  parent_agent_id             UUID REFERENCES agents(id) ON DELETE SET NULL,
   -- Timestamps
   created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -157,7 +163,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   status            VARCHAR(20) NOT NULL DEFAULT 'running',  -- running/completed/handoff/failed
   tokens_used       INT NOT NULL DEFAULT 0,
   tokens_limit      INT NOT NULL DEFAULT 200000,
-  handoff_file_path TEXT,  -- path to markdown handoff file in Obsidian vault
+  context_snapshot  JSONB,  -- saved state on handoff
   started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   ended_at          TIMESTAMPTZ
 );
@@ -170,7 +176,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   channel_id      UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
   title           TEXT NOT NULL,
   number          INT NOT NULL,  -- per-channel task number (#t1, #t2, ...)
-  status          VARCHAR(20) NOT NULL DEFAULT 'open',  -- open/claimed/pending_review/completed
+  status          VARCHAR(20) NOT NULL DEFAULT 'open',  -- open/claimed/reviewing/completed
   claimed_by_id   UUID,  -- user or agent id
   claimed_by_type VARCHAR(10),  -- human/agent
   claimed_by_name VARCHAR(100),
@@ -252,6 +258,15 @@ CREATE TABLE IF NOT EXISTS cron_jobs (
   enabled        BOOLEAN NOT NULL DEFAULT true,
   last_run_at    TIMESTAMPTZ,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ──────────────── Agent Channel Read Positions ────────────────
+-- Separate from channel_reads (which is for human users)
+CREATE TABLE IF NOT EXISTS agent_channel_reads (
+  agent_id      UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  channel_id    UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  last_read_seq BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (agent_id, channel_id)
 );
 
 -- ──────────────── LLM Provider Keys ────────────────

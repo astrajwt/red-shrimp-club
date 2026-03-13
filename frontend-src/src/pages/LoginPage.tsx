@@ -1,45 +1,28 @@
-/**
- * @file LoginPage.tsx — 登录/注册页面
- * @description 认证入口页面，提供登录和注册两种模式切换。
- *   采用红虾俱乐部视觉风格（深色背景 + 红色主题 + 像素风虾 Logo）。
- *
- * @props onSuccess — 登录/注册成功后的回调（实际由 store 状态驱动页面切换）
- *
- * 组件结构：
- *   - 左上角品牌 Logo（PixelShrimp + 中英文标题）
- *   - 居中表单卡片（标题栏 + 输入区 + 提交按钮 + 模式切换 + 版本号）
- *   - Field 子组件 — 可复用的输入框（带聚焦高亮效果）
- *   - PixelShrimp 子组件 — 像素风格虾 SVG 图标
- */
+// Red Shrimp Lab — Login Page (connected to backend)
 
 import { useState } from 'react'
 import { useAuthStore } from '../store/auth'
+import { useServiceStatus } from '../lib/service-status'
 
 export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
-  // ── 本地表单状态 ──
-  const [mode, setMode] = useState<'login' | 'register'>('login')  // 当前模式：登录 or 注册
+  const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [displayName, setDisplayName] = useState('')  // 仅注册模式使用
-  const [error, setError] = useState<string | null>(null)  // 错误信息
-  const [busy, setBusy] = useState(false)  // 提交中锁定标志
+  const [displayName, setDisplayName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const { login, register } = useAuthStore()
+  const service = useServiceStatus()
 
-  /**
-   * 表单提交处理
-   * 根据当前 mode 调用 auth store 的 login/register 方法
-   * 成功后触发 onSuccess 回调；失败时显示错误信息
-   */
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
       if (mode === 'login') {
-        await login(username, password)
+        await login(username)
       } else {
-        await register(username, password, displayName || undefined)
+        await register(username, displayName || undefined)
       }
       onSuccess?.()
     } catch (err: any) {
@@ -100,18 +83,11 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
             />
           )}
           <Field
-            label="username"
-            placeholder="your_handle"
+            label="email"
+            placeholder="you@example.com"
             type="text"
             value={username}
             onChange={setUsername}
-          />
-          <Field
-            label="password"
-            placeholder="••••••••"
-            type="password"
-            value={password}
-            onChange={setPassword}
           />
 
           {/* Error */}
@@ -121,10 +97,16 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
             </div>
           )}
 
+          {!service.reachable && (
+            <div className="border-[2px] border-[#d4a017] bg-[#1f180a] px-3 py-2 text-[12px] text-[#f0d27a]">
+              {service.message ?? 'Backend unavailable. Start the backend before signing in.'}
+            </div>
+          )}
+
           {/* Submit */}
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || !service.reachable}
             className="w-full border-[3px] border-black bg-[#c0392b] text-black text-[15px] uppercase tracking-[0.08em] py-3 mt-2 hover:bg-[#e04050] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             style={{ transform: 'rotate(0.15deg)' }}
           >
@@ -134,7 +116,7 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
           {/* Mode toggle */}
           <div className="border-t-[3px] border-black/30 pt-4 text-center">
             <span className="text-[12px] text-[#6bc5e8]">
-              {mode === 'login' ? 'no account?' : 'have an account?'}
+              {mode === 'login' ? 'first time here?' : 'already have an account?'}
             </span>{' '}
             <button
               type="button"
@@ -155,15 +137,6 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
   )
 }
 
-/**
- * Field — 表单输入框子组件
- * @param label - 输入框标签（显示在上方，11px 大写）
- * @param placeholder - 占位符文本
- * @param type - 输入类型（text / password）
- * @param value - 受控值
- * @param onChange - 值变更回调
- * 聚焦时边框变红 + 添加发光阴影效果
- */
 function Field({
   label, placeholder, type, value, onChange
 }: {
@@ -193,11 +166,6 @@ function Field({
   )
 }
 
-/**
- * PixelShrimp — 像素风格红虾 SVG 图标
- * @param size - 图标尺寸（默认 52px），13x13 像素网格按比例放大
- * 使用 imageRendering: pixelated 保持像素锐利边缘
- */
 function PixelShrimp({ size = 52 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 13 13" style={{ imageRendering: 'pixelated' }}>

@@ -1,35 +1,26 @@
-/**
- * Agent 路由 — /api/agents
- *
- * 文件位置: backend-src/src/routes/agents.ts
- * 核心功能:
- *   GET    /              — 列出 server 中的所有 Agent
- *   POST   /              — 创建新 Agent
- *   GET    /:id           — 获取 Agent 详情
- *   PATCH  /:id/activity  — 更新 Agent 活动状态
- *   POST   /:id/start     — 启动 Agent（调用 ProcessManager）
- *   POST   /:id/stop      — 停止 Agent
- *   POST   /:id/heartbeat — Agent 心跳上报（Agent 进程自身调用）
- *   GET    /:id/logs      — 获取 Agent 日志（分页）
- *
- * 与 Daemon 的关系:
- *   start/stop 操作通过 processManager 管理子进程
- *   heartbeat 同时更新 DB 和 processManager 的内存状态
- */
+// Agents routes — /api/agents
+// GET    /              list agents in server
+// POST   /              create agent
+// GET    /:id           get agent detail
+// PATCH  /:id/activity  update activity status
+// POST   /:id/start     start agent (calls daemon)
+// POST   /:id/stop      stop agent
+// POST   /:id/heartbeat agent heartbeat ping
+// GET    /:id/logs      get agent logs (paginated)
+// GET    /servers        list servers for current user
 
 import type { FastifyPluginAsync } from 'fastify'
+import { join } from 'path'
+import { readFile, writeFile } from 'fs/promises'
 import { query, queryOne } from '../db/client.js'
-import { processManager } from '../daemon/process-manager.js'
-import type { AgentConfig } from '../daemon/process-manager.js'
+import { processManager, SUPPORTED_RUNTIMES } from '../daemon/process-manager.js'
+import type { AgentConfig, RuntimeId } from '../daemon/process-manager.js'
+import { initAgentWorkspace } from '../daemon/workspace-init.js'
+import { llmClient } from '../daemon/llm-client.js'
 
 export const agentRoutes: FastifyPluginAsync = async (app) => {
 
   // ── GET /api/agents ───────────────────────────────────────────────
-  /**
-   * 列出当前用户所在 server 的所有 Agent
-   * 通过 server_members JOIN 确保权限隔离
-   * @param serverId 可选，指定 server 过滤
-   */
   app.get('/', { preHandler: [app.authenticate] }, async (req) => {
     const { serverId } = req.query as { serverId?: string }
     const caller = req.user as { sub: string }
@@ -37,7 +28,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     const agents = await query(
       `SELECT a.id, a.name, a.description, a.model_provider, a.model_id,
               a.runtime, a.status, a.activity, a.activity_detail,
-              a.last_heartbeat_at, a.workspace_path, a.created_at
+              a.last_heartbeat_at, a.workspace_path, a.created_at,
+              a.role, a.parent_agent_id
        FROM agents a
        JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
        WHERE ($2::uuid IS NULL OR a.server_id = $2::uuid)
@@ -48,37 +40,86 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ── POST /api/agents ──────────────────────────────────────────────
-  /**
-   * 创建新 Agent
-   * 默认使用 Claude Sonnet 模型和 claude runtime
-   * Agent 创建后处于 offline 状态，需手动调用 start 启动
-   */
-  app.post('/', { preHandler: [app.authenticate] }, async (req) => {
-    const { serverId, name, description, modelId, modelProvider, runtime, workspacePath } =
+  app.post('/', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const caller = req.user as { sub: string }
+    let { serverId, machineId, name, description, role, modelId, modelProvider, runtime, workspacePath, systemPrompt } =
       req.body as {
-        serverId: string; name: string; description?: string;
-        modelId?: string; modelProvider?: string;
-        runtime?: string; workspacePath?: string;
+        serverId?: string; machineId?: string; name: string; description?: string;
+        role?: string; modelId?: string; modelProvider?: string;
+        runtime?: string; workspacePath?: string; systemPrompt?: string;
       }
+
+    if (!name?.trim()) return reply.code(400).send({ error: 'name required' })
+
+    // Validate runtime
+    const resolvedRuntime = (runtime ?? 'claude') as RuntimeId
+    if (!SUPPORTED_RUNTIMES.includes(resolvedRuntime)) {
+      return reply.code(400).send({ error: `Unsupported runtime: ${runtime}. Supported: ${SUPPORTED_RUNTIMES.join(', ')}` })
+    }
+
+    // Auto-resolve serverId from user's primary server if not provided
+    if (!serverId) {
+      const server = await queryOne<{ id: string }>(
+        `SELECT s.id FROM servers s
+         JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $1
+         LIMIT 1`,
+        [caller.sub]
+      )
+      if (!server) return reply.code(400).send({ error: 'No server found for user' })
+      serverId = server.id
+    }
+
+    // Auto-assign workspace path if not provided
+    // Default: <project>/shrimps/<name>  (i.e. backend-src/../shrimps/)
+    const agentsBaseDir = process.env.AGENTS_WORKSPACE_DIR ?? join(process.cwd(), '..', 'shrimps')
+    const resolvedWorkspace = workspacePath?.trim()
+      || join(agentsBaseDir, name.trim().toLowerCase().replace(/\s+/g, '-'))
 
     const [agent] = await query(
       `INSERT INTO agents
-         (server_id, name, description, model_id, model_provider, runtime, workspace_path)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (server_id, machine_id, name, description, model_id, model_provider, runtime, workspace_path, role)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
-        serverId, name, description ?? null,
-        modelId ?? 'claude-sonnet-4-6',     // 默认模型
-        modelProvider ?? 'anthropic',        // 默认提供商
-        runtime ?? 'claude',                 // 默认运行时
-        workspacePath ?? null,
+        serverId, machineId ?? null, name.trim(), description ?? null,
+        modelId ?? 'claude-sonnet-4-6',
+        modelProvider ?? 'anthropic',
+        runtime ?? 'claude',
+        resolvedWorkspace,
+        role ?? 'general',
       ]
     )
+
+    // Add agent to server's #all channel
+    const allChannel = await queryOne<{ id: string }>(
+      `SELECT id FROM channels WHERE server_id = $1 AND name = 'all' LIMIT 1`,
+      [serverId]
+    )
+    if (allChannel) {
+      await query(
+        `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [allChannel.id, agent.id]
+      )
+    }
+
+    // Initialize workspace with MEMORY.md, CLAUDE.md, HEARTBEAT.md
+    const serverUrl = process.env.SERVER_URL ?? `http://localhost:${process.env.PORT ?? 3001}`
+    initAgentWorkspace(resolvedWorkspace, {
+      agentId:      agent.id,
+      agentName:    agent.name,
+      description:  agent.description ?? null,
+      role:         (role as any) ?? 'general',
+      modelId:      agent.model_id,
+      serverUrl,
+      channelName:  '#all',
+      teamContext:  '红虾俱乐部 (Red Shrimp Lab) — multi-agent collaboration system. Team includes human users and AI agents communicating via mcp__chat tools.',
+      customPrompt: systemPrompt ?? undefined,
+    }).catch(err => console.error(`[workspace] Init failed for ${agent.name}:`, err.message))
+
     return { agent }
   })
 
   // ── GET /api/agents/:id ───────────────────────────────────────────
-  /** 获取单个 Agent 的完整信息 */
   app.get('/:id', { preHandler: [app.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const agent = await queryOne('SELECT * FROM agents WHERE id = $1', [id])
@@ -87,11 +128,6 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ── PATCH /api/agents/:id/activity ───────────────────────────────
-  /**
-   * 更新 Agent 活动状态
-   * Agent 进程在执行不同任务时调用此接口更新状态
-   * 前端据此显示 Agent 当前在做什么（如 "正在编码"、"正在分析" 等）
-   */
   app.patch('/:id/activity', { preHandler: [app.authenticate] }, async (req) => {
     const { id } = req.params as { id: string }
     const { activity, activityDetail } = req.body as {
@@ -106,16 +142,6 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ── POST /api/agents/:id/start ────────────────────────────────────
-  /**
-   * 启动 Agent 进程
-   * 流程:
-   *   1. 从 DB 读取 Agent 配置
-   *   2. 生成临时 API Key（格式: agent_{id}_{timestamp}）
-   *   3. 构建 AgentConfig 并调用 processManager.spawn()
-   *   4. 更新 DB 状态为 'starting'
-   *
-   * 前置条件: 需要配置 SLOCK_SERVER_URL 环境变量
-   */
   app.post('/:id/start', { preHandler: [app.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const agent = await queryOne<{
@@ -124,18 +150,27 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     }>('SELECT * FROM agents WHERE id = $1', [id])
 
     if (!agent) return reply.code(404).send({ error: 'Agent not found' })
-    if (!process.env.SLOCK_SERVER_URL) {
-      return reply.code(500).send({ error: 'SLOCK_SERVER_URL not configured' })
+
+    if (processManager.isRunning(id)) {
+      await query(
+        `UPDATE agents SET status = 'running', last_heartbeat_at = COALESCE(last_heartbeat_at, NOW()) WHERE id = $1`,
+        [id]
+      )
+      return { ok: true, alreadyRunning: true, message: `Agent ${agent.name} is already running` }
     }
 
-    // 为本次 Agent 会话生成临时 API Key
+    // Use SERVER_URL if set, fall back to local server URL
+    const serverUrl = process.env.SERVER_URL
+      ?? `http://${process.env.HOST ?? '127.0.0.1'}:${process.env.PORT ?? 3001}`
+
+    // Generate a temp API key for this agent session
     const apiKey = `agent_${id}_${Date.now()}`
 
     const config: AgentConfig = {
       id:            agent.id,
       name:          agent.name,
       machineId:     agent.machine_id ?? 'local',
-      serverUrl:     process.env.SLOCK_SERVER_URL,
+      serverUrl,
       apiKey,
       workspacePath: agent.workspace_path ?? process.cwd(),
       runtime:       agent.runtime,
@@ -148,7 +183,6 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ── POST /api/agents/:id/stop ─────────────────────────────────────
-  /** 停止 Agent 进程，更新 DB 状态为 offline */
   app.post('/:id/stop', { preHandler: [app.authenticate] }, async (req) => {
     const { id } = req.params as { id: string }
     await processManager.stop(id)
@@ -157,27 +191,18 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ── POST /api/agents/:id/heartbeat ────────────────────────────────
-  /**
-   * Agent 心跳上报
-   * 由 Agent 子进程每 30 秒调用一次
-   * 注意: 此接口无 authenticate 中间件，因为 Agent 使用自己的认证方式
-   *
-   * 功能:
-   *   1. 更新 processManager 内存中的心跳时间
-   *   2. 更新 DB 中的 last_heartbeat_at 和状态
-   *   3. 可选: 上报 token 用量（用于 handoff 阈值监控）
-   */
+  // Called by the Agent process itself every 30s
   app.post('/:id/heartbeat', async (req) => {
     const { id } = req.params as { id: string }
     const { tokenUsage } = req.body as { tokenUsage?: number }
 
     processManager.updateHeartbeat(id)
     await query(
-      `UPDATE agents SET last_heartbeat_at = NOW(), status = 'online' WHERE id = $1`,
+      `UPDATE agents SET last_heartbeat_at = NOW() WHERE id = $1`,
       [id]
     )
 
-    // 如果上报了 token 用量，更新最新的 running 状态的 run 记录
+    // Track token usage for handoff threshold monitoring
     if (tokenUsage !== undefined) {
       await query(
         `UPDATE agent_runs SET tokens_used = $1
@@ -189,14 +214,100 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
 
     return { ok: true }
   })
+  // ── POST /api/agents/:id/reset-context ───────────────────────────
+  // Summarize current context into MEMORY.md, then stop the agent so it
+  // restarts fresh with the condensed memory on next start.
+  app.post('/:id/reset-context', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const agent = await queryOne<{
+      id: string; name: string; workspace_path: string | null; model_id: string;
+    }>('SELECT id, name, workspace_path, model_id FROM agents WHERE id = $1', [id])
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' })
+
+    const workspacePath = agent.workspace_path ?? ''
+    const memoryPath = join(workspacePath, 'MEMORY.md')
+
+    // Read existing MEMORY.md
+    let currentMemory = ''
+    try { currentMemory = await readFile(memoryPath, 'utf-8') } catch { /* no file yet */ }
+
+    // Read recent logs for context
+    const logs = await query(
+      `SELECT level, content FROM agent_logs WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 80`,
+      [id]
+    )
+    const logText = (logs as any[]).reverse()
+      .map((l: any) => `[${l.level}] ${l.content}`)
+      .join('\n')
+
+    // Ask LLM to write a condensed MEMORY.md
+    const resp = await llmClient.complete({
+      model: agent.model_id,
+      prompt: `You are compacting the memory of AI shrimp "${agent.name}".
+
+Current MEMORY.md:
+\`\`\`
+${currentMemory || '(empty)'}
+\`\`\`
+
+Recent activity logs (newest at bottom):
+\`\`\`
+${logText || '(none)'}
+\`\`\`
+
+Write an updated MEMORY.md that:
+1. Preserves the Identity section exactly
+2. Summarizes key findings, decisions, and completed work from the logs
+3. Notes any in-progress tasks or important state
+4. Stays under 150 lines
+
+Output only the raw Markdown content for MEMORY.md, nothing else.`,
+    })
+
+    // Write compacted memory
+    await writeFile(memoryPath, resp.text, 'utf-8')
+
+    // Log the compaction event
+    await query(
+      `INSERT INTO agent_logs (agent_id, level, content) VALUES ($1, 'info', $2)`,
+      [id, `[compact] Context summarized (${resp.tokensUsed} tokens used). MEMORY.md updated. Restart to apply.`]
+    )
+
+    // Stop the agent process (it will reload from fresh MEMORY.md on next start)
+    try { await processManager.stop(id) } catch { /* already stopped */ }
+    await query(`UPDATE agents SET status = 'offline', activity = NULL WHERE id = $1`, [id])
+
+    return { ok: true, tokensUsed: resp.tokensUsed }
+  })
+
+  // ── DELETE /api/agents/:id ────────────────────────────────────────
+  app.delete('/:id', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const caller = req.user as { sub: string }
+    const { id } = req.params as { id: string }
+
+    // Verify ownership (agent must belong to caller's server)
+    const rows = await query(
+      `SELECT a.id, a.workspace_path, a.status FROM agents a
+       JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
+       WHERE a.id = $2`,
+      [caller.sub, id]
+    )
+    if (!rows.length) return reply.code(404).send({ error: 'not found' })
+
+    const agent = rows[0] as { id: string; workspace_path: string | null; status: string }
+
+    // Stop if running
+    try { await processManager.stop(id) } catch { /* already stopped */ }
+
+    // Delete DB records (logs and runs cascade via FK)
+    await query(`DELETE FROM agent_logs WHERE agent_id = $1`, [id])
+    await query(`DELETE FROM agent_runs WHERE agent_id = $1`, [id])
+    await query(`DELETE FROM agents WHERE id = $1`, [id])
+
+    return { ok: true }
+  })
 
   // ── GET /api/agents/:id/logs ──────────────────────────────────────
-  /**
-   * 获取 Agent 日志（支持向前分页）
-   * @param limit  每页条数，默认 100，最大 500
-   * @param before 时间游标，返回 created_at < before 的日志
-   * @returns { logs: LogEntry[] } 按时间正序排列
-   */
   app.get('/:id/logs', { preHandler: [app.authenticate] }, async (req) => {
     const { id } = req.params as { id: string }
     const { limit = '100', before } = req.query as { limit?: string; before?: string }
