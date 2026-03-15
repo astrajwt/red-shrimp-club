@@ -2,6 +2,7 @@ import { query, queryOne } from '../db/client.js'
 import { broadcastMessage } from '../socket/index.js'
 import { notifyAgentMembers } from './agent-delivery.js'
 import { relayInternalMessageToFeishu } from './feishu-relay.js'
+import { notifyNewMessage } from './push-notifications.js'
 
 export type MessageSenderType = 'human' | 'agent'
 
@@ -55,16 +56,37 @@ export async function createStoredMessage(params: CreateStoredMessageParams) {
   )
 
   broadcastMessage(channelId, msg)
+
+  // Push notification for new messages
+  void notifyNewMessage({
+    channelId,
+    senderId,
+    senderName,
+    senderType,
+    content: msg.content as string,
+  }).catch(() => {})
+
   // Only notify agents for human messages.
   // Agent-to-agent: agents pick up via receive_message polling + @mention.
   // This prevents chain reactions where agent A's reply wakes agent B.
   if (senderType === 'human') {
+    // Append attachment info (with absolute paths) so agents can access uploaded files
+    let agentContent = msg.content as string
+    if (attachments.length > 0) {
+      const uploadsDir = process.env.UPLOADS_DIR ?? '/var/redshrimp/uploads'
+      const attLines = (attachments as Array<{ filename: string; mime_type: string; url: string }>).map(a => {
+        const storageName = a.url.split('/').pop()
+        const absPath = `${uploadsDir}/${storageName}`
+        return `- ${a.filename} (${a.mime_type}) → ${absPath}`
+      })
+      agentContent += `\n\n[附件]\n${attLines.join('\n')}`
+    }
     await notifyAgentMembers({
       channelId,
       senderId,
       senderName,
       senderType,
-      content: msg.content,
+      content: agentContent,
       timestamp: msg.created_at,
     })
   }

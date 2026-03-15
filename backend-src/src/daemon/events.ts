@@ -111,6 +111,10 @@ export function emitTaskDocAdded(actorId: string, taskId: string, docPath: strin
   eventBus.emit({ type: 'task:doc_added', agentId: actorId, payload: { taskId, docPath }, timestamp: new Date() })
 }
 
+export function emitTaskUpdated(actorId: string, taskId: string, channelId?: string) {
+  eventBus.emit({ type: 'task:updated', agentId: actorId, payload: { taskId, channelId }, timestamp: new Date() })
+}
+
 export function emitTokenHandoff(
   agentId: string, fromRunId: string, toRunId: string,
   snapshot: Record<string, unknown>

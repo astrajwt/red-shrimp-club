@@ -11,6 +11,7 @@ import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { query, queryOne } from '../db/client.js'
 import { machineConnectionManager } from '../daemon/machine-connection.js'
+import { resolveServerUrl } from '../server-url.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Resolve daemon path relative to project root (backend-src/../daemon-src/dist/index.js)
@@ -73,12 +74,14 @@ export const machineRoutes: FastifyPluginAsync = async (app) => {
       [server.id, autoName, keyHash, rawKey]
     )
 
-    const serverUrl = process.env.SERVER_URL ?? `http://localhost:${process.env.PORT ?? 3001}`
+    const serverUrl = resolveServerUrl(req)
 
     return {
       ...machine,
       api_key: rawKey,  // returned once only
-      connect_command: `node ${process.env.DAEMON_PATH || DEFAULT_DAEMON_PATH} --server-url ${serverUrl} --api-key ${rawKey}`,
+      server_url: serverUrl,
+      connect_command: `npx ${serverUrl}/daemon/redshrimp-daemon.tgz --server-url ${serverUrl} --api-key ${rawKey}`,
+      env_config: `REDSHRIMP_SERVER_URL=${serverUrl}\nREDSHRIMP_API_KEY=${rawKey}`,
     }
   })
 
@@ -124,11 +127,13 @@ export const machineRoutes: FastifyPluginAsync = async (app) => {
     const rawKey = machine.api_key
     if (!rawKey) return reply.code(400).send({ error: 'API key not available — please delete and recreate the machine' })
 
-    const serverUrl = process.env.SERVER_URL ?? `http://localhost:${process.env.PORT ?? 3001}`
+    const serverUrl = resolveServerUrl(req)
 
     return {
       api_key: rawKey,
-      connect_command: `node ${process.env.DAEMON_PATH || DEFAULT_DAEMON_PATH} --server-url ${serverUrl} --api-key ${rawKey}`,
+      server_url: serverUrl,
+      connect_command: `npx ${serverUrl}/daemon/redshrimp-daemon.tgz --server-url ${serverUrl} --api-key ${rawKey}`,
+      env_config: `REDSHRIMP_SERVER_URL=${serverUrl}\nREDSHRIMP_API_KEY=${rawKey}`,
     }
   })
 
@@ -207,8 +212,8 @@ export const machineRoutes: FastifyPluginAsync = async (app) => {
     const liveRuntimes = machineConnectionManager.getAllRuntimes()
     return [
       { id: 'claude', name: 'Claude Code', binary: 'claude', available: liveRuntimes.includes('claude'), defaultModel: 'claude-sonnet-4-6' },
-      { id: 'codex',  name: 'Codex CLI',   binary: 'codex',  available: liveRuntimes.includes('codex'),  defaultModel: 'o4-mini' },
-      { id: 'kimi',   name: 'Kimi CLI',    binary: 'kimi',   available: liveRuntimes.includes('kimi'),   defaultModel: 'kimi-k2-5' },
+      { id: 'codex',  name: 'Codex CLI',   binary: 'codex',  available: liveRuntimes.includes('codex'),  defaultModel: 'gpt-5.4' },
+      { id: 'kimi',   name: 'Kimi CLI',    binary: 'kimi',   available: liveRuntimes.includes('kimi'),   defaultModel: 'kimi-code/kimi-for-coding' },
     ]
   })
 }

@@ -12,7 +12,7 @@ function toLocalTime(iso) {
 }
 var args = process.argv.slice(2);
 var agentId = "";
-var serverUrl = "http://localhost:3001";
+var serverUrl = process.env.REDSHRIMP_SERVER_URL?.trim() || process.env.SERVER_URL?.trim() || `http://127.0.0.1:${process.env.PORT ?? 3001}`;
 var authToken = "";
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--agent-id" && args[i + 1]) agentId = args[++i];
@@ -78,7 +78,7 @@ server.tool(
   "Receive new messages. Use block=true to wait for new messages. Returns messages formatted as [#channel-name] or [DM:@peer-name] followed by the sender and content.",
   {
     block: z.boolean().default(true).describe("Whether to block (wait) for new messages"),
-    timeout_ms: z.number().default(59e3).describe("How long to wait in ms when blocking (default 59s, just under MCP tool call timeout)")
+    timeout_ms: z.number().default(45e3).describe("How long to wait in ms when blocking")
   },
   async ({ block, timeout_ms }) => {
     try {
@@ -252,12 +252,12 @@ server.tool(
     channel: z.string().describe("Target channel, e.g. '#all'"),
     title: z.string().describe("Parent todo title"),
     summary: z.string().optional().describe("Summary of the todo"),
-    owner_agent_id: z.string().optional().describe("Primary owner agent id"),
+    owner_agent_id: z.string().optional().describe("Primary owner agent id or name/mention. Defaults to the calling agent if omitted."),
     clean_level: z.string().optional().describe("Current user-agreed memory cleanliness standard"),
     subtasks: z.array(
       z.object({
         title: z.string().describe("Subtask title"),
-        assignee_agent_id: z.string().optional().describe("Assignee agent id")
+        assignee_agent_id: z.string().optional().describe("Assignee agent id or name/mention")
       })
     ).default([]).describe("Subtasks to create under the todo")
   },
@@ -292,18 +292,18 @@ Root memory: ${data.bundle.docPath}`
 );
 server.tool(
   "append_todo_note",
-  "Append a derived markdown note to an existing todo. Use this for plans, summaries, reading notes, or review notes so every derived markdown stays under the same todo.",
+  "Append a derived markdown note to the current todo. Use this for plans, summaries, reading notes, or review notes so every derived markdown stays under the same todo. If task_id is omitted, the server will try to use the agent's current active task automatically.",
   {
-    task_id: z.string().describe("The parent todo task id"),
+    task_id: z.string().optional().describe("The parent todo task id. Optional if the agent currently has exactly one active task."),
     title: z.string().describe("Markdown note title"),
     content: z.string().describe("Markdown note content")
   },
   async ({ task_id, title, content }) => {
     try {
-      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/tasks/${task_id}/memory-note`, {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/tasks/memory-note`, {
         method: "POST",
         headers: commonHeaders,
-        body: JSON.stringify({ title, content })
+        body: JSON.stringify({ task_id, title, content })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -312,7 +312,7 @@ server.tool(
       return {
         content: [{
           type: "text",
-          text: `Todo note linked: ${data.note.docPath}`
+          text: `Todo note linked to #t${data.task.number}: ${data.note.docPath}`
         }]
       };
     } catch (err) {
@@ -325,7 +325,7 @@ server.tool(
   "List tasks on a channel's task board. Returns tasks with their number (#t1, #t2...), title, status, and assignee.",
   {
     channel: z.string().describe("The channel whose task board to view \u2014 e.g. '#engineering', '#proj-slock'"),
-    status: z.enum(["all", "open", "claimed", "reviewing", "completed"]).default("all").describe("Filter by status (default: all)")
+    status: z.enum(["all", "todo", "in_progress", "in_review", "done"]).default("all").describe("Filter by status (default: all)")
   },
   async ({ channel, status }) => {
     try {
@@ -371,12 +371,13 @@ ${formatted}`
 );
 server.tool(
   "create_tasks",
-  "Create one or more tasks on a channel's task board. Returns the created task numbers.",
+  "Create one or more tasks on a channel's task board. Tasks are assigned immediately when created. If assignee_agent_id is omitted, the task is assigned to the calling agent. The assignee can be given as agent id, plain name, or @mention.",
   {
     channel: z.string().describe("The channel to create tasks in \u2014 e.g. '#engineering'"),
     tasks: z.array(
       z.object({
-        title: z.string().describe("Task title")
+        title: z.string().describe("Task title"),
+        assignee_agent_id: z.string().optional().describe("Explicit assignee agent id, plain name, or @mention. Defaults to the calling agent if omitted.")
       })
     ).describe("Array of tasks to create")
   },
@@ -393,7 +394,9 @@ server.tool(
           content: [{ type: "text", text: `Error: ${data.error}` }]
         };
       }
-      const created = data.tasks.map((t) => `#t${t.taskNumber} "${t.title}"`).join("\n");
+      const created = data.tasks
+        .map((t) => `#t${t.taskNumber} "${t.title}"${t.assigneeName ? ` \u2192 @${t.assigneeName}` : ""}`)
+        .join("\n");
       return {
         content: [
           {
@@ -411,96 +414,82 @@ ${created}`
   }
 );
 server.tool(
+  "create_task_room",
+  "Create or reopen a task-specific group channel and invite the relevant members. Useful when Donovan or Brandeis need a dedicated room for a task discussion.",
+  {
+    channel: z.string().describe("The parent task-board channel that owns the task — e.g. '#all'"),
+    task_number: z.number().describe("The task number to create a room for (e.g. 138)"),
+    participant_agent_ids: z.array(z.string()).optional().describe("Optional extra agent ids, plain names, or @mentions to invite into the room.")
+  },
+  async ({ channel, task_number, participant_agent_ids }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/task-room`, {
+        method: "POST",
+        headers: commonHeaders,
+        body: JSON.stringify({ channel, task_number, participant_agent_ids })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          content: [{ type: "text", text: `Error: ${data.error}` }]
+        };
+      }
+      const invitedAgents = data.invitedAgents?.length
+        ? `Agents: ${data.invitedAgents.map((name) => `@${name}`).join(", ")}`
+        : "Agents: none";
+      const invitedHumans = `Humans inherited from ${channel}: ${data.invitedHumans ?? 0}`;
+      return {
+        content: [{
+          type: "text",
+          text: `${data.created ? "Created" : "Reopened"} task room #${data.channel.name} for #t${task_number}.\n${invitedAgents}\n${invitedHumans}`
+        }]
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Error: ${err.message}` }]
+      };
+    }
+  }
+);
+server.tool(
   "claim_tasks",
-  "Claim one or more tasks by their number. Returns which claims succeeded and which failed (e.g. already claimed by someone else).",
+  "Disabled in explicit-assignment mode. Tasks must be assigned by a human reviewer.",
   {
     channel: z.string().describe("The channel whose tasks to claim \u2014 e.g. '#engineering'"),
     task_numbers: z.array(z.number()).describe("Task numbers to claim (e.g. [1, 3, 5])")
   },
-  async ({ channel, task_numbers }) => {
-    try {
-      const res = await fetch(
-        `${serverUrl}/internal/agent/${agentId}/tasks/claim`,
-        {
-          method: "POST",
-          headers: commonHeaders,
-          body: JSON.stringify({ channel, task_numbers })
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        return {
-          content: [{ type: "text", text: `Error: ${data.error}` }]
-        };
-      }
-      const lines = data.results.map((r) => {
-        if (r.success) {
-          return `#t${r.taskNumber}: claimed`;
-        }
-        return `#t${r.taskNumber}: FAILED \u2014 ${r.reason || "already claimed"}`;
-      });
-      const succeeded = data.results.filter((r) => r.success).length;
-      const failed = data.results.length - succeeded;
-      let summary = `${succeeded} claimed`;
-      if (failed > 0) summary += `, ${failed} failed`;
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Claim results (${summary}):
-${lines.join("\n")}`
-          }
-        ]
-      };
-    } catch (err) {
-      return {
-        content: [{ type: "text", text: `Error: ${err.message}` }]
-      };
-    }
+  async () => {
+    return {
+      content: [{
+        type: "text",
+        text: "Error: Tasks must be explicitly assigned by a human. claim_tasks is disabled."
+      }]
+    };
   }
 );
 server.tool(
   "unclaim_task",
-  "Release your claim on a task, setting it back to open.",
+  "Disabled in explicit-assignment mode. Assigned tasks cannot be unclaimed by agents.",
   {
     channel: z.string().describe("The channel \u2014 e.g. '#engineering'"),
     task_number: z.number().describe("The task number to unclaim (e.g. 3)")
   },
-  async ({ channel, task_number }) => {
-    try {
-      const res = await fetch(
-        `${serverUrl}/internal/agent/${agentId}/tasks/unclaim`,
-        {
-          method: "POST",
-          headers: commonHeaders,
-          body: JSON.stringify({ channel, task_number })
-        }
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        return {
-          content: [{ type: "text", text: `Error: ${data.error}` }]
-        };
-      }
-      return {
-        content: [
-          { type: "text", text: `#t${task_number} unclaimed \u2014 now open.` }
-        ]
-      };
-    } catch (err) {
-      return {
-        content: [{ type: "text", text: `Error: ${err.message}` }]
-      };
-    }
+  async () => {
+    return {
+      content: [{
+        type: "text",
+        text: "Error: Tasks must be explicitly assigned by a human. unclaim_task is disabled."
+      }]
+    };
   }
 );
 server.tool(
   "update_task_status",
-  "Update a task's progress status. Valid statuses: open, claimed, reviewing, completed. Agents should normally stop at reviewing and wait for human completion.",
+  "Update task progress status for a task already assigned to you. Valid transitions: todo\u2192in_progress, in_progress\u2192in_review, in_progress\u2192done, in_review\u2192in_progress, in_review\u2192done.",
   {
     channel: z.string().describe("The channel \u2014 e.g. '#engineering'"),
     task_number: z.number().describe("The task number to update (e.g. 3)"),
-    status: z.enum(["open", "claimed", "reviewing", "completed"]).describe("The new status")
+    status: z.enum(["todo", "in_progress", "in_review", "done"]).describe("The new status")
   },
   async ({ channel, task_number, status }) => {
     try {
@@ -530,5 +519,46 @@ server.tool(
     }
   }
 );
+server.tool(
+  "create_bulletin",
+  "Create a bulletin (便签/公告). The bulletin is saved to the board and also written as a flash note in the vault. Use category 'sticky' for personal notes, 'chrono' for timeline updates, 'ops' for operational status, 'report' for reports, 'announcement' for announcements.",
+  {
+    category: z.enum(["sticky", "chrono", "ops", "report", "announcement"]).describe("Bulletin category"),
+    title: z.string().describe("Bulletin title"),
+    content: z.string().optional().describe("Bulletin body content (markdown supported)"),
+    priority: z.enum(["urgent", "normal", "low"]).default("normal").describe("Priority level"),
+    linked_url: z.string().optional().describe("Optional external link"),
+    pinned: z.boolean().default(false).describe("Whether to pin the bulletin"),
+  },
+  async ({ category, title, content, priority, linked_url, pinned }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/bulletins`, {
+        method: "POST",
+        headers: commonHeaders,
+        body: JSON.stringify({ category, title, content, priority, linked_url, pinned })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { content: [{ type: "text", text: `Error: ${data.error}` }] };
+      }
+      const b = data.bulletin;
+      let text = `Bulletin created: "${b.title}" [${b.category}]`;
+      if (b.linked_file) text += `\nVault flash note: ${b.linked_file}`;
+      return { content: [{ type: "text", text }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+    }
+  }
+);
+// Gracefully handle EPIPE when parent process is killed
+process.stdout.on('error', (err) => {
+  if (err.code === 'EPIPE') process.exit(0);
+});
+process.stdin.on('error', (err) => {
+  if (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED') process.exit(0);
+});
+process.on('SIGTERM', () => process.exit(0));
+process.on('SIGINT', () => process.exit(0));
+
 var transport = new StdioServerTransport();
 await server.connect(transport);

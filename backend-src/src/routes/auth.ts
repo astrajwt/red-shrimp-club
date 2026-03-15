@@ -7,13 +7,19 @@ import { randomUUID, createHash } from 'crypto'
 import { z } from 'zod'
 import { query, queryOne } from '../db/client.js'
 
+function normalizeIdentity(value: string): string {
+  const trimmed = value.trim().toLowerCase()
+  if (!trimmed) return trimmed
+  return trimmed.includes('@') ? trimmed : `${trimmed}@local.dev`
+}
+
 const LoginSchema = z.object({
-  email: z.string().email(),
+  identity: z.string().trim().min(1).max(200),
 })
 
 const RegisterSchema = z.object({
-  name:  z.string().min(1).max(100),
-  email: z.string().email(),
+  name:  z.string().trim().min(1).max(100),
+  email: z.string().min(1).max(200).transform(normalizeIdentity),
 })
 
 const ACCESS_TOKEN_EXP  = '15m'
@@ -23,7 +29,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /api/auth/register ──────────────────────────────────────
   app.post('/register', async (req, reply) => {
-    const body = RegisterSchema.parse(req.body)
+    const parsed = RegisterSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'Invalid registration input',
+        details: parsed.error.flatten(),
+      })
+    }
+    const body = parsed.data
 
     // Check email not taken
     const existing = await queryOne('SELECT id FROM users WHERE email = $1', [body.email])
@@ -59,12 +72,27 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /api/auth/login ─────────────────────────────────────────
   app.post('/login', async (req, reply) => {
-    const body = LoginSchema.parse(req.body)
+    const parsed = LoginSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'Invalid login input',
+        details: parsed.error.flatten(),
+      })
+    }
+    const body = parsed.data
+    const normalizedIdentity = normalizeIdentity(body.identity)
+    const loweredIdentity = body.identity.trim().toLowerCase()
 
     const user = await queryOne<{
       id: string; name: string; email: string; password_hash: string;
       email_verified: boolean; role: string;
-    }>('SELECT * FROM users WHERE email = $1', [body.email])
+    }>(
+      `SELECT * FROM users
+       WHERE email = $1
+          OR lower(name) = $2
+       LIMIT 1`,
+      [normalizedIdentity, loweredIdentity]
+    )
 
     if (!user) return reply.code(401).send({ error: 'Account not found' })
 

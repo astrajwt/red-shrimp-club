@@ -148,6 +148,16 @@ body {
   border-radius: 0;
 }
 
+/* KaTeX dark theme overrides */
+.katex { color: #e7dfd3; font-size: 1em; }
+.katex .base { color: #e7dfd3; }
+.katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; padding: 0.25em 0; }
+.katex-display > .katex { color: #f0b35e; }
+.katex .katex-html { color: inherit; }
+.katex .mord, .katex .mbin, .katex .mrel, .katex .mop, .katex .mopen, .katex .mclose, .katex .mpunct { color: inherit; }
+.katex .sqrt > .root { color: #6bc5e8; }
+.katex .frac-line { border-bottom-color: #6a6068; }
+
 /* Thin scrollbars */
 ::-webkit-scrollbar       { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: #120f13; }

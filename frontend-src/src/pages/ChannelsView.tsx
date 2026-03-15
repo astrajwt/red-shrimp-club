@@ -9,17 +9,21 @@ import {
 import { markSent } from '../lib/sent-tracker'
 import { AgentAvatar } from '../components/AgentAvatar'
 import { MenuButton, MenuShell } from '../components/Menu'
-import { isImeComposing } from '../lib/ime'
+import { isImeComposing, useImeGuard } from '../lib/ime'
 import { socketClient } from '../lib/socket'
 import { useAuthStore } from '../store/auth'
 import DocumentViewer from './DocumentViewer'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 
 type WorkspaceSectionKey = 'memory' | 'knowledge' | 'notes' | 'docs'
 
 export default function ChannelsView({ requestedChannelId, onOpenDoc }: { requestedChannelId?: string | null; onOpenDoc?: (path: string) => void }) {
   const { user } = useAuthStore()
+  const { onCompositionStart, onCompositionEnd, isComposingRef } = useImeGuard()
   const [channels, setChannels]     = useState<Channel[]>([])
   const [dms, setDMs]               = useState<Channel[]>([])
   const [activeId, setActiveId]     = useState<string | null>(null)
@@ -882,8 +886,10 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
               value={input}
               onChange={handleInputChange}
               onPaste={handlePaste}
+              onCompositionStart={onCompositionStart}
+              onCompositionEnd={onCompositionEnd}
               onKeyDown={e => {
-                if (isImeComposing(e)) return
+                if (isImeComposing(e) || isComposingRef.current) return
                 if (e.key === 'Backspace') {
                   const cursor = inputRef.current?.selectionStart ?? input.length
                   const selEnd = inputRef.current?.selectionEnd ?? cursor
@@ -1341,11 +1347,24 @@ function MessageContent({
     }
     return seg
   })
-  // Auto-detect vault paths like 03_knowlage/..., 02_project/..., 04_routine/... and wrap as vault links
   if (onOpenDoc) {
+    // 1) Strip absolute vault root prefix so all paths become vault-relative
+    //    Matches patterns like /home/.../JwtVault/ or any OBSIDIAN_ROOT-style absolute path
     processed = processed.replace(
-      /(?:^|\s)`?((?:0[0-6]_\w+\/)[^\s`\])<]+\.md)`?/gm,
-      (match, path) => match.replace(path, `[${path}](vault://${path})`)
+      /(?:\/[\w.-]+)*\/JwtVault\//g,
+      ''
+    )
+    // 2) Auto-detect vault-relative paths (00_hub/..., 03_knowledge/..., etc.) and wrap as vault links
+    //    Matches both backtick-wrapped (`path.md`) and bare paths
+    //    Supports .md and common file extensions
+    processed = processed.replace(
+      /`((?:\d{2}_\w+\/)[^\s`\])<,;]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|pdf))`/gm,
+      (_match, path) => `[${path}](vault://${path})`
+    )
+    // Also match bare paths (not in backticks, not already in markdown link syntax)
+    processed = processed.replace(
+      /(?<![[(\/`\w])((?:\d{2}_\w+\/)[^\s`\])<,;]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|pdf))(?=[\s,;)\]】}`]|$)/gm,
+      (_match, path) => `[${path}](vault://${path})`
     )
   }
 
@@ -1353,7 +1372,8 @@ function MessageContent({
     <div className="chat-markdown whitespace-pre-wrap break-words">
       {thinking && <ThinkingBlock thinking={thinking} />}
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{
           p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
           strong: ({ children }) => {
@@ -1382,16 +1402,46 @@ function MessageContent({
             </pre>
           ),
           a: ({ href, children }) => {
+            // vault:// protocol links
             const vaultMatch = href?.match(/^vault:\/\/(.+)/)
             if (vaultMatch && onOpenDoc) {
+              const vaultPath = vaultMatch[1]
+              const fileName = vaultPath.split('/').pop()?.replace(/\.md$/, '') ?? vaultPath
               return (
                 <span
-                  className="text-[#6bc5e8] underline cursor-pointer hover:text-[#f0b35e]"
-                  onClick={() => onOpenDoc(vaultMatch[1])}
-                >{children}</span>
+                  className="inline-flex items-center gap-0.5 text-[#6bc5e8] hover:text-[#f0b35e] cursor-pointer group"
+                  onClick={() => onOpenDoc(vaultPath)}
+                  title={vaultPath}
+                >
+                  <svg className="w-3 h-3 shrink-0 opacity-50 group-hover:opacity-100" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M2 2h8l4 4v8H2V2zm8 1v3h3L10 3zM4 8h8v1H4V8zm0 2h6v1H4v-1z"/>
+                  </svg>
+                  <span className="underline underline-offset-2">{children}</span>
+                </span>
               )
             }
-            return <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#6bc5e8] underline hover:text-[#f0b35e]">{children}</a>
+            // Regular markdown links that happen to be vault-relative paths
+            if (href && /^\d{2}_\w+\//.test(href) && onOpenDoc) {
+              const fileName = href.split('/').pop()?.replace(/\.md$/, '') ?? href
+              return (
+                <span
+                  className="inline-flex items-center gap-0.5 text-[#6bc5e8] hover:text-[#f0b35e] cursor-pointer group"
+                  onClick={() => onOpenDoc(href)}
+                  title={href}
+                >
+                  <svg className="w-3 h-3 shrink-0 opacity-50 group-hover:opacity-100" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M2 2h8l4 4v8H2V2zm8 1v3h3L10 3zM4 8h8v1H4V8zm0 2h6v1H4v-1z"/>
+                  </svg>
+                  <span className="underline underline-offset-2">{children}</span>
+                </span>
+              )
+            }
+            return (
+              <a href={href} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 text-[#6bc5e8] underline underline-offset-2 hover:text-[#f0b35e]">
+                {children}<span className="text-[10px] opacity-40">↗</span>
+              </a>
+            )
           },
           ul: ({ children }) => <ul className="list-disc list-inside ml-2 mb-1">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal list-inside ml-2 mb-1">{children}</ol>,

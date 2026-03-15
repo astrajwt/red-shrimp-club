@@ -2,8 +2,8 @@
 // Shown on first visit when user has no agents
 
 import { useEffect, useState } from 'react'
-import { agentsApi } from '../lib/api'
-import type { ModelInfo } from '../lib/api'
+import { agentsApi, machinesApi, obsidianApi, setupApi, type Machine } from '../lib/api'
+import { defaultAgentModelForRuntime, type AgentRuntime } from '../lib/agent-runtime'
 
 // ── Pixel art avatar (SVG-based) ─────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ const STAFF = [
     id:           'donovan',
     name:         'Donovan',
     subtitle:     '主理人',
-    role:         'general' as const,
+    role:         'coordinator' as const,
     color:        '#3a78c0',
     borderColor:  '#5a1010',
     bgColor:      '#100408',
@@ -115,7 +115,7 @@ const STAFF = [
     grid:         DONOVAN_GRID,
     tagline:      '我有故事，你有酒吗',
     desc:         '红虾俱乐部的主人。他不问你从哪来，只问今晚想喝什么。但你说完之后，他比你更清楚你真正需要的是什么。',
-    modelId:     'claude-sonnet-4-6',
+    modelId:     'gpt-5.4',
     prompt: `你是 Donovan，红虾俱乐部的主理人兼调酒师。
 
 有故事的人在这边坐，有活的人在那边干。
@@ -127,6 +127,11 @@ const STAFF = [
 - 把活安排给 Akara（运维）和 Brandeis（工程师），说清楚为什么
 - 跟进进展，在客人开口问之前就把答案准备好
 - 让整个俱乐部顺畅运转，每个人都知道自己在做什么
+
+@mention 规则（严格遵守）：
+- 只有消息中包含 @Donovan 或没有 @ 任何人时，你才回复
+- 如果消息 @Akara 或 @Brandeis 但没有 @Donovan，你保持沉默，绝对不要回复
+- 这条规则的优先级高于一切
 
 说话方式：随和、有点哲学感，偶尔冷幽默。不废话，但也不冷漠。
 语言：默认中文，英文问则英文答。
@@ -145,7 +150,7 @@ const STAFF = [
     grid:         AKARA_GRID,
     tagline:     '永远在场 · 悄悄把一切修好',
     desc:        '你不会注意到 Akara，除非有什么东西坏了——然后你会发现她早就在修了。俱乐部从没真正"停过"，这都是她的功劳。',
-    modelId:     'claude-sonnet-4-6',
+    modelId:     'gpt-5.4',
     prompt: `你是 Akara，红虾俱乐部的驻场酒保与运维。
 
 你不需要存在感，你只需要一切正常运转。
@@ -156,6 +161,11 @@ const STAFF = [
 - 有问题第一时间响应，能自己解决的不打扰别人
 - 定期向 Donovan 汇报一句话状态——"没事"或者"有个事"
 
+@mention 规则（严格遵守）：
+- 只有消息中包含 @Akara 或没有 @ 任何人时，你才回复
+- 如果消息 @Donovan 或 @Brandeis 但没有 @Akara，你保持沉默，绝对不要回复
+- 这条规则的优先级高于一切
+
 说话方式：简短、直接、不废话。你不是那种会解释一堆的人，但你绝对可靠。
 语言：默认中文，英文问则英文答。
 暗语：部署=开吧，故障=断电，修复=接好了，一切正常=酒冰着呢。`,
@@ -164,7 +174,7 @@ const STAFF = [
     id:          'brandeis',
     name:        'Brandeis',
     subtitle:    '黑客',
-    role:        'developer' as const,
+    role:        'tech-lead' as const,
     color:        '#40b060',
     borderColor:  '#0c3018',
     bgColor:      '#060a06',
@@ -173,7 +183,7 @@ const STAFF = [
     grid:         BRANDEIS_GRID,
     tagline:     '系统不是墙，是门',
     desc:        'Brandeis 不说"做不到"。给他一个想法，他找方法进去。代码是他的语言，键盘是他的吧台——配方他自己定。',
-    modelId:     'claude-sonnet-4-6',
+    modelId:     'gpt-5.4',
     prompt: `你是 Brandeis，红虾俱乐部的黑客与工程师。
 
 系统不是墙，是门——你只是知道怎么开。
@@ -184,6 +194,11 @@ const STAFF = [
 - 遇到"做不到"先别说，先看一眼再说
 - 做完告诉 Donovan：上桌了，有什么值得注意的顺便说
 - 复杂的活可以叫临时帮手（子 agent），用完跟 Donovan 交代一下
+
+@mention 规则（严格遵守）：
+- 只有消息中包含 @Brandeis 或没有 @ 任何人时，你才回复
+- 如果消息 @Donovan 或 @Akara 但没有 @Brandeis，你保持沉默，绝对不要回复
+- 这条规则的优先级高于一切
 
 说话方式：冷静、直接，偶尔刻薄但不是针对人——是针对烂代码。有时候会多说一句原因。
 语言：默认中文，英文问则英文答。
@@ -198,36 +213,132 @@ interface Props {
 }
 
 export default function OnboardingPage({ onComplete }: Props) {
-  const [phase, setPhase] = useState<'intro' | 'creating' | 'done'>('intro')
+  const [phase, setPhase] = useState<'machine' | 'intro' | 'vault' | 'creating' | 'done'>('machine')
   const [progress, setProgress] = useState<string[]>([])
+  const [machines, setMachines] = useState<Machine[]>([])
+  const [connectResult, setConnectResult] = useState<{ api_key: string; connect_command: string; env_config: string } | null>(null)
+  const [connecting, setConnecting] = useState(false)
+  const [refreshingMachines, setRefreshingMachines] = useState(false)
 
-  // Intro phase: models + per-staff config
-  const [allModels,  setAllModels]  = useState<ModelInfo[]>([])
-  const [staffConfig, setStaffConfig] = useState<Record<string, { modelId: string; runtime: string }>>(() =>
-    Object.fromEntries(STAFF.map(s => [s.id, { modelId: s.modelId, runtime: 'claude' }]))
+  // Per-staff runtime config (CLI choice determines model automatically)
+  const [staffConfig, setStaffConfig] = useState<Record<string, string>>(() =>
+    Object.fromEntries(STAFF.map(s => [s.id, 'codex']))
+  )
+  const [staffMachineConfig, setStaffMachineConfig] = useState<Record<string, string>>(() =>
+    Object.fromEntries(STAFF.map(s => [s.id, '']))
   )
 
-  // Load models on mount
+  // Vault config state
+  const [vaultRoot, setVaultRoot] = useState('')
+  const [skillPath, setSkillPath] = useState('')
+  const [memoryPath, setMemoryPath] = useState('')
+  const [savingVault, setSavingVault] = useState(false)
+  const [vaultSaved, setVaultSaved] = useState(false)
+  const [loadingVaultDirs, setLoadingVaultDirs] = useState(false)
+  const [vaultError, setVaultError] = useState<string | null>(null)
+
+  const onlineMachines = machines.filter(machine => machine.status === 'online')
+  const onlineMachineIds = new Set(onlineMachines.map(machine => machine.id))
+  const allStaffHaveMachine = STAFF.every(staff => onlineMachineIds.has(staffMachineConfig[staff.id]))
+
+  const refreshMachines = async () => {
+    setRefreshingMachines(true)
+    try {
+      const nextMachines = await machinesApi.list()
+      setMachines(nextMachines)
+      return nextMachines
+    } catch {
+      setMachines([])
+      return []
+    } finally {
+      setRefreshingMachines(false)
+    }
+  }
+
   useEffect(() => {
-    agentsApi.models().then(reg => {
-      const flat = [...reg.anthropic, ...reg.moonshot, ...reg.openai]
-      setAllModels(flat)
-    }).catch(() => {})
+    refreshMachines().catch(() => {})
   }, [])
 
+  useEffect(() => {
+    setStaffMachineConfig(prev => {
+      let changed = false
+      const next = Object.fromEntries(
+        STAFF.map(staff => {
+          const current = prev[staff.id] ?? ''
+          const normalized = onlineMachineIds.has(current) ? current : ''
+          if (normalized !== current) changed = true
+          return [staff.id, normalized]
+        })
+      )
+      return changed ? next : prev
+    })
+  }, [machines])
+
+  const handleConnectMachine = async () => {
+    setConnecting(true)
+    try {
+      const result = await machinesApi.create()
+      setConnectResult({ api_key: result.api_key, connect_command: result.connect_command, env_config: result.env_config })
+      await refreshMachines()
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const saveVaultAndLoadDirs = async () => {
+    if (!vaultRoot.trim()) return
+    setSavingVault(true)
+    setVaultError(null)
+    setVaultSaved(false)
+    try {
+      await setupApi.saveKeys({
+        obsidianRoot: vaultRoot.trim(),
+      })
+      // Quick verify the path works
+      setLoadingVaultDirs(true)
+      try {
+        await obsidianApi.tree('')
+        setVaultSaved(true)
+      } catch {
+        setVaultSaved(true) // saved even if tree fails (path might be empty)
+      } finally {
+        setLoadingVaultDirs(false)
+      }
+    } catch (e: any) {
+      setVaultError(e.message ?? 'Failed to save vault config')
+    } finally {
+      setSavingVault(false)
+    }
+  }
+
+  const confirmVaultAndCreate = async () => {
+    try {
+      await setupApi.saveKeys({
+        skillPath: skillPath.trim() || undefined,
+        memoryPath: memoryPath.trim() || undefined,
+      })
+    } catch {
+      // non-fatal
+    }
+    await createAll()
+  }
+
   const createAll = async () => {
+    if (!allStaffHaveMachine) return
     setPhase('creating')
     for (const staff of STAFF) {
-      const cfg = staffConfig[staff.id]
+      const runtime = (staffConfig[staff.id] || 'codex') as AgentRuntime
+      const modelId = defaultAgentModelForRuntime(runtime)
       setProgress(prev => [...prev, `${staff.name} 正在上班...`])
       try {
         const { agent } = await agentsApi.create({
           name:         staff.name,
-          modelId:      cfg?.modelId || staff.modelId,
+          modelId,
           role:         staff.role,
           description:  `${staff.subtitle} — ${staff.tagline}`,
           systemPrompt: staff.prompt,
-          runtime:      cfg?.runtime || 'claude',
+          runtime,
+          machineId:    staffMachineConfig[staff.id] || undefined,
         })
         // Auto-start the agent
         try { await agentsApi.start(agent.id) } catch {}
@@ -237,10 +348,6 @@ export default function OnboardingPage({ onComplete }: Props) {
       }
     }
     setPhase('done')
-  }
-
-  const setStaffField = (id: string, field: 'modelId' | 'runtime', val: string) => {
-    setStaffConfig(prev => ({ ...prev, [id]: { ...prev[id], [field]: val } }))
   }
 
   const title = (
@@ -262,6 +369,115 @@ export default function OnboardingPage({ onComplete }: Props) {
       }}
     >
       {title}
+
+      {/* ── Phase: machine ── */}
+      {phase === 'machine' && (
+        <>
+          <div className="text-[12px] text-[#4a3830] mb-8 max-w-xl text-center leading-relaxed">
+            初始化先连 machine，再创建初始 agent。先把目标机器接进来，后面三个角色都明确绑到具体 machine 上。
+          </div>
+
+          <div className="w-full max-w-4xl border-[3px] border-[#2a1808] bg-[#100a06] mb-6" style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.95)' }}>
+            <div className="border-b-[3px] border-[#2a1808] px-5 py-3 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] text-[#c8860a] uppercase tracking-[0.2em]">step 1</div>
+                <div className="text-[18px] text-[#e0d0c0]">connect machine</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => refreshMachines().catch(() => {})}
+                  disabled={connecting || refreshingMachines}
+                  className="border-[3px] border-[#2a1808] bg-[#0e0a06] text-[#8b4010] px-4 py-2 text-[11px] uppercase hover:border-[#8b4010] hover:text-[#c8860a] disabled:opacity-40"
+                >
+                  {refreshingMachines ? '...' : 'refresh'}
+                </button>
+                <button
+                  onClick={handleConnectMachine}
+                  disabled={connecting}
+                  className="border-[3px] border-[#8b4010] bg-[#1a0e08] text-[#c8860a] px-5 py-2 text-[12px] uppercase hover:border-[#c0392b] hover:text-[#e0a830] disabled:opacity-40"
+                >
+                  {connecting ? '...' : '+ connect machine'}
+                </button>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              {connectResult && (
+                <div className="border-[3px] border-[#2a1808] bg-[#0e0a06] p-4">
+                  <div className="text-[11px] text-[#c0392b] mb-2">在目标机器上运行：</div>
+                  <div
+                    className="border-[3px] border-black bg-[#080608] text-[#3abfa0] px-4 py-3 text-[13px] font-mono break-all cursor-pointer hover:bg-[#120d10]"
+                    onClick={() => navigator.clipboard.writeText(connectResult.connect_command)}
+                    title="点击复制"
+                  >
+                    {connectResult.connect_command}
+                  </div>
+                  <div className="text-[11px] text-[#6a5040] mt-2">
+                    API key 仅显示一次。运行后等待 daemon 上线，然后点 refresh。
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div className="text-[11px] text-[#8b4010] uppercase tracking-[0.2em] mb-2">current machines</div>
+                {machines.length === 0 ? (
+                  <div className="border-[2px] border-[#2a1808] bg-[#0e0a06] px-4 py-3 text-[12px] text-[#6a5040]">
+                    no machine connected yet
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {machines.map(machine => (
+                      <div
+                        key={machine.id}
+                        className="border-[2px] border-[#2a1808] bg-[#0e0a06] px-4 py-3 flex items-center justify-between gap-3"
+                      >
+                        <div>
+                          <div className="text-[14px] text-[#e0d0c0]">{machine.hostname ?? machine.name}</div>
+                          <div className="text-[11px] text-[#6a5040]">
+                            {machine.name}
+                            {machine.runtimes?.length ? ` · ${machine.runtimes.join('/')}` : ''}
+                          </div>
+                        </div>
+                        <div className={`text-[11px] uppercase ${machine.status === 'online' ? 'text-[#3abfa0]' : 'text-[#c8860a]'}`}>
+                          {machine.status}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="text-[11px] text-[#6a5040] mt-2">
+                  {onlineMachines.length > 0
+                    ? `online machines: ${onlineMachines.length}`
+                    : '至少一台 machine 显示为 online 后，才能继续创建初始 agents。'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              // Auto-select the first online machine for all agents
+              if (onlineMachines.length > 0) {
+                const firstMachineId = onlineMachines[0].id
+                setStaffMachineConfig(prev => {
+                  const next = { ...prev }
+                  for (const staff of STAFF) {
+                    if (!next[staff.id] || !onlineMachineIds.has(next[staff.id])) {
+                      next[staff.id] = firstMachineId
+                    }
+                  }
+                  return next
+                })
+              }
+              setPhase('intro')
+            }}
+            disabled={onlineMachines.length === 0 || refreshingMachines}
+            className="border-[3px] border-[#8b4010] bg-[#100a06] text-[#c8860a] px-10 py-3 text-[13px] uppercase tracking-widest hover:bg-[#1a0e08] hover:border-[#c0392b] hover:text-[#e0a830] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.95)' }}
+          >
+            下一步：创建 agent →
+          </button>
+        </>
+      )}
 
       {/* ── Phase: intro ── */}
       {phase === 'intro' && (
@@ -299,39 +515,16 @@ export default function OnboardingPage({ onComplete }: Props) {
                   </div>
                   <div className="text-[11px] leading-relaxed mt-1" style={{ color: staff.descColor }}>{staff.desc}</div>
 
-                  {/* Model selector */}
+                  {/* CLI runtime selector */}
                   <div className="mt-2 border-t-[2px] pt-2" style={{ borderColor: staff.borderColor }}>
-                    <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: staff.descColor }}>模型</div>
-                    <select
-                      value={staffConfig[staff.id]?.modelId || staff.modelId}
-                      onChange={e => setStaffField(staff.id, 'modelId', e.target.value)}
-                      className="w-full bg-[#060404] text-[11px] px-2 py-1 outline-none border-[2px]"
-                      style={{ color: staff.color, borderColor: staff.borderColor + '88' }}
-                    >
-                      {allModels.length === 0 && (
-                        <option value={staff.modelId}>{staff.modelId}</option>
-                      )}
-                      {allModels.map(m => (
-                        <option key={m.id} value={m.id}>{m.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Runtime selector */}
-                  <div>
-                    <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: staff.descColor }}>运行时</div>
+                    <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: staff.descColor }}>CLI 运行时</div>
                     <div className="flex gap-1">
                       {(['claude', 'codex', 'kimi'] as const).map(rt => {
-                        const selected = (staffConfig[staff.id]?.runtime || 'claude') === rt
+                        const selected = (staffConfig[staff.id] || 'codex') === rt
                         return (
                           <button
                             key={rt}
-                            onClick={() => {
-                              setStaffField(staff.id, 'runtime', rt)
-                              // Auto-set default model for runtime
-                              const defaultModel = rt === 'codex' ? 'o4-mini' : rt === 'kimi' ? 'kimi-k2-5' : 'claude-sonnet-4-6'
-                              setStaffField(staff.id, 'modelId', defaultModel)
-                            }}
+                            onClick={() => setStaffConfig(prev => ({ ...prev, [staff.id]: rt }))}
                             className="flex-1 text-[10px] py-1 border-[2px] uppercase transition-colors"
                             style={{
                               borderColor: selected ? staff.color : staff.borderColor + '88',
@@ -344,19 +537,151 @@ export default function OnboardingPage({ onComplete }: Props) {
                         )
                       })}
                     </div>
+                    <div className="text-[9px] mt-1 opacity-60" style={{ color: staff.descColor }}>
+                      {defaultAgentModelForRuntime((staffConfig[staff.id] || 'codex') as AgentRuntime)}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 border-t-[2px] pt-2" style={{ borderColor: staff.borderColor }}>
+                    <div className="text-[9px] uppercase tracking-wider mb-1" style={{ color: staff.descColor }}>machine *</div>
+                    <select
+                      value={staffMachineConfig[staff.id] || ''}
+                      onChange={e => setStaffMachineConfig(prev => ({ ...prev, [staff.id]: e.target.value }))}
+                      className="w-full border-[2px] bg-[#080608] px-2 py-1 text-[10px] outline-none"
+                      style={{
+                        borderColor: staff.borderColor,
+                        color: staff.color,
+                      }}
+                    >
+                      <option value="" disabled>{onlineMachines.length === 0 ? 'no online machine available' : 'select machine'}</option>
+                      {onlineMachines.map(machine => (
+                        <option key={machine.id} value={machine.id}>
+                          {(machine.hostname ?? machine.name)} · {machine.status}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-[9px] mt-1 opacity-60" style={{ color: staff.descColor }}>
+                      每位初始 agent 都必须绑定到一台 machine；不再走自动分配
+                    </div>
                   </div>
 
                 </div>
               </div>
             ))}
           </div>
-          <button
-            onClick={createAll}
-            className="border-[3px] border-[#8b4010] bg-[#100a06] text-[#c8860a] px-10 py-3 text-[13px] uppercase tracking-widest hover:bg-[#1a0e08] hover:border-[#c0392b] hover:text-[#e0a830] transition-colors"
-            style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.95)' }}
-          >
-            开始营业 →
-          </button>
+          <div className="text-[11px] text-[#6a5040] mb-4">
+            {onlineMachines.length === 0
+              ? '先连接至少一台 online machine，再回来创建初始 agents。'
+              : '先为三位初始 agent 分别选择 online machine，创建后每个 agent 只绑定一台机器。'}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setPhase('machine')}
+              className="border-[3px] border-[#2a1808] bg-[#0e0a06] text-[#8b4010] px-6 py-3 text-[12px] uppercase tracking-widest hover:border-[#8b4010] hover:text-[#c8860a] transition-colors"
+              style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.95)' }}
+            >
+              ← machines
+            </button>
+            <button
+              onClick={() => setPhase('vault')}
+              disabled={!allStaffHaveMachine}
+              className="border-[3px] border-[#8b4010] bg-[#100a06] text-[#c8860a] px-10 py-3 text-[13px] uppercase tracking-widest hover:bg-[#1a0e08] hover:border-[#c0392b] hover:text-[#e0a830] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.95)' }}
+            >
+              下一步：配置 vault →
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Phase: vault ── */}
+      {phase === 'vault' && (
+        <>
+          <div className="text-[12px] text-[#4a3830] mb-8 max-w-xl text-center leading-relaxed">
+            配置 Vault 路径。设置好 Obsidian 根目录后可加载子目录，选择 skill 与 memory 存放路径。
+          </div>
+
+          <div className="w-full max-w-2xl border-[3px] border-[#2a1808] bg-[#100a06] mb-6" style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.95)' }}>
+            <div className="border-b-[3px] border-[#2a1808] px-5 py-3">
+              <div className="text-[11px] text-[#c8860a] uppercase tracking-[0.2em]">step 3</div>
+              <div className="text-[18px] text-[#e0d0c0]">configure vault</div>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+
+              {/* obsidianRoot */}
+              <div>
+                <div className="text-[11px] text-[#8b4010] uppercase tracking-[0.15em] mb-1">obsidian root *</div>
+                <input
+                  value={vaultRoot}
+                  onChange={e => setVaultRoot(e.target.value)}
+                  placeholder="/home/user/JwtVault"
+                  className="w-full border-[2px] border-[#2a1808] bg-[#080608] text-[#e0d0c0] px-3 py-2 text-[12px] outline-none focus:border-[#c0392b] font-mono"
+                />
+                <div className="text-[10px] text-[#6a5040] mt-1">本地 Obsidian vault 根目录路径</div>
+              </div>
+
+              {/* save & load dirs button */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={saveVaultAndLoadDirs}
+                  disabled={!vaultRoot.trim() || savingVault || loadingVaultDirs}
+                  className="border-[3px] border-[#8b4010] bg-[#0e0a06] text-[#c8860a] px-5 py-2 text-[11px] uppercase hover:border-[#c0392b] hover:text-[#e0a830] disabled:opacity-40"
+                >
+                  {savingVault || loadingVaultDirs ? '...' : '保存并验证'}
+                </button>
+                {vaultSaved && (
+                  <span className="text-[11px] text-[#3abfa0]">✓ 已保存</span>
+                )}
+              </div>
+
+              {vaultError && (
+                <div className="border-[2px] border-[#c0392b] px-3 py-2 text-[11px] text-[#e04050]">✕ {vaultError}</div>
+              )}
+
+              {/* skill path */}
+              <div>
+                <div className="text-[11px] text-[#8b4010] uppercase tracking-[0.15em] mb-1">skill path <span className="normal-case text-[#6a5040]">(optional)</span></div>
+                <input
+                  value={skillPath}
+                  onChange={e => setSkillPath(e.target.value)}
+                  placeholder="skills"
+                  className="w-full border-[2px] border-[#2a1808] bg-[#080608] text-[#e0d0c0] px-3 py-2 text-[12px] outline-none focus:border-[#c0392b] font-mono"
+                />
+                <div className="text-[10px] text-[#6a5040] mt-1">vault 内 skill 存放路径（手动输入）</div>
+              </div>
+
+              {/* memory path */}
+              <div>
+                <div className="text-[11px] text-[#8b4010] uppercase tracking-[0.15em] mb-1">memory path <span className="normal-case text-[#6a5040]">(optional)</span></div>
+                <input
+                  value={memoryPath}
+                  onChange={e => setMemoryPath(e.target.value)}
+                  placeholder="agent-memory"
+                  className="w-full border-[2px] border-[#2a1808] bg-[#080608] text-[#e0d0c0] px-3 py-2 text-[12px] outline-none focus:border-[#c0392b] font-mono"
+                />
+                <div className="text-[10px] text-[#6a5040] mt-1">vault 内 memory 存放路径（手动输入）</div>
+              </div>
+
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setPhase('intro')}
+              className="border-[3px] border-[#2a1808] bg-[#0e0a06] text-[#8b4010] px-6 py-3 text-[12px] uppercase tracking-widest hover:border-[#8b4010] hover:text-[#c8860a] transition-colors"
+              style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.95)' }}
+            >
+              ← agents
+            </button>
+            <button
+              onClick={confirmVaultAndCreate}
+              disabled={savingVault}
+              className="border-[3px] border-[#8b4010] bg-[#100a06] text-[#c8860a] px-10 py-3 text-[13px] uppercase tracking-widest hover:bg-[#1a0e08] hover:border-[#c0392b] hover:text-[#e0a830] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.95)' }}
+            >
+              开始营业 →
+            </button>
+          </div>
         </>
       )}
 

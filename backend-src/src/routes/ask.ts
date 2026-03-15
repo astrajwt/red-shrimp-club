@@ -53,7 +53,7 @@ async function buildContext(filePath?: string): Promise<string[]> {
   return contextParts
 }
 
-const SYSTEM_PROMPT = `You are a helpful assistant for the Red Shrimp Lab project.
+const DEFAULT_SYSTEM_PROMPT = `You are a helpful assistant for the Red Shrimp Lab project.
 Answer questions based on the provided context. Be concise and direct.
 If asking about tasks or agents, use the task/agent data provided.
 Reply in the same language as the question (Chinese or English).`
@@ -62,8 +62,8 @@ export const askRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /api/ask — full response
   app.post('/', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const { question, filePath, model } = req.body as {
-      question: string; filePath?: string; model?: string
+    const { question, filePath, model, systemPrompt } = req.body as {
+      question: string; filePath?: string; model?: string; systemPrompt?: string
     }
     if (!question?.trim()) return reply.code(400).send({ error: 'question is required' })
 
@@ -74,7 +74,8 @@ export const askRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const response = await llmClient.complete({
-        prompt, systemPrompt: SYSTEM_PROMPT,
+        prompt,
+        systemPrompt: systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT,
         model: model ?? undefined, maxTokens: 1024,
       })
       return { answer: response.text, model: response.model }
@@ -85,8 +86,8 @@ export const askRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /api/ask/stream — SSE streaming
   app.post('/stream', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const { question, filePath, model } = req.body as {
-      question: string; filePath?: string; model?: string
+    const { question, filePath, model, systemPrompt } = req.body as {
+      question: string; filePath?: string; model?: string; systemPrompt?: string
     }
     if (!question?.trim()) return reply.code(400).send({ error: 'question is required' })
 
@@ -105,7 +106,8 @@ export const askRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       for await (const chunk of llmClient.streamComplete({
-        prompt, systemPrompt: SYSTEM_PROMPT,
+        prompt,
+        systemPrompt: systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT,
         model: model ?? undefined, maxTokens: 1024,
       })) {
         reply.raw.write(`data: ${JSON.stringify({ text: chunk })}\n\n`)

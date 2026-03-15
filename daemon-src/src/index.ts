@@ -26,10 +26,33 @@ const FALLBACK_MEMORY_TEMPLATE = `# {{agentName}}
 - {{activeContext}}
 `
 
-// ── CLI args ────────────────────────────────────────────────────────
+// ── Load .env file (lightweight, no dotenv dependency) ──────────────
+function loadEnvFile() {
+  const candidates = [
+    resolve(__dirname, '../.env'),           // daemon-src/.env
+    resolve(__dirname, '../../.env'),         // project root .env
+  ]
+  for (const envPath of candidates) {
+    if (!existsSync(envPath)) continue
+    const content = readFileSync(envPath, 'utf-8')
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const eqIdx = trimmed.indexOf('=')
+      if (eqIdx < 1) continue
+      const key = trimmed.slice(0, eqIdx).trim()
+      const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '')
+      if (!process.env[key]) process.env[key] = val  // CLI env takes priority
+    }
+    break  // only load first found
+  }
+}
+loadEnvFile()
+
+// ── CLI args + env fallback ─────────────────────────────────────────
 const args = process.argv.slice(2)
-let serverUrl = ''
-let apiKey = ''
+let serverUrl = process.env.REDSHRIMP_SERVER_URL ?? process.env.SERVER_URL ?? ''
+let apiKey = process.env.REDSHRIMP_API_KEY ?? process.env.API_KEY ?? ''
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--server-url' && args[i + 1]) serverUrl = args[++i]
@@ -40,13 +63,21 @@ for (let i = 0; i < args.length; i++) {
   }
   if (args[i] === '--help' || args[i] === '-h') {
     console.log(`redshrimp-daemon v${VERSION}`)
-    console.log('Usage: redshrimp-daemon --server-url <url> --api-key <key>')
+    console.log('Usage: redshrimp-daemon [--server-url <url>] [--api-key <key>]')
+    console.log('')
+    console.log('Config priority: CLI args > env vars > .env file')
+    console.log('  Env vars: REDSHRIMP_SERVER_URL, REDSHRIMP_API_KEY')
     process.exit(0)
   }
 }
 
 if (!serverUrl || !apiKey) {
-  console.error('Usage: redshrimp-daemon --server-url <url> --api-key <key>')
+  console.error('Error: server-url and api-key are required.')
+  console.error('')
+  console.error('Set them via any of:')
+  console.error('  1. CLI args:  redshrimp-daemon --server-url <url> --api-key <key>')
+  console.error('  2. Env vars:  REDSHRIMP_SERVER_URL=... REDSHRIMP_API_KEY=...')
+  console.error('  3. .env file: create daemon-src/.env with the vars above')
   process.exit(1)
 }
 

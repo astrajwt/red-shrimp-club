@@ -53,7 +53,7 @@ class MachineConnectionManager {
   /** Send agent:start to daemon — starts or resumes an agent */
   startAgent(machineId: string, agent: {
     id: string; name: string; description?: string | null;
-    model_id: string; runtime: string;
+    model_id: string; runtime: string; reasoning_effort?: string; session_id?: string | null;
   }, serverUrl: string) {
     const state = this.machines.get(machineId)
     if (!state) return
@@ -65,10 +65,12 @@ class MachineConnectionManager {
       description: agent.description ?? undefined,
       model: agent.model_id,
       runtime: agent.runtime || 'claude',
+      reasoningEffort: agent.reasoning_effort || undefined,
       serverUrl,
     }
-    if (existingState?.sessionId) {
-      config.sessionId = existingState.sessionId
+    const resumeSessionId = existingState?.sessionId || agent.session_id || undefined
+    if (resumeSessionId) {
+      config.sessionId = resumeSessionId
     }
 
     this.send(machineId, { type: 'agent:start', agentId: agent.id, config })

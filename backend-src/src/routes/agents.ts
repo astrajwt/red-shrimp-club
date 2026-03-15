@@ -10,15 +10,289 @@
 // GET    /servers        list servers for current user
 
 import type { FastifyPluginAsync } from 'fastify'
-import { join } from 'path'
-import { readFile, writeFile } from 'fs/promises'
+import { readdirSync, readFileSync, statSync } from 'fs'
+import { join, basename, extname } from 'path'
+import { cp, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { query, queryOne } from '../db/client.js'
 import { processManager, SUPPORTED_RUNTIMES } from '../daemon/process-manager.js'
 import type { AgentConfig, RuntimeId } from '../daemon/process-manager.js'
 import { initAgentWorkspace } from '../daemon/workspace-init.js'
 import { llmClient } from '../daemon/llm-client.js'
+import { compactAgentContext } from '../services/context-compaction.js'
+import { machineConnectionManager } from '../daemon/machine-connection.js'
+import { resolveServerUrl } from '../server-url.js'
+import { isWorkspaceInsideAgentsBase, resolveAgentsBaseDir, resolveAgentWorkspacePath } from '../services/agent-workspace.js'
+
+async function readWorkspaceDoc(workspacePath: string | null, relativePath: string) {
+  const docPath = join(workspacePath ?? '', relativePath)
+  if (!workspacePath) {
+    return { path: docPath, content: '', updatedAt: null }
+  }
+
+  try {
+    const [content, info] = await Promise.all([
+      readFile(docPath, 'utf-8'),
+      stat(docPath),
+    ])
+    return { path: docPath, content, updatedAt: info.mtime.toISOString() }
+  } catch {
+    return { path: docPath, content: '', updatedAt: null }
+  }
+}
+
+type FrontmatterValue = string | string[]
+
+function stripQuotes(value: string) {
+  return value.replace(/^['"]|['"]$/g, '').trim()
+}
+
+function parseInlineList(value: string): string[] {
+  return value
+    .slice(1, -1)
+    .split(',')
+    .map(part => stripQuotes(part.trim()))
+    .filter(Boolean)
+}
+
+function parseFrontmatter(content: string): {
+  frontmatter: Record<string, FrontmatterValue>
+  body: string
+} {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/)
+  if (!match) return { frontmatter: {}, body: content }
+
+  const block = match[1]
+  const frontmatter: Record<string, FrontmatterValue> = {}
+  const lines = block.split(/\r?\n/)
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (!line.trim()) continue
+
+    const entry = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/)
+    if (!entry) continue
+
+    const key = entry[1].toLowerCase()
+    const rawValue = entry[2].trim()
+
+    if (!rawValue) {
+      const items: string[] = []
+      while (index + 1 < lines.length) {
+        const nextLine = lines[index + 1]
+        const listItem = nextLine.match(/^\s*-\s+(.*)$/)
+        if (!listItem) break
+        items.push(stripQuotes(listItem[1].trim()))
+        index += 1
+      }
+      if (items.length > 0) frontmatter[key] = items
+      continue
+    }
+
+    if (rawValue.startsWith('[') && rawValue.endsWith(']')) {
+      frontmatter[key] = parseInlineList(rawValue)
+      continue
+    }
+
+    frontmatter[key] = stripQuotes(rawValue)
+  }
+
+  return { frontmatter, body: content.slice(match[0].length) }
+}
+
+function frontmatterArrayValue(value: FrontmatterValue | undefined): string[] {
+  if (!value) return []
+  return Array.isArray(value) ? value : [value]
+}
+
+function frontmatterStringValue(value: FrontmatterValue | undefined): string | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
+}
+
+function defaultModelForRuntime(runtime: RuntimeId): string {
+  switch (runtime) {
+    case 'codex':
+      return 'gpt-5.4'
+    case 'kimi':
+      return 'kimi-code/kimi-for-coding'
+    case 'claude':
+    default:
+      return 'claude-sonnet-4-6'
+  }
+}
+
+function normalizeAgentModelId(modelId: string | undefined, _runtime?: string): string | undefined {
+  const trimmed = modelId?.trim()
+  if (!trimmed) return undefined
+  return trimmed
+}
+
+function defaultProviderForRuntime(runtime: RuntimeId): string {
+  switch (runtime) {
+    case 'codex':
+      return 'openai'
+    case 'kimi':
+      return 'moonshot'
+    case 'claude':
+    default:
+      return 'anthropic'
+  }
+}
+
+function providerForModel(modelId: string): string {
+  if (modelId.startsWith('claude')) return 'anthropic'
+  if (modelId.startsWith('moonshot') || modelId.startsWith('kimi')) return 'moonshot'
+  if (modelId.startsWith('glm')) return 'zhipu'
+  if (modelId.startsWith('qwen') || modelId.startsWith('codeplan')) return 'dashscope'
+  return 'openai'
+}
+
+function runtimeForModel(modelId: string): RuntimeId {
+  const provider = providerForModel(modelId)
+  if (provider === 'anthropic') return 'claude'
+  if (provider === 'moonshot') return 'kimi'
+  return 'codex'
+}
 
 export const agentRoutes: FastifyPluginAsync = async (app) => {
+  await query('ALTER TABLE agents ADD COLUMN IF NOT EXISTS note TEXT').catch(() => {})
+  const agentsBaseDir = resolveAgentsBaseDir()
+
+  if (process.env.OBSIDIAN_ROOT?.trim()) {
+    await mkdir(agentsBaseDir, { recursive: true }).catch(() => {})
+    const rows = await query<{ id: string; name: string; workspace_path: string | null }>(
+      'SELECT id, name, workspace_path FROM agents'
+    ).catch(() => [])
+
+    for (const row of rows) {
+      const desiredPath = resolveAgentWorkspacePath(row.name)
+      const currentPath = row.workspace_path?.trim()
+      if (currentPath && isWorkspaceInsideAgentsBase(currentPath, agentsBaseDir) && currentPath === desiredPath) continue
+
+      if (currentPath && currentPath !== desiredPath) {
+        await cp(currentPath, desiredPath, { recursive: true, force: false }).catch(() => {})
+      }
+
+      await query(
+        'UPDATE agents SET workspace_path = $2 WHERE id = $1',
+        [row.id, desiredPath]
+      ).catch(() => {})
+    }
+  }
+
+  type AgentControlRow = {
+    id: string
+    name: string
+    description: string | null
+    runtime: string
+    model_id: string
+    machine_id: string | null
+    workspace_path: string | null
+    session_id: string | null
+    reasoning_effort: string | null
+  }
+
+  const readAgentControlRow = async (id: string) =>
+    queryOne<AgentControlRow>(
+      `SELECT id, name, description, runtime, model_id, machine_id, workspace_path, session_id, reasoning_effort
+       FROM agents
+       WHERE id = $1`,
+      [id]
+    )
+
+  const stopAgentInstance = async (agentId: string) => {
+    const daemonMachine = machineConnectionManager.getMachineForAgent(agentId)
+    if (daemonMachine) {
+      machineConnectionManager.stopAgent(daemonMachine, agentId)
+    }
+    try {
+      await processManager.stop(agentId)
+    } catch {
+      // The agent may be daemon-backed or already stopped.
+    }
+    await query(`UPDATE agents SET status = 'offline', activity = NULL WHERE id = $1`, [agentId])
+  }
+
+  const startAgentInstance = async (agent: AgentControlRow, serverUrl: string, forceRestart = false) => {
+    const connectedMachines = machineConnectionManager.getAll()
+    let targetMachineId: string | undefined
+
+    if (agent.machine_id) {
+      targetMachineId = agent.machine_id
+    } else if (connectedMachines.length > 0) {
+      const existingMachine = machineConnectionManager.getMachineForAgent(agent.id)
+      if (existingMachine && !forceRestart) {
+        await query(
+          `UPDATE agents SET status = 'running', last_heartbeat_at = COALESCE(last_heartbeat_at, NOW()) WHERE id = $1`,
+          [agent.id]
+        )
+        return { ok: true, alreadyRunning: true, message: `Agent ${agent.name} is already running on daemon` }
+      }
+      for (const m of connectedMachines) {
+        if (m.runtimes.includes(agent.runtime)) {
+          targetMachineId = m.machineId
+          break
+        }
+      }
+    }
+
+    const connectedTargetMachine = targetMachineId ? machineConnectionManager.get(targetMachineId) : undefined
+
+    if (targetMachineId && connectedTargetMachine) {
+      machineConnectionManager.startAgent(targetMachineId, agent as any, serverUrl)
+      await query(`UPDATE agents SET status = 'starting' WHERE id = $1`, [agent.id])
+      return { ok: true, message: `Agent ${agent.name} starting on daemon ${targetMachineId}` }
+    }
+
+    if (agent.machine_id && targetMachineId && !connectedTargetMachine) {
+      // Fallback: if the assigned machine is not connected, try to run locally
+      // This is common when the machine daemon disconnected but we're on the same host
+      if (!processManager.isRunning(agent.id)) {
+        const apiKey = `agent_${agent.id}_${Date.now()}`
+        const config: AgentConfig = {
+          id:            agent.id,
+          name:          agent.name,
+          machineId:     agent.machine_id ?? 'local',
+          serverUrl,
+          apiKey,
+          workspacePath: agent.workspace_path ?? process.cwd(),
+          runtime:       agent.runtime,
+          modelId:       agent.model_id,
+          reasoningEffort: agent.reasoning_effort ?? undefined,
+          sessionId:     agent.session_id ?? undefined,
+        }
+        await processManager.spawn(config)
+        await query(`UPDATE agents SET status = 'starting' WHERE id = $1`, [agent.id])
+        return { ok: true, message: `Machine ${targetMachineId} not connected — starting ${agent.name} locally as fallback` }
+      }
+    }
+
+    if (processManager.isRunning(agent.id) && !forceRestart) {
+      await query(
+        `UPDATE agents SET status = 'running', last_heartbeat_at = COALESCE(last_heartbeat_at, NOW()) WHERE id = $1`,
+        [agent.id]
+      )
+      return { ok: true, alreadyRunning: true, message: `Agent ${agent.name} is already running` }
+    }
+
+    const apiKey = `agent_${agent.id}_${Date.now()}`
+    const config: AgentConfig = {
+      id:            agent.id,
+      name:          agent.name,
+      machineId:     agent.machine_id ?? 'local',
+      serverUrl,
+      apiKey,
+      workspacePath: agent.workspace_path ?? process.cwd(),
+      runtime:       agent.runtime,
+      modelId:       agent.model_id,
+      reasoningEffort: agent.reasoning_effort ?? undefined,
+      sessionId:     agent.session_id ?? undefined,
+    }
+
+    await processManager.spawn(config)
+    await query(`UPDATE agents SET status = 'starting' WHERE id = $1`, [agent.id])
+    return { ok: true, message: `Agent ${agent.name} starting locally` }
+  }
 
   // ── GET /api/agents ───────────────────────────────────────────────
   app.get('/', { preHandler: [app.authenticate] }, async (req) => {
@@ -26,11 +300,15 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     const caller = req.user as { sub: string }
 
     const agents = await query(
-      `SELECT a.id, a.name, a.description, a.model_provider, a.model_id,
-              a.runtime, a.status, a.activity, a.activity_detail,
+      `SELECT a.id, a.name, a.description, a.note, a.model_provider, a.model_id,
+              a.runtime, a.reasoning_effort, a.status, a.activity, a.activity_detail,
               a.last_heartbeat_at, a.workspace_path, a.created_at,
-              a.role, a.parent_agent_id
+              a.role, a.parent_agent_id, a.machine_id, a.current_project_id,
+              m.name AS machine_name, m.hostname AS machine_hostname, m.status AS machine_status,
+              p.name AS current_project_name, p.slug AS current_project_slug
        FROM agents a
+       LEFT JOIN machines m ON m.id = a.machine_id
+       LEFT JOIN projects p ON p.id = a.current_project_id
        JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
        WHERE ($2::uuid IS NULL OR a.server_id = $2::uuid)
        ORDER BY a.name`,
@@ -42,17 +320,19 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   // ── POST /api/agents ──────────────────────────────────────────────
   app.post('/', { preHandler: [app.authenticate] }, async (req, reply) => {
     const caller = req.user as { sub: string }
-    let { serverId, machineId, name, description, role, modelId, modelProvider, runtime, workspacePath, systemPrompt } =
+    let { serverId, machineId, name, description, role, modelId, modelProvider, runtime, workspacePath, systemPrompt, parentAgentId, reasoningEffort } =
       req.body as {
         serverId?: string; machineId?: string; name: string; description?: string;
         role?: string; modelId?: string; modelProvider?: string;
         runtime?: string; workspacePath?: string; systemPrompt?: string;
+        parentAgentId?: string; reasoningEffort?: string;
       }
 
     if (!name?.trim()) return reply.code(400).send({ error: 'name required' })
 
-    // Validate runtime
-    const resolvedRuntime = (runtime ?? 'claude') as RuntimeId
+    const requestedRuntime = runtime?.trim()
+    const resolvedModelId = normalizeAgentModelId(modelId, requestedRuntime)
+    const resolvedRuntime = (resolvedModelId ? runtimeForModel(resolvedModelId) : (runtime ?? 'codex')) as RuntimeId
     if (!SUPPORTED_RUNTIMES.includes(resolvedRuntime)) {
       return reply.code(400).send({ error: `Unsupported runtime: ${runtime}. Supported: ${SUPPORTED_RUNTIMES.join(', ')}` })
     }
@@ -69,24 +349,55 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       serverId = server.id
     }
 
+    machineId = machineId?.trim() || undefined
+    if (!machineId) {
+      return reply.code(400).send({ error: 'machineId required. Create/connect a machine first, then choose it when creating the agent.' })
+    }
+
+    const machine = await queryOne<{ id: string }>(
+      `SELECT m.id
+       FROM machines m
+       JOIN server_members sm ON sm.server_id = m.server_id AND sm.user_id = $1
+       WHERE m.id = $2 AND m.server_id = $3`,
+      [caller.sub, machineId, serverId]
+    )
+    if (!machine) {
+      return reply.code(400).send({ error: 'Machine not found in current server' })
+    }
+
     // Auto-assign workspace path if not provided
-    // Default: <project>/shrimps/<name>  (i.e. backend-src/../shrimps/)
-    const agentsBaseDir = process.env.AGENTS_WORKSPACE_DIR ?? join(process.cwd(), '..', 'shrimps')
+    // Default: ~/JwtVault/00_hub/agents/<name>  (vault-based memory)
     const resolvedWorkspace = workspacePath?.trim()
-      || join(agentsBaseDir, name.trim().toLowerCase().replace(/\s+/g, '-'))
+      || resolveAgentWorkspacePath(name)
+
+    // If parentAgentId not provided, default to the first coordinator/ops agent in this server.
+    if (!parentAgentId) {
+      const manager = await queryOne<{ id: string }>(
+        `SELECT id
+         FROM agents
+         WHERE server_id = $1
+           AND role IN ('coordinator', 'ops')
+         ORDER BY CASE role WHEN 'coordinator' THEN 0 WHEN 'ops' THEN 1 ELSE 2 END, created_at
+         LIMIT 1`,
+        [serverId]
+      )
+      if (manager) parentAgentId = manager.id
+    }
 
     const [agent] = await query(
       `INSERT INTO agents
-         (server_id, machine_id, name, description, model_id, model_provider, runtime, workspace_path, role)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (server_id, machine_id, name, description, model_id, model_provider, runtime, workspace_path, role, parent_agent_id, reasoning_effort)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         serverId, machineId ?? null, name.trim(), description ?? null,
-        modelId ?? 'claude-sonnet-4-6',
-        modelProvider ?? 'anthropic',
-        runtime ?? 'claude',
+        resolvedModelId ?? defaultModelForRuntime(resolvedRuntime),
+        resolvedModelId ? providerForModel(resolvedModelId) : defaultProviderForRuntime(resolvedRuntime),
+        resolvedRuntime,
         resolvedWorkspace,
         role ?? 'general',
+        parentAgentId ?? null,
+        reasoningEffort?.trim() || 'medium',
       ]
     )
 
@@ -102,8 +413,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       )
     }
 
-    // Initialize workspace with MEMORY.md, CLAUDE.md, HEARTBEAT.md
-    const serverUrl = process.env.SERVER_URL ?? `http://localhost:${process.env.PORT ?? 3001}`
+    // Initialize workspace with MEMORY / KNOWLEDGE / notes / CLAUDE / HEARTBEAT
+    const serverUrl = resolveServerUrl(req)
     initAgentWorkspace(resolvedWorkspace, {
       agentId:      agent.id,
       agentName:    agent.name,
@@ -119,12 +430,272 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     return { agent }
   })
 
+  // ── POST /api/agents/reconnect-all ───────────────────────────────
+  app.post('/reconnect-all', { preHandler: [app.authenticate] }, async (req) => {
+    const caller = req.user as { sub: string }
+    const agents = await query<AgentControlRow>(
+      `SELECT a.id, a.name, a.description, a.runtime, a.model_id, a.machine_id,
+              a.workspace_path, a.session_id, a.reasoning_effort
+       FROM agents a
+       JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
+       ORDER BY a.name`,
+      [caller.sub]
+    )
+
+    const results: Array<{ agentId: string; name: string; ok: boolean; message?: string; error?: string }> = []
+
+    for (const agent of agents) {
+      try {
+        await stopAgentInstance(agent.id)
+        await new Promise(resolve => setTimeout(resolve, 150))
+        const started = await startAgentInstance(agent, resolveServerUrl(req), true)
+        if (!started.ok) {
+          results.push({
+            agentId: agent.id,
+            name: agent.name,
+            ok: false,
+            error: started.error ?? started.message ?? 'Reconnect failed',
+          })
+          continue
+        }
+        results.push({
+          agentId: agent.id,
+          name: agent.name,
+          ok: true,
+          message: started.message,
+        })
+      } catch (err: any) {
+        results.push({
+          agentId: agent.id,
+          name: agent.name,
+          ok: false,
+          error: err?.message ?? 'Reconnect failed',
+        })
+      }
+    }
+
+    return {
+      ok: results.every(result => result.ok),
+      count: results.length,
+      results,
+    }
+  })
+
+  // ── PATCH /api/agents/:id/note ───────────────────────────────────
+  app.patch('/:id/note', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const caller = req.user as { sub: string }
+    const { id } = req.params as { id: string }
+    const { note } = req.body as { note?: string | null }
+
+    const agent = await queryOne<{ id: string }>(
+      `SELECT a.id
+       FROM agents a
+       JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
+       WHERE a.id = $2`,
+      [caller.sub, id]
+    )
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' })
+
+    const normalizedNote = note?.trim() ? note.trim() : null
+    const [updated] = await query(
+      `UPDATE agents SET note = $1 WHERE id = $2 RETURNING id, note`,
+      [normalizedNote, id]
+    )
+    return { agent: updated }
+  })
+
   // ── GET /api/agents/:id ───────────────────────────────────────────
   app.get('/:id', { preHandler: [app.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const agent = await queryOne('SELECT * FROM agents WHERE id = $1', [id])
+    const agent = await queryOne(
+      `SELECT a.*, m.name AS machine_name, m.hostname AS machine_hostname, m.status AS machine_status,
+              p.name AS current_project_name, p.slug AS current_project_slug
+       FROM agents a
+       LEFT JOIN machines m ON m.id = a.machine_id
+       LEFT JOIN projects p ON p.id = a.current_project_id
+       WHERE a.id = $1`,
+      [id]
+    )
     if (!agent) return reply.code(404).send({ error: 'Agent not found' })
     return agent
+  })
+
+  // ── GET /api/agents/:id/memory ────────────────────────────────────
+  app.get('/:id/memory', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const caller = req.user as { sub: string }
+    const { id } = req.params as { id: string }
+
+    const agent = await queryOne<{ workspace_path: string | null }>(
+      `SELECT a.workspace_path
+       FROM agents a
+       JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
+       WHERE a.id = $2`,
+      [caller.sub, id]
+    )
+
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' })
+
+    const [memory, knowledge, notesIndex] = await Promise.all([
+      readWorkspaceDoc(agent.workspace_path, 'MEMORY.md'),
+      readWorkspaceDoc(agent.workspace_path, 'KNOWLEDGE.md'),
+      readWorkspaceDoc(agent.workspace_path, 'notes/README.md'),
+    ])
+
+    return {
+      path: memory.path,
+      content: memory.content,
+      updatedAt: memory.updatedAt,
+      workspacePath: agent.workspace_path,
+      memory,
+      knowledge,
+      notesIndex,
+    }
+  })
+
+  // ── GET /api/agents/:id/authored-docs ───────────────────────────
+  app.get('/:id/authored-docs', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const caller = req.user as { sub: string }
+    const { id } = req.params as { id: string }
+
+    const agent = await queryOne<{ id: string; name: string }>(
+      `SELECT a.id, a.name
+       FROM agents a
+       JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
+       WHERE a.id = $2`,
+      [caller.sub, id]
+    )
+
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' })
+
+    const vaultRoot = process.env.OBSIDIAN_ROOT
+    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+
+    const authorMention = `@${agent.name}`.toLowerCase()
+    const docs: Array<{
+      path: string
+      title: string
+      author: string[]
+      date: string | null
+      type: string | null
+      tags: string[]
+      youtube: string | null
+      source: string | null
+      updatedAt: string | null
+    }> = []
+
+    const scanDir = (dir: string, relDir = '') => {
+      let entries
+      try {
+        entries = readdirSync(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+
+      for (const entry of entries) {
+        if (entry.name.startsWith('.') || entry.name === 'node_modules') continue
+
+        const absolutePath = join(dir, entry.name)
+        const relativePath = relDir ? join(relDir, entry.name) : entry.name
+
+        if (entry.isDirectory()) {
+          scanDir(absolutePath, relativePath)
+          continue
+        }
+
+        if (!entry.isFile() || extname(entry.name).toLowerCase() !== '.md') continue
+
+        try {
+          const content = readFileSync(absolutePath, 'utf-8')
+          const { frontmatter } = parseFrontmatter(content)
+          const authors = frontmatterArrayValue(frontmatter.author)
+          if (!authors.some(author => author.toLowerCase().includes(authorMention))) continue
+
+          docs.push({
+            path: relativePath,
+            title: frontmatterStringValue(frontmatter.title) ?? basename(relativePath, '.md'),
+            author: authors,
+            date: frontmatterStringValue(frontmatter.date),
+            type: frontmatterStringValue(frontmatter.type),
+            tags: frontmatterArrayValue(frontmatter.tags),
+            youtube: frontmatterStringValue(frontmatter.youtube),
+            source: frontmatterStringValue(frontmatter.source),
+            updatedAt: statSync(absolutePath).mtime.toISOString(),
+          })
+        } catch {
+          // Skip unreadable files.
+        }
+      }
+    }
+
+    scanDir(vaultRoot)
+
+    docs.sort((left, right) => {
+      const leftDate = left.date ? Date.parse(left.date) : 0
+      const rightDate = right.date ? Date.parse(right.date) : 0
+      if (leftDate !== rightDate) return rightDate - leftDate
+      return left.title.localeCompare(right.title)
+    })
+
+    return { docs }
+  })
+
+  // ── GET /api/agents/:id/todos ─────────────────────────────────────
+  app.get('/:id/todos', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const caller = req.user as { sub: string }
+    const { id } = req.params as { id: string }
+
+    const agent = await queryOne<{ id: string }>(
+      `SELECT a.id
+       FROM agents a
+       JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
+       WHERE a.id = $2`,
+      [caller.sub, id]
+    )
+
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' })
+
+    const todos = await query(
+      `SELECT t.id,
+              t.channel_id,
+              c.name AS channel_name,
+              t.title,
+              t.number,
+              t.status,
+              t.claimed_by_id,
+              t.claimed_by_name,
+              t.claimed_at,
+              t.completed_at,
+              t.created_at,
+              COALESCE(
+                json_agg(
+                  DISTINCT jsonb_build_object(
+                    'id', td.id,
+                    'doc_path', td.doc_path,
+                    'doc_name', td.doc_name,
+                    'status', td.status
+                  )
+                ) FILTER (WHERE td.id IS NOT NULL),
+                '[]'
+              ) AS docs
+       FROM tasks t
+       JOIN channels c ON c.id = t.channel_id
+       LEFT JOIN task_documents td ON td.task_id = t.id
+       WHERE t.claimed_by_id = $1
+       GROUP BY t.id, c.name
+       ORDER BY
+         CASE t.status
+           WHEN 'claimed' THEN 0
+           WHEN 'in_progress' THEN 1
+           WHEN 'reviewing' THEN 2
+           WHEN 'open' THEN 3
+           WHEN 'completed' THEN 4
+           ELSE 5
+         END,
+         t.number`,
+      [id]
+    )
+
+    return { todos }
   })
 
   // ── PATCH /api/agents/:id/activity ───────────────────────────────
@@ -141,52 +712,34 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     return { agent }
   })
 
+  // ── PATCH /api/agents/:id/model ─────────────────────────────────
+  app.patch('/:id/model', { preHandler: [app.authenticate] }, async (req) => {
+    const { id } = req.params as { id: string }
+    const { modelId } = req.body as { modelId: string }
+    if (!modelId?.trim()) return { error: 'modelId required' }
+    const provider = providerForModel(modelId)
+    const [agent] = await query(
+      `UPDATE agents SET model_id = $1, model_provider = $2 WHERE id = $3 RETURNING id, model_id, model_provider`,
+      [modelId.trim(), provider, id]
+    )
+    return { agent }
+  })
+
   // ── POST /api/agents/:id/start ────────────────────────────────────
   app.post('/:id/start', { preHandler: [app.authenticate] }, async (req, reply) => {
     const { id } = req.params as { id: string }
-    const agent = await queryOne<{
-      id: string; name: string; runtime: string; model_id: string;
-      machine_id: string | null; workspace_path: string | null;
-    }>('SELECT * FROM agents WHERE id = $1', [id])
+    const agent = await readAgentControlRow(id)
 
     if (!agent) return reply.code(404).send({ error: 'Agent not found' })
-
-    if (processManager.isRunning(id)) {
-      await query(
-        `UPDATE agents SET status = 'running', last_heartbeat_at = COALESCE(last_heartbeat_at, NOW()) WHERE id = $1`,
-        [id]
-      )
-      return { ok: true, alreadyRunning: true, message: `Agent ${agent.name} is already running` }
-    }
-
-    // Use SERVER_URL if set, fall back to local server URL
-    const serverUrl = process.env.SERVER_URL
-      ?? `http://${process.env.HOST ?? '127.0.0.1'}:${process.env.PORT ?? 3001}`
-
-    // Generate a temp API key for this agent session
-    const apiKey = `agent_${id}_${Date.now()}`
-
-    const config: AgentConfig = {
-      id:            agent.id,
-      name:          agent.name,
-      machineId:     agent.machine_id ?? 'local',
-      serverUrl,
-      apiKey,
-      workspacePath: agent.workspace_path ?? process.cwd(),
-      runtime:       agent.runtime,
-      modelId:       agent.model_id,
-    }
-
-    await processManager.spawn(config)
-    await query(`UPDATE agents SET status = 'starting' WHERE id = $1`, [id])
-    return { ok: true, message: `Agent ${agent.name} starting` }
+    const started = await startAgentInstance(agent, resolveServerUrl(req))
+    if (!started.ok) return reply.code(409).send(started)
+    return started
   })
 
   // ── POST /api/agents/:id/stop ─────────────────────────────────────
   app.post('/:id/stop', { preHandler: [app.authenticate] }, async (req) => {
     const { id } = req.params as { id: string }
-    await processManager.stop(id)
-    await query(`UPDATE agents SET status = 'offline', activity = NULL WHERE id = $1`, [id])
+    await stopAgentInstance(id)
     return { ok: true }
   })
 
@@ -224,60 +777,15 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     }>('SELECT id, name, workspace_path, model_id FROM agents WHERE id = $1', [id])
     if (!agent) return reply.code(404).send({ error: 'Agent not found' })
 
-    const workspacePath = agent.workspace_path ?? ''
-    const memoryPath = join(workspacePath, 'MEMORY.md')
-
-    // Read existing MEMORY.md
-    let currentMemory = ''
-    try { currentMemory = await readFile(memoryPath, 'utf-8') } catch { /* no file yet */ }
-
-    // Read recent logs for context
-    const logs = await query(
-      `SELECT level, content FROM agent_logs WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 80`,
-      [id]
-    )
-    const logText = (logs as any[]).reverse()
-      .map((l: any) => `[${l.level}] ${l.content}`)
-      .join('\n')
-
-    // Ask LLM to write a condensed MEMORY.md
-    const resp = await llmClient.complete({
-      model: agent.model_id,
-      prompt: `You are compacting the memory of AI shrimp "${agent.name}".
-
-Current MEMORY.md:
-\`\`\`
-${currentMemory || '(empty)'}
-\`\`\`
-
-Recent activity logs (newest at bottom):
-\`\`\`
-${logText || '(none)'}
-\`\`\`
-
-Write an updated MEMORY.md that:
-1. Preserves the Identity section exactly
-2. Summarizes key findings, decisions, and completed work from the logs
-3. Notes any in-progress tasks or important state
-4. Stays under 150 lines
-
-Output only the raw Markdown content for MEMORY.md, nothing else.`,
-    })
-
-    // Write compacted memory
-    await writeFile(memoryPath, resp.text, 'utf-8')
-
-    // Log the compaction event
-    await query(
-      `INSERT INTO agent_logs (agent_id, level, content) VALUES ($1, 'info', $2)`,
-      [id, `[compact] Context summarized (${resp.tokensUsed} tokens used). MEMORY.md updated. Restart to apply.`]
+    const result = await compactAgentContext(
+      agent.id, agent.name, agent.workspace_path ?? '', agent.model_id
     )
 
     // Stop the agent process (it will reload from fresh MEMORY.md on next start)
     try { await processManager.stop(id) } catch { /* already stopped */ }
     await query(`UPDATE agents SET status = 'offline', activity = NULL WHERE id = $1`, [id])
 
-    return { ok: true, tokensUsed: resp.tokensUsed }
+    return { ok: true, tokensUsed: result.tokensUsed }
   })
 
   // ── DELETE /api/agents/:id ────────────────────────────────────────

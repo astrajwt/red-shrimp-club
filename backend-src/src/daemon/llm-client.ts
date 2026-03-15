@@ -29,12 +29,11 @@ export interface CompletionResponse {
   provider: Provider
 }
 
-type Provider = 'anthropic' | 'moonshot' | 'openai'
+type Provider = 'anthropic' | 'moonshot' | 'moonshot' | 'openai' | 'zhipu' | 'dashscope'
 
 // ─── Provider config ──────────────────────────────────────────────────────────
 
 const CLAUDE_DEFAULT_MODEL  = 'claude-sonnet-4-6'
-const KIMI_DEFAULT_MODEL    = 'moonshot-v1-8k'
 const OPENAI_DEFAULT_MODEL  = 'gpt-4o'
 
 // Backoff config
@@ -47,7 +46,18 @@ const BACKOFF_RETRIES  = 6
 function resolveProvider(model: string): Provider {
   if (model.startsWith('claude'))     return 'anthropic'
   if (model.startsWith('moonshot'))   return 'moonshot'
+  if (model.startsWith('glm'))        return 'zhipu'
+  if (model.startsWith('qwen') || model.startsWith('codeplan')) return 'dashscope'
   return 'openai'  // gpt-*, o1-*, codex-*
+}
+
+// ─── Provider-specific base URLs and API key env vars ──────────────────────
+
+const PROVIDER_CONFIG: Record<string, { baseURL: string; envKey: string }> = {
+  moonshot:   { baseURL: 'https://api.moonshot.cn/v1',                envKey: 'MOONSHOT_API_KEY' },
+  openai:     { baseURL: 'https://api.openai.com/v1',                envKey: 'OPENAI_API_KEY' },
+  zhipu:      { baseURL: 'https://open.bigmodel.cn/api/paas/v4',     envKey: 'ZHIPU_API_KEY' },
+  dashscope:  { baseURL: 'https://coding.dashscope.aliyuncs.com/v1', envKey: 'DASHSCOPE_API_KEY' },
 }
 
 // ─── Exponential backoff retry ───────────────────────────────────────────────
@@ -110,10 +120,10 @@ class LLMClient {
         yield* this.streamClaude(model, req)
         break
       case 'moonshot':
-        yield* this.streamOpenAICompat(model, req, 'moonshot')
-        break
       case 'openai':
-        yield* this.streamOpenAICompat(model, req, 'openai')
+      case 'zhipu':
+      case 'dashscope':
+        yield* this.streamOpenAICompat(model, req, provider)
         break
     }
   }
@@ -131,10 +141,10 @@ class LLMClient {
         result = await withRetry(() => this.callClaude(model, req))
         break
       case 'moonshot':
-        result = await withRetry(() => this.callOpenAICompat(model, req, 'moonshot'))
-        break
       case 'openai':
-        result = await withRetry(() => this.callOpenAICompat(model, req, 'openai'))
+      case 'zhipu':
+      case 'dashscope':
+        result = await withRetry(() => this.callOpenAICompat(model, req, provider))
         break
     }
 
@@ -178,17 +188,11 @@ class LLMClient {
   private async callOpenAICompat(
     model: string,
     req: CompletionRequest,
-    provider: 'moonshot' | 'openai'
+    provider: 'moonshot' | 'openai' | 'zhipu' | 'dashscope'
   ): Promise<CompletionResponse> {
-    const baseURL =
-      provider === 'moonshot'
-        ? 'https://api.moonshot.cn/v1'
-        : 'https://api.openai.com/v1'
-
-    const apiKey =
-      provider === 'moonshot'
-        ? process.env.MOONSHOT_API_KEY!
-        : process.env.OPENAI_API_KEY!
+    const cfg = PROVIDER_CONFIG[provider]
+    const baseURL = process.env[`${provider.toUpperCase()}_BASE_URL`] ?? cfg.baseURL
+    const apiKey = process.env[cfg.envKey]!
 
     const messages: Array<{ role: string; content: string }> = []
     if (req.systemPrompt) {
@@ -256,15 +260,11 @@ class LLMClient {
   private async *streamOpenAICompat(
     model: string,
     req: CompletionRequest,
-    provider: 'moonshot' | 'openai'
+    provider: 'moonshot' | 'openai' | 'zhipu' | 'dashscope'
   ): AsyncGenerator<string> {
-    const baseURL = provider === 'moonshot'
-      ? 'https://api.moonshot.cn/v1'
-      : 'https://api.openai.com/v1'
-
-    const apiKey = provider === 'moonshot'
-      ? process.env.MOONSHOT_API_KEY!
-      : process.env.OPENAI_API_KEY!
+    const cfg = PROVIDER_CONFIG[provider]
+    const baseURL = process.env[`${provider.toUpperCase()}_BASE_URL`] ?? cfg.baseURL
+    const apiKey = process.env[cfg.envKey]!
 
     const messages: Array<{ role: string; content: string }> = []
     if (req.systemPrompt) messages.push({ role: 'system', content: req.systemPrompt })
@@ -337,14 +337,24 @@ class LLMClient {
         { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5',   tier: 'fast'     },
       ],
       moonshot: [
-        { id: 'moonshot-v1-8k',   label: 'Kimi (8K)',   tier: 'fast'     },
-        { id: 'moonshot-v1-32k',  label: 'Kimi (32K)',  tier: 'standard' },
-        { id: 'moonshot-v1-128k', label: 'Kimi (128K)', tier: 'premium'  },
+        { id: 'kimi-code/kimi-for-coding', label: 'Kimi Code',  tier: 'standard' },
+        { id: 'kimi-k2-5',                 label: 'Kimi K2.5',  tier: 'standard' },
       ],
       openai: [
-        { id: 'gpt-4o',      label: 'GPT-4o',      tier: 'premium'  },
-        { id: 'gpt-4o-mini', label: 'GPT-4o Mini', tier: 'fast'     },
-        { id: 'o1-mini',     label: 'o1 Mini',     tier: 'standard' },
+        { id: 'gpt-5.4',            label: 'GPT-5.4',              tier: 'premium'  },
+        { id: 'gpt-5.3-codex',      label: 'GPT-5.3 Codex',       tier: 'standard' },
+        { id: 'gpt-5.2-codex',      label: 'GPT-5.2 Codex',       tier: 'standard' },
+        { id: 'gpt-5.2',            label: 'GPT-5.2',              tier: 'standard' },
+        { id: 'gpt-5.1-codex-max',  label: 'GPT-5.1 Codex Max',   tier: 'premium'  },
+        { id: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini',  tier: 'fast'     },
+      ],
+      zhipu: [
+        { id: 'glm-5',   label: 'GLM-5 (744B MoE)',  tier: 'premium'  },
+        { id: 'glm-4.7', label: 'GLM-4.7',            tier: 'standard' },
+      ],
+      dashscope: [
+        { id: 'qwen3.5',        label: 'Qwen 3.5',         tier: 'premium'  },
+        { id: 'qwen-coder-plus', label: 'Qwen Coder Plus', tier: 'standard' },
       ],
     }
   }

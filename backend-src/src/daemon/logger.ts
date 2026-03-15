@@ -1,6 +1,6 @@
 // Daemon Logger — 三路日志输出
 // 1. 数据库 agent_logs 表
-// 2. Obsidian markdown 文件 ~/JwtVault/agents/<name>/logs/YYYY-MM-DD.md
+// 2. Obsidian markdown 文件 ~/JwtVault/00_hub/agents/<name>/logs/YYYY-MM-DD.md
 // 3. WebSocket 推送给前端
 
 import fs from 'fs'
@@ -37,13 +37,13 @@ export class ObsidianLogWriter {
   private vaultRoot: string
   private handles = new Map<string, fs.WriteStream>()
 
-  constructor(vaultRoot = path.join(os.homedir(), 'JwtVault')) {
+  constructor(vaultRoot = process.env.OBSIDIAN_ROOT?.trim() || path.join(os.homedir(), 'JwtVault')) {
     this.vaultRoot = vaultRoot
   }
 
   private getPath(agentName: string): string {
     const date = new Date().toISOString().slice(0, 10)  // YYYY-MM-DD
-    return path.join(this.vaultRoot, 'agents', agentName, 'logs', `${date}.md`)
+    return path.join(this.vaultRoot, '00_hub', 'agents', agentName, 'logs', `${date}.md`)
   }
 
   private getStream(agentName: string): fs.WriteStream {

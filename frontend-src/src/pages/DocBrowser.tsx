@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { obsidianApi, askApi, agentsApi, type ObsidianEntry, type ModelInfo } from '../lib/api'
+import { isImeComposing } from '../lib/ime'
 import DocumentViewer from './DocumentViewer'
 
 export default function DocBrowser() {
@@ -170,6 +171,7 @@ function AskPanel({ filePath }: { filePath: string | null }) {
   }
 
   const onKey = (e: React.KeyboardEvent) => {
+    if (isImeComposing(e)) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
 
@@ -218,7 +220,7 @@ function AskPanel({ filePath }: { filePath: string | null }) {
           <select
             value={selectedModel}
             onChange={e => onModelChange(e.target.value)}
-            className="flex-1 bg-[#141018] border border-[#2a2228] text-[#9a8888] text-[10px] px-1.5 py-0.5 outline-none focus:border-[#c0392b] cursor-pointer"
+            className="rsl-control rsl-select flex-1 bg-[#141018] border border-[#2a2228] text-[#9a8888] text-[10px] px-1.5 py-0.5 outline-none cursor-pointer"
             style={{ fontFamily: 'inherit' }}
           >
             {models.length === 0 && (

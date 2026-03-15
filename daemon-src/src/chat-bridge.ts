@@ -17,7 +17,10 @@ function toLocalTime(iso: string): string {
 // ── CLI args ──────────────────────────────────────────────────────
 const args = process.argv.slice(2)
 let agentId = ''
-let serverUrl = 'http://localhost:3001'
+let serverUrl =
+  process.env.REDSHRIMP_SERVER_URL?.trim()
+  || process.env.SERVER_URL?.trim()
+  || `http://127.0.0.1:${process.env.PORT ?? 3001}`
 let authToken = ''
 
 for (let i = 0; i < args.length; i++) {
@@ -65,7 +68,7 @@ server.tool(
   'Receive new messages. Use block=true to wait for new messages.',
   {
     block: z.boolean().default(true).describe('Whether to block (wait) for new messages'),
-    timeout_ms: z.number().default(59000).describe('How long to wait in ms when blocking'),
+    timeout_ms: z.number().default(45000).describe('How long to wait in ms when blocking'),
   },
   async ({ block, timeout_ms }) => {
     try {
@@ -185,10 +188,14 @@ server.tool(
 
 server.tool(
   'create_tasks',
-  'Create tasks on a channel task board.',
+  'Create tasks on a channel task board. Tasks are assigned immediately when created. If assignee_agent_id is omitted, the task is assigned to the calling agent. The assignee can be an agent id, plain name, or @mention. Use linked_docs to attach vault document paths (relative to vault root) to each task.',
   {
     channel: z.string(),
-    tasks: z.array(z.object({ title: z.string() })),
+    tasks: z.array(z.object({
+      title: z.string(),
+      assignee_agent_id: z.string().optional(),
+      linked_docs: z.array(z.string()).optional(),
+    })),
   },
   async ({ channel, tasks }) => {
     try {
@@ -198,7 +205,9 @@ server.tool(
       })
       const data = await res.json() as any
       if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
-      const created = data.tasks.map((t: any) => `#t${t.taskNumber} "${t.title}"`).join('\n')
+      const created = data.tasks
+        .map((t: any) => `#t${t.taskNumber} "${t.title}"${t.assigneeName ? ` → @${t.assigneeName}` : ''}`)
+        .join('\n')
       return { content: [{ type: 'text' as const, text: `Created ${data.tasks.length} task(s):\n${created}` }] }
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
@@ -208,52 +217,41 @@ server.tool(
 
 server.tool(
   'claim_tasks',
-  'Claim tasks by number.',
+  'Disabled in explicit-assignment mode. Tasks must be assigned by a human reviewer.',
   {
     channel: z.string(),
     task_numbers: z.array(z.number()),
   },
-  async ({ channel, task_numbers }) => {
-    try {
-      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/tasks/claim`, {
-        method: 'POST', headers: commonHeaders,
-        body: JSON.stringify({ channel, task_numbers }),
-      })
-      const data = await res.json() as any
-      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
-      const lines = data.results.map((r: any) => r.success ? `#t${r.taskNumber}: claimed` : `#t${r.taskNumber}: FAILED — ${r.reason}`)
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] }
-    } catch (err: any) {
-      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+  async () => {
+    return {
+      content: [{
+        type: 'text' as const,
+        text: 'Error: Tasks must be explicitly assigned by a human. claim_tasks is disabled.',
+      }],
     }
   },
 )
 
 server.tool(
   'unclaim_task',
-  'Release claim on a task.',
+  'Disabled in explicit-assignment mode. Assigned tasks cannot be unclaimed by agents.',
   {
     channel: z.string(),
     task_number: z.number(),
   },
-  async ({ channel, task_number }) => {
-    try {
-      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/tasks/unclaim`, {
-        method: 'POST', headers: commonHeaders,
-        body: JSON.stringify({ channel, task_number }),
-      })
-      const data = await res.json() as any
-      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
-      return { content: [{ type: 'text' as const, text: `#t${task_number} unclaimed.` }] }
-    } catch (err: any) {
-      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+  async () => {
+    return {
+      content: [{
+        type: 'text' as const,
+        text: 'Error: Tasks must be explicitly assigned by a human. unclaim_task is disabled.',
+      }],
     }
   },
 )
 
 server.tool(
   'update_task_status',
-  'Update task progress status.',
+  'Update task progress status for a task already assigned to you. Valid transitions: todo→in_progress, in_progress→in_review, in_progress→done, in_review→in_progress, in_review→done.',
   {
     channel: z.string(),
     task_number: z.number(),
@@ -273,6 +271,94 @@ server.tool(
     }
   },
 )
+
+server.tool(
+  'link_task_doc',
+  'Link a vault document to an existing task. The doc_path should be relative to vault root (e.g. "05_notes/bugfix/bugfix-2026-03-14-fix.md"). Status can be "writing" (agent is still working on it) or "unread" (ready for review).',
+  {
+    channel: z.string(),
+    task_number: z.number(),
+    doc_path: z.string(),
+    doc_name: z.string().optional(),
+    status: z.enum(['writing', 'unread']).optional(),
+  },
+  async ({ channel, task_number, doc_path, doc_name, status }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/tasks/link-doc`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ channel, task_number, doc_path, doc_name, status }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      if (data.already_linked) return { content: [{ type: 'text' as const, text: `Doc already linked to #t${task_number}` }] }
+      return { content: [{ type: 'text' as const, text: `Linked "${doc_path}" to #t${task_number}` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'create_sticky_note',
+  'Create a sticky note on the homepage bulletin board. Also writes a flash note to vault 05_notes/flash/. Use for quick ideas, reminders, or flash thoughts.',
+  {
+    title: z.string().describe('Short title for the sticky note'),
+    content: z.string().optional().describe('Detailed content of the note'),
+    color: z.enum(['#f0b35e', '#6bc5e8', '#7ecfa8', '#c0392b']).optional().describe('Sticky note color'),
+  },
+  async ({ title, content, color }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/bulletins`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({
+          category: 'sticky',
+          title,
+          content: content ?? null,
+          metadata: { color: color ?? '#f0b35e', size: 'medium' },
+        }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      const vaultPath = data.bulletin?.linked_file ? ` → ${data.bulletin.linked_file}` : ''
+      return { content: [{ type: 'text' as const, text: `Sticky note created: "${title}"${vaultPath}` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+// ── vault_commit — commit vault changes to git ─────────────────────
+server.tool(
+  'vault_commit',
+  'Commit your vault file changes to git. Call this after writing or updating documents in the vault.',
+  {
+    message: z.string().optional().describe('Short commit message describing what changed'),
+  },
+  async ({ message }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/vault-commit`, {
+        method: 'POST',
+        headers: commonHeaders,
+        body: JSON.stringify({ message: message ?? undefined }),
+      })
+      const data = await res.json() as Record<string, unknown>
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${(data as any).error ?? res.status}` }] }
+      return { content: [{ type: 'text' as const, text: 'Vault commit scheduled.' }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+// ── Graceful shutdown on pipe break ───────────────────────────────
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') process.exit(0)
+})
+process.stdin.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED') process.exit(0)
+})
+process.on('SIGTERM', () => process.exit(0))
+process.on('SIGINT', () => process.exit(0))
 
 // ── Start MCP server ──────────────────────────────────────────────
 const transport = new StdioServerTransport()

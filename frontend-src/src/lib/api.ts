@@ -278,10 +278,10 @@ export const filesApi = {
 
 export const machinesApi = {
   list:      () => get<Machine[]>('/machines'),
-  create:    () => post<Machine & { api_key: string; connect_command: string }>('/machines', {}),
+  create:    () => post<Machine & { api_key: string; server_url: string; connect_command: string; env_config: string }>('/machines', {}),
   rename:    (id: string, name: string) => patch<Machine>('/machines/' + id, { name }),
   delete:    (id: string) => del('/machines/' + id),
-  reconnect: (id: string) => post<{ api_key: string; connect_command: string }>('/machines/' + id + '/reconnect'),
+  reconnect: (id: string) => post<{ api_key: string; server_url: string; connect_command: string; env_config: string }>('/machines/' + id + '/reconnect'),
   agents:    (id: string) => get<Agent[]>('/machines/' + id + '/agents'),
 }
 

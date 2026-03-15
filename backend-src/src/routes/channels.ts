@@ -11,15 +11,33 @@ import type { FastifyPluginAsync } from 'fastify'
 import { query, queryOne } from '../db/client.js'
 
 export const channelRoutes: FastifyPluginAsync = async (app) => {
+  await query(`
+    ALTER TABLE channels
+      ADD COLUMN IF NOT EXISTS task_id UUID REFERENCES tasks(id) ON DELETE SET NULL
+  `).catch(() => {})
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS channels_task_id_unique
+      ON channels(task_id) WHERE task_id IS NOT NULL
+  `).catch(() => {})
 
   // ── GET /api/channels ─────────────────────────────────────────────
-  // Returns all public channels in the user's server(s)
+  // Returns public channels in the user's primary server (or specified server)
   app.get('/', { preHandler: [app.authenticate] }, async (req) => {
     const caller = req.user as { sub: string }
     const { serverId } = req.query as { serverId?: string }
 
+    // Default to user's primary (owned) server
+    let targetServerId = serverId ?? null
+    if (!targetServerId) {
+      const primary = await queryOne<{ server_id: string }>(
+        `SELECT server_id FROM server_members WHERE user_id = $1 ORDER BY role = 'owner' DESC, joined_at ASC LIMIT 1`,
+        [caller.sub]
+      )
+      targetServerId = primary?.server_id ?? null
+    }
+
     const rows = await query(
-      `SELECT c.id, c.name, c.description, c.type,
+      `SELECT c.id, c.name, c.description, c.type, c.server_id,
               (cm.user_id IS NOT NULL OR cm.agent_id IS NOT NULL) AS joined
        FROM channels c
        JOIN servers s ON s.id = c.server_id
@@ -29,7 +47,7 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
        WHERE c.type = 'channel'
          AND ($2::uuid IS NULL OR c.server_id = $2::uuid)
        ORDER BY CASE WHEN c.name = 'all' THEN 0 ELSE 1 END, c.name`,
-      [caller.sub, serverId ?? null]
+      [caller.sub, targetServerId]
     )
     return rows
   })

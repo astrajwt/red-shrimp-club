@@ -1,5 +1,5 @@
 // Files routes — /api/files
-// POST /upload   multipart upload (image/pdf)
+// POST /upload   multipart upload (generic attachments)
 // GET  /:id      file metadata
 
 import type { FastifyPluginAsync } from 'fastify'
@@ -9,12 +9,23 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import { query } from '../db/client.js'
 
-const ALLOWED_MIME = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'application/pdf',
-])
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024   // 10MB
-const MAX_PDF_BYTES   = 50 * 1024 * 1024   // 50MB
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
+
+function normalizeFilename(filename: string | undefined, mime: string) {
+  const trimmed = filename?.trim()
+  if (trimmed) return trimmed
+
+  const fallbackExt =
+    mime === 'image/png' ? '.png' :
+    mime === 'image/jpeg' ? '.jpg' :
+    mime === 'image/gif' ? '.gif' :
+    mime === 'image/webp' ? '.webp' :
+    mime === 'application/pdf' ? '.pdf' :
+    ''
+
+  return `attachment-${Date.now()}${fallbackExt}`
+}
 
 export const fileRoutes: FastifyPluginAsync = async (app) => {
 
@@ -25,12 +36,10 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
     const data = await req.file() as MultipartFile | undefined
     if (!data) return reply.code(400).send({ error: 'No file provided' })
 
-    const mime = data.mimetype
-    if (!ALLOWED_MIME.has(mime)) {
-      return reply.code(400).send({ error: `File type not allowed: ${mime}` })
-    }
-
-    const maxBytes = mime === 'application/pdf' ? MAX_PDF_BYTES : MAX_IMAGE_BYTES
+    const mime = data.mimetype || 'application/octet-stream'
+    const originalFilename = normalizeFilename(data.filename, mime)
+    const isImage = mime.startsWith('image/')
+    const maxBytes = isImage ? MAX_IMAGE_BYTES : MAX_ATTACHMENT_BYTES
     const uploadsDir = process.env.UPLOADS_DIR ?? '/var/redshrimp/uploads'
 
     // Stream to temp buffer to check size
@@ -47,7 +56,7 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // Save to disk
-    const ext      = mime === 'application/pdf' ? '.pdf' : path.extname(data.filename) || '.bin'
+    const ext      = path.extname(originalFilename) || '.bin'
     const fileId   = randomUUID()
     const filename = `${fileId}${ext}`
     const filePath = path.join(uploadsDir, filename)
@@ -67,7 +76,7 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
          (id, server_id, uploader_id, uploader_type, filename, mime_type, size_bytes, storage_path)
        VALUES ($1, $2, $3, 'human', $4, $5, $6, $7)
        RETURNING id, filename, mime_type, size_bytes, created_at`,
-      [fileId, serverId, caller.sub, data.filename, mime, totalBytes, filename]
+      [fileId, serverId, caller.sub, originalFilename, mime, totalBytes, filename]
     )
 
     return {

@@ -1,21 +1,26 @@
 {
-  "name": "redshrimp-daemon",
+  "name": "@redshrimp/daemon",
   "version": "0.1.0",
   "description": "Red Shrimp Lab — machine daemon for remote agent management",
   "type": "module",
   "bin": {
-    "redshrimp-daemon": "./dist/index.js"
+    "redshrimp-daemon": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "node build.mjs",
     "start": "node dist/index.js"
   },
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "ws": "^8.18.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "zod": "^3.24.4"
-  },
-  "devDependencies": {
+    "zod": "^3.24.4",
     "esbuild": "^0.25.0",
     "@types/ws": "^8.5.14",
     "typescript": "^5.8.2"

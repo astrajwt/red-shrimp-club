@@ -25,7 +25,7 @@ async function playFile(src: string, fallback: () => void): Promise<void> {
   }
 }
 
-// ── New message — ice cubes in glass ──────────────────────────────────────
+// ── New message — short prompt tone ────────────────────────────────────────
 export function playSfxMessage() {
   playFile('/audio/sfx-message.mp3', synthesizeMessage)
 }
@@ -33,15 +33,17 @@ export function playSfxMessage() {
 function synthesizeMessage() {
   try {
     const c = getCtx()
-    const osc = c.createOscillator()
-    const gain = c.createGain()
-    osc.connect(gain); gain.connect(c.destination)
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(1800, c.currentTime)
-    osc.frequency.exponentialRampToValueAtTime(900, c.currentTime + 0.08)
-    gain.gain.setValueAtTime(0.18, c.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.25)
-    osc.start(); osc.stop(c.currentTime + 0.25)
+    for (const [freq, delay] of [[1046, 0], [1318, 0.06]] as const) {
+      const osc = c.createOscillator()
+      const gain = c.createGain()
+      osc.connect(gain); gain.connect(c.destination)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, c.currentTime + delay)
+      gain.gain.setValueAtTime(0.0001, c.currentTime + delay)
+      gain.gain.linearRampToValueAtTime(0.08, c.currentTime + delay + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + delay + 0.18)
+      osc.start(c.currentTime + delay); osc.stop(c.currentTime + delay + 0.18)
+    }
   } catch { /* ignore */ }
 }
 
@@ -67,7 +69,7 @@ function synthesizeAgentOnline() {
   } catch { /* ignore */ }
 }
 
-// ── Task complete — cocktail shaker ───────────────────────────────────────
+// ── Task complete — ice cubes in glass ────────────────────────────────────
 export function playSfxComplete() {
   playFile('/audio/sfx-complete.mp3', synthesizeComplete)
 }
@@ -75,20 +77,22 @@ export function playSfxComplete() {
 function synthesizeComplete() {
   try {
     const c = getCtx()
-    const buf = c.createBuffer(1, Math.floor(c.sampleRate * 0.6), c.sampleRate)
-    const data = buf.getChannelData(0)
-    for (let i = 0; i < data.length; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.max(0, 1 - i / data.length)
+    for (const [freq, delay, gainLevel] of [[2100, 0, 0.12], [1680, 0.08, 0.09], [2380, 0.16, 0.08]] as const) {
+      const osc = c.createOscillator()
+      const gain = c.createGain()
+      const filter = c.createBiquadFilter()
+      osc.connect(filter); filter.connect(gain); gain.connect(c.destination)
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(freq, c.currentTime + delay)
+      osc.frequency.exponentialRampToValueAtTime(Math.max(700, freq * 0.45), c.currentTime + delay + 0.12)
+      filter.type = 'highpass'
+      filter.frequency.value = 900
+      gain.gain.setValueAtTime(0.0001, c.currentTime + delay)
+      gain.gain.linearRampToValueAtTime(gainLevel, c.currentTime + delay + 0.008)
+      gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + delay + 0.18)
+      osc.start(c.currentTime + delay)
+      osc.stop(c.currentTime + delay + 0.18)
     }
-    const src = c.createBufferSource()
-    const filter = c.createBiquadFilter()
-    const gain = c.createGain()
-    src.buffer = buf
-    filter.type = 'bandpass'; filter.frequency.value = 2000; filter.Q.value = 0.8
-    src.connect(filter); filter.connect(gain); gain.connect(c.destination)
-    gain.gain.setValueAtTime(0.3, c.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.6)
-    src.start()
   } catch { /* ignore */ }
 }
 

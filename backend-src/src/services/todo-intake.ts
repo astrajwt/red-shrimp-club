@@ -2,10 +2,17 @@ import { mkdir, writeFile } from 'fs/promises'
 import path from 'path'
 import { emitTaskCreated, emitTaskDocAdded } from '../daemon/events.js'
 import { query, queryOne } from '../db/client.js'
+import { reserveTaskNumbers } from './task-sequence.js'
 
 export interface TodoSubtaskInput {
   title: string
   assigneeAgentId?: string
+}
+
+interface ResolvedTodoSubtask {
+  title: string
+  assigneeAgentId: string
+  assigneeName: string
 }
 
 export interface TodoIntakeInput {
@@ -16,6 +23,7 @@ export interface TodoIntakeInput {
   ownerAgentId?: string
   reviewerName?: string
   cleanLevel?: string
+  dueDate?: string
   subtasks?: TodoSubtaskInput[]
 }
 
@@ -63,25 +71,66 @@ function buildTodoDir(title: string) {
   return { dirName, dirPath }
 }
 
-async function getNextTaskNumber(channelId: string): Promise<number> {
-  const row = await queryOne<{ max: string }>(
-    'SELECT COALESCE(MAX(number), 0) AS max FROM tasks WHERE channel_id = $1',
-    [channelId]
+async function ensureTaskRootDoc(input: { actorId: string; taskId: string }) {
+  const existing = await queryOne<{ doc_path: string }>(
+    'SELECT doc_path FROM task_documents WHERE task_id = $1 ORDER BY created_at ASC LIMIT 1',
+    [input.taskId]
   )
-  return Number(row?.max ?? 0) + 1
+  if (existing?.doc_path) return existing.doc_path
+
+  const task = await queryOne<{ title: string; number: number }>(
+    'SELECT title, number FROM tasks WHERE id = $1',
+    [input.taskId]
+  )
+  if (!task) throw new Error('Task not found')
+
+  const vaultRoot = await ensureVaultRoot()
+  const date = new Date().toISOString().slice(0, 10)
+  const dirPath = path.posix.join('memory', 'todos', `${date}-t${task.number}-${slugify(task.title)}`)
+  const docName = 'index.md'
+  const docPath = path.posix.join(dirPath, docName)
+  const absDir = path.join(vaultRoot, ...dirPath.split('/'))
+  const absPath = path.join(absDir, docName)
+
+  await mkdir(absDir, { recursive: true })
+  await writeFile(
+    absPath,
+    `# ${task.title}
+
+## Meta
+
+- Task: #t${task.number}
+- Auto-created: true
+
+## Summary
+
+This task did not have a root memory note yet. The system created this file automatically when the first derived task document was written.
+`,
+    'utf8'
+  )
+
+  await query(
+    `INSERT INTO task_documents (task_id, doc_path, doc_name, status)
+     VALUES ($1, $2, $3, 'unread')`,
+    [input.taskId, docPath, docName]
+  )
+  emitTaskDocAdded(input.actorId, input.taskId, docPath)
+  return docPath
 }
 
-async function getAgentName(agentId?: string): Promise<string | null> {
-  if (!agentId) return null
+async function getRequiredAgentName(agentId: string): Promise<string> {
   const row = await queryOne<{ name: string }>('SELECT name FROM agents WHERE id = $1', [agentId])
-  return row?.name ?? null
+  if (!row?.name) throw new Error(`Assignee agent not found: ${agentId}`)
+  return row.name
 }
 
-function buildTodoMarkdown(input: TodoIntakeInput & { ownerName: string | null; subtasks: TodoSubtaskInput[] }): string {
+function buildTodoMarkdown(input: TodoIntakeInput & { ownerName: string; subtasks: ResolvedTodoSubtask[] }): string {
   const today = new Date().toISOString().slice(0, 10)
   const subtasks = input.subtasks.length > 0
-    ? input.subtasks.map((item, index) => `- [ ] ${index + 1}. ${item.title}`).join('\n')
-    : '- [ ] 待 Donovan 补充拆解'
+    ? input.subtasks
+      .map((item, index) => `- [ ] ${index + 1}. ${item.title} (@${item.assigneeName})`)
+      .join('\n')
+    : `- [ ] 待 ${input.ownerName} 补充拆解`
 
   return `# ${input.title}
 
@@ -89,7 +138,7 @@ function buildTodoMarkdown(input: TodoIntakeInput & { ownerName: string | null; 
 
 - 日期: ${today}
 - 记录人: Donovan
-- 主负责人: ${input.ownerName ?? 'Donovan'}
+- 主负责人: ${input.ownerName}
 - Reviewer: ${input.reviewerName ?? 'Jwt2077'}
 - Memory Clean 标准: ${input.cleanLevel ?? '待与用户确认'}
 
@@ -118,23 +167,24 @@ async function insertTask(params: {
   channelId: string
   title: string
   number: number
-  ownerAgentId?: string
-  ownerName?: string | null
+  ownerAgentId: string
+  ownerName: string
+  dueDate?: string
 }) {
-  const status = params.ownerAgentId ? 'claimed' : 'open'
   const [task] = await query(
     `INSERT INTO tasks (
-       channel_id, title, number, status, claimed_by_id, claimed_by_type, claimed_by_name, claimed_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $5 IS NULL THEN NULL ELSE NOW() END)
+       channel_id, title, number, status, claimed_by_id, claimed_by_type, claimed_by_name, claimed_at, due_date
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8)
      RETURNING *`,
     [
       params.channelId,
       params.title,
       params.number,
-      status,
-      params.ownerAgentId ?? null,
-      params.ownerAgentId ? 'agent' : null,
-      params.ownerName ?? null,
+      'claimed',
+      params.ownerAgentId,
+      'agent',
+      params.ownerName,
+      params.dueDate ?? null,
     ]
   )
   return task
@@ -147,21 +197,39 @@ export async function createTodoBundle(input: TodoIntakeInput): Promise<TodoBund
   const docPath = path.posix.join(dirPath, docName)
   const absDir = path.join(vaultRoot, ...dirPath.split('/'))
   const absPath = path.join(absDir, docName)
-  const ownerName = await getAgentName(input.ownerAgentId)
+  const ownerAgentId = input.ownerAgentId?.trim()
+  if (!ownerAgentId) throw new Error('ownerAgentId is required for todo intake')
+
+  const ownerName = await getRequiredAgentName(ownerAgentId)
   const subtasks = (input.subtasks ?? [])
-    .map(item => ({ title: item.title.trim(), assigneeAgentId: item.assigneeAgentId }))
+    .map(item => ({
+      title: item.title.trim(),
+      assigneeAgentId: item.assigneeAgentId?.trim() || ownerAgentId,
+    }))
     .filter(item => item.title)
+  const resolvedSubtasks = await Promise.all(
+    subtasks.map(async item => ({
+      ...item,
+      assigneeName: await getRequiredAgentName(item.assigneeAgentId),
+    }))
+  )
 
   await mkdir(absDir, { recursive: true })
-  await writeFile(absPath, buildTodoMarkdown({ ...input, ownerName, subtasks }), 'utf8')
+  await writeFile(
+    absPath,
+    buildTodoMarkdown({ ...input, ownerAgentId, ownerName, subtasks: resolvedSubtasks }),
+    'utf8'
+  )
 
-  const parentTaskNumber = await getNextTaskNumber(input.channelId)
+  const reserved = await reserveTaskNumbers(input.channelId, 1 + resolvedSubtasks.length)
+  const parentTaskNumber = reserved.first
   const parentTask = await insertTask({
     channelId: input.channelId,
     title: input.title,
     number: parentTaskNumber,
-    ownerAgentId: input.ownerAgentId,
+    ownerAgentId,
     ownerName,
+    dueDate: input.dueDate,
   })
   emitTaskCreated(input.actorId, parentTask.id, input.channelId)
 
@@ -173,15 +241,15 @@ export async function createTodoBundle(input: TodoIntakeInput): Promise<TodoBund
   emitTaskDocAdded(input.actorId, parentTask.id, doc.doc_path)
 
   const subtaskNumbers: number[] = []
-  for (const subtask of subtasks) {
-    const subtaskNumber = await getNextTaskNumber(input.channelId)
-    const subtaskOwnerName = await getAgentName(subtask.assigneeAgentId)
+  for (const [index, subtask] of resolvedSubtasks.entries()) {
+    const subtaskNumber = reserved.first + index + 1
     const created = await insertTask({
       channelId: input.channelId,
       title: subtask.title,
       number: subtaskNumber,
       ownerAgentId: subtask.assigneeAgentId,
-      ownerName: subtaskOwnerName,
+      ownerName: subtask.assigneeName,
+      dueDate: input.dueDate,
     })
     emitTaskCreated(input.actorId, created.id, input.channelId)
     await query(
@@ -209,13 +277,9 @@ function buildNoteFileName(title: string): string {
 
 export async function appendTodoNote(input: TodoNoteInput): Promise<TodoNoteResult> {
   const vaultRoot = await ensureVaultRoot()
-  const firstDoc = await queryOne<{ doc_path: string }>(
-    'SELECT doc_path FROM task_documents WHERE task_id = $1 ORDER BY created_at ASC LIMIT 1',
-    [input.taskId]
-  )
-  if (!firstDoc?.doc_path) throw new Error('Todo has no linked memory root')
+  const rootDocPath = await ensureTaskRootDoc({ actorId: input.actorId, taskId: input.taskId })
 
-  const todoDir = path.posix.dirname(firstDoc.doc_path)
+  const todoDir = path.posix.dirname(rootDocPath)
   const docName = buildNoteFileName(input.title)
   const docPath = path.posix.join(todoDir, docName)
   const absPath = path.join(vaultRoot, ...docPath.split('/'))

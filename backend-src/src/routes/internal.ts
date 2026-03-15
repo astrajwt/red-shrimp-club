@@ -287,7 +287,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
         for (const chId of channelIds) {
           const lastRead = readMap[chId] ?? 0
           const msgs = await query(
-            `SELECT m.id, m.channel_id, m.sender_id, m.sender_type, m.sender_name, m.content, m.seq, m.created_at,
+            `SELECT m.id, m.channel_id, m.sender_id, m.sender_type, m.sender_name, m.content, m.attachments, m.seq, m.created_at,
                     c.name AS channel_name, c.type AS channel_type
              FROM messages m JOIN channels c ON c.id = m.channel_id
              WHERE m.channel_id = $1 AND m.seq > $2 AND m.sender_id != $3

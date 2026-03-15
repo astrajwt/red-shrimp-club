@@ -83,8 +83,8 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
             />
           )}
           <Field
-            label="email"
-            placeholder="you@example.com"
+            label="identity"
+            placeholder="Jwt2077 / you@example.com"
             type="text"
             value={username}
             onChange={setUsername}

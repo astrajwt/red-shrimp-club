@@ -188,7 +188,7 @@ export default function ActivityPage() {
           }}
         >
           <div className="border-b-[3px] border-black px-4 py-2 bg-[#1e1a20]">
-            <div className="text-[13px] uppercase text-[#4a4048]">shrimp</div>
+            <div className="text-[13px] uppercase text-[#4a4048]">agent</div>
           </div>
           <div className="px-3 py-3 space-y-2">
             {agents.map(agent => {
@@ -217,7 +217,7 @@ export default function ActivityPage() {
               )
             })}
             {agents.length === 0 && (
-              <div className="text-[12px] text-[#4a4048] text-center py-4">暂无shrimp</div>
+              <div className="text-[12px] text-[#4a4048] text-center py-4">暂无 agent</div>
             )}
           </div>
         </div>

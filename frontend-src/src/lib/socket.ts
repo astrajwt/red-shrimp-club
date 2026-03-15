@@ -69,6 +69,8 @@ export type SocketEventMap = {
   'task:updated':       TaskEvent
   'subagent:action':    SubagentEvent
   'message':            { channelId: string; message: unknown }
+  'bulletin:created':   unknown
+  'bulletin:updated':   unknown
 }
 
 // ─── Socket manager ───────────────────────────────────────────────────────────
