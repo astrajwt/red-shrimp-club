@@ -5,12 +5,26 @@
 import WebSocket from 'ws'
 import { spawn, ChildProcess, execSync } from 'child_process'
 import { mkdir, writeFile, access } from 'fs/promises'
+import { existsSync, readFileSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import os from 'os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const VERSION = '0.1.0'
+const REPO_ROOT = resolve(__dirname, '../..')
+const DEFAULT_MEMORY_TEMPLATE_PATH = resolve(REPO_ROOT, 'config', 'MEMORY.template.md')
+const FALLBACK_MEMORY_TEMPLATE = `# {{agentName}}
+
+## Role
+{{roleSeed}}
+
+## Key Knowledge
+{{keyKnowledge}}
+
+## Active Context
+- {{activeContext}}
+`
 
 // ── CLI args ────────────────────────────────────────────────────────
 const args = process.argv.slice(2)
@@ -55,6 +69,9 @@ interface AgentProc {
   proc: ChildProcess | null
   sessionId: string | null
   status: 'active' | 'sleeping' | 'inactive'
+  pendingNotificationCount: number
+  notificationTimer: ReturnType<typeof setTimeout> | null
+  lastDeliveredMessage: DeliveredMessage | null
 }
 
 interface AgentConfig {
@@ -63,14 +80,55 @@ interface AgentConfig {
   description?: string
   model: string
   runtime: string
+  reasoningEffort?: string
   serverUrl: string
   authToken?: string
   sessionId?: string
 }
 
+interface DeliveredMessage {
+  channel_name: string
+  channel_type: string
+  sender_name: string
+  sender_type: string
+  content: string
+  timestamp: string
+}
+
 const agents = new Map<string, AgentProc>()
 const chatBridgePath = resolve(__dirname, 'chat-bridge.js')
 const workspaceBase = resolve(os.homedir(), '.redshrimp', 'agents')
+const NOTIFICATION_BATCH_MS = 3000
+const WAKE_NOTIFICATION_DELAY_MS = 1500
+const DEFAULT_KIMI_CLI_MODEL = 'kimi-code/kimi-for-coding'
+const LEGACY_KIMI_MODEL = 'kimi-k2-5'
+
+interface InitialMemoryTemplateInput {
+  agentName: string
+  description?: string
+  serverUrl?: string
+  activeContext?: string
+}
+
+function resolveMemoryTemplatePath(): string {
+  const customPath = process.env.MEMORY_TEMPLATE_PATH?.trim()
+  if (customPath) return resolve(customPath)
+  return DEFAULT_MEMORY_TEMPLATE_PATH
+}
+
+function loadMemoryTemplate(): string {
+  const templatePath = resolveMemoryTemplatePath()
+  if (!existsSync(templatePath)) return FALLBACK_MEMORY_TEMPLATE
+  try {
+    return readFileSync(templatePath, 'utf-8')
+  } catch {
+    return FALLBACK_MEMORY_TEMPLATE
+  }
+}
+
+function renderMemoryTemplate(template: string, values: Record<string, string>): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => values[key] ?? '')
+}
 
 function buildMcpConfig(agentId: string, config: AgentConfig): string {
   return JSON.stringify({
@@ -88,45 +146,186 @@ function buildMcpConfig(agentId: string, config: AgentConfig): string {
   })
 }
 
-function buildAgentPrompt(name: string): string {
-  return `You are ${name}. Read CLAUDE.md and MEMORY.md for your role and context.\nYour job: stay online silently and respond only when someone talks to you.\nLoop (repeat forever):\n1. Call mcp__chat__receive_message with block=true\n2. For each message received: if it's directed at you, @mentions you, or is a DM — reply using the reply_to field from the message (e.g. reply_to.dm_to or reply_to.channel)\n3. Go back to step 1\nIMPORTANT: Do NOT send any unprompted messages. Do NOT announce you are online. Do NOT send status updates. Only speak when a message requires your response.\nExit only when your context window is nearly full — write important notes to MEMORY.md first, then exit cleanly.`
+function buildChatBridgeArgs(agentId: string, config: AgentConfig): string[] {
+  return [
+    'node',
+    chatBridgePath,
+    '--agent-id', agentId,
+    '--server-url', config.serverUrl || serverUrl,
+    '--auth-token', config.authToken || apiKey,
+  ]
 }
 
-function buildCommand(agentId: string, config: AgentConfig): string[] {
+function buildInitialMemoryIndex(input: InitialMemoryTemplateInput): string {
+  return renderMemoryTemplate(loadMemoryTemplate(), {
+    agentName: input.agentName,
+    roleSeed: input.description?.trim() || 'No role defined yet.',
+    keyKnowledge: [
+      input.serverUrl?.trim() ? `- Backend: \`${input.serverUrl.trim()}\`.` : '',
+      '- Read `KNOWLEDGE.md` and `notes/` for workspace context when available.',
+      '- Update this file when role, preferences, or active context change.',
+    ].filter(Boolean).join('\n'),
+    activeContext: input.activeContext?.trim() || 'First startup.',
+    serverUrl: input.serverUrl?.trim() || '',
+    channelName: '',
+    teamContext: '',
+  })
+}
+
+function buildBootstrapPrompt(name: string): string {
+  return `You are "${name}", an AI agent in Red Shrimp.
+
+Read \`MEMORY.md\` in your cwd first. It is your editable memory index and the main source of truth for your role, preferences, and active context.
+
+Communication rules:
+- Use MCP chat tools only for communication.
+- Do NOT use shell commands to send or receive messages.
+- Do NOT output plain text outside tool calls.
+- Do NOT announce yourself or send unprompted status updates.
+- Write important long-term state back to \`MEMORY.md\`.
+
+Available MCP chat tools:
+- \`mcp__chat__receive_message\`
+- \`mcp__chat__send_message\`
+- \`mcp__chat__list_server\`
+- \`mcp__chat__read_history\`
+- \`mcp__chat__list_tasks\`
+- \`mcp__chat__create_tasks\`
+- \`mcp__chat__claim_tasks\`
+- \`mcp__chat__unclaim_task\`
+- \`mcp__chat__update_task_status\`
+
+Task rules:
+- Tasks are explicitly assigned. Do not rely on claim/unclaim as a normal workflow.
+- Only update the status of tasks already assigned to you.
+- When creating a task, assign it directly to the right agent up front instead of leaving it open.
+- \`create_tasks\` accepts the assignee as an agent id, plain name, or @mention; if omitted, the task is assigned to you.
+
+Working loop:
+1. Read \`MEMORY.md\`.
+2. Call \`mcp__chat__receive_message(block=true)\` to listen for work.
+3. Reply or take action as needed using chat/task tools.
+4. After each step, call \`mcp__chat__receive_message(block=true)\` again.
+
+Your process may exit between turns. Make \`receive_message(block=true)\` your last action when you finish the current step.`
+}
+
+function buildResumePrompt(unreadCount: number): string {
+  if (unreadCount > 0) {
+    return `You may have unread messages from while you were away. Call \`mcp__chat__receive_message(block=true)\` to read them, respond as appropriate, and then keep listening.`
+  }
+  return `No new work is guaranteed. Read \`MEMORY.md\` if needed, then call \`mcp__chat__receive_message(block=true)\` to keep listening.`
+}
+
+function buildLaunchPrompt(config: AgentConfig, unreadCount: number): string {
+  if (config.sessionId) return buildResumePrompt(unreadCount)
+  return buildBootstrapPrompt(config.displayName || config.name)
+}
+
+function usesStreamingJsonInput(runtime: string): boolean {
+  return runtime === 'claude'
+}
+
+function supportsStdinNotification(runtime: string): boolean {
+  return runtime === 'claude'
+}
+
+function buildStdinMessage(runtime: string, text: string): string {
+  if (runtime === 'kimi') {
+    return JSON.stringify({ role: 'user', content: text })
+  }
+
+  return JSON.stringify({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'text', text }] },
+  })
+}
+
+function normalizeKimiCliModel(model?: string): string | undefined {
+  if (!model?.trim()) return undefined
+  if (model === LEGACY_KIMI_MODEL) return DEFAULT_KIMI_CLI_MODEL
+  return model
+}
+
+function writeAgentInput(ap: AgentProc, text: string): boolean {
+  if (!ap.proc?.stdin?.writable) return false
+
+  try {
+    ap.proc.stdin.write(`${buildStdinMessage(ap.config.runtime || 'claude', text)}\n`)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function buildCommand(agentId: string, config: AgentConfig, prompt: string): string[] {
   const mcpConfig = buildMcpConfig(agentId, config)
-  const prompt = buildAgentPrompt(config.displayName || config.name)
   const runtime = config.runtime || 'claude'
 
   switch (runtime) {
     case 'claude': {
       const args: string[] = [
         'claude',
+        '--allow-dangerously-skip-permissions',
         '--dangerously-skip-permissions',
-        '--model', config.model || 'claude-sonnet-4-6',
+        '--verbose',
+        '--output-format', 'stream-json',
+        '--input-format', 'stream-json',
         '--mcp-config', mcpConfig,
+        '--model', config.model || 'sonnet',
       ]
       if (config.sessionId) {
         args.push('--resume', config.sessionId)
-      } else {
-        args.push('-p', prompt)
       }
       return args
     }
-    case 'codex':
-      return [
+    case 'codex': {
+      // Codex uses -c flags for inline MCP config (matches slock driver)
+      const bridgeArgs = buildChatBridgeArgs(agentId, config)
+      const bridgeCommand = bridgeArgs[0]  // 'node'
+      const bridgeRest = bridgeArgs.slice(1)
+      const codexArgs = [
         'codex', 'exec',
+        ...(config.sessionId ? ['resume', config.sessionId] : []),
         '--dangerously-bypass-approvals-and-sandbox',
-        '-m', config.model || 'o4-mini',
-        prompt,
+        '--json',
+        '-c', `mcp_servers.chat.command=${JSON.stringify(bridgeCommand)}`,
+        '-c', `mcp_servers.chat.args=${JSON.stringify(bridgeRest)}`,
+        '-c', 'mcp_servers.chat.startup_timeout_sec=30',
+        '-c', 'mcp_servers.chat.tool_timeout_sec=120',
+        '-c', 'mcp_servers.chat.enabled=true',
+        '-c', 'mcp_servers.chat.required=true',
       ]
-    case 'kimi':
-      return [
+      if (config.model) {
+        codexArgs.push('-m', config.model)
+      } else {
+        codexArgs.push('-m', 'gpt-5.4')
+      }
+      if (config.reasoningEffort) {
+        codexArgs.push('-c', `model_reasoning_effort=${config.reasoningEffort}`)
+      } else {
+        codexArgs.push('-c', 'model_reasoning_effort="medium"')
+      }
+      codexArgs.push(prompt)
+      return codexArgs
+    }
+    case 'kimi': {
+      const kimiModel = normalizeKimiCliModel(config.model)
+      const kimiArgs = [
         'kimi',
-        '--skip-permissions',
-        '--model', config.model || 'kimi-k2-5',
+        '--print',
+        '--output-format', 'stream-json',
         '--mcp-config', mcpConfig,
-        '-p', prompt,
       ]
+      if (kimiModel) {
+        kimiArgs.push('--model', kimiModel)
+      }
+      if (config.sessionId) {
+        kimiArgs.push('--session', config.sessionId)
+      }
+      kimiArgs.push('-p', prompt)
+      return kimiArgs
+    }
     default:
       throw new Error(`Unknown runtime: ${runtime}`)
   }
@@ -153,10 +352,40 @@ async function startAgent(agentId: string, config: AgentConfig) {
   try {
     await access(resolve(workDir, 'MEMORY.md'))
   } catch {
-    await writeFile(resolve(workDir, 'MEMORY.md'), `# ${config.displayName || config.name}\n\n## Role\n${config.description || 'AI Agent'}\n\n## Active Context\n- Just started\n`)
+    await writeFile(resolve(workDir, 'MEMORY.md'), buildInitialMemoryIndex({
+      agentName: config.displayName || config.name,
+      description: config.description,
+      serverUrl: config.serverUrl || serverUrl,
+      activeContext: 'First startup.',
+    }))
   }
 
-  const cmd = buildCommand(agentId, config)
+  // Codex requires a git repo (like slock driver)
+  const runtime = config.runtime || 'claude'
+  if (runtime === 'codex') {
+    const gitDir = resolve(workDir, '.git')
+    if (!existsSync(gitDir)) {
+      try {
+        execSync('git init', { cwd: workDir, stdio: 'pipe' })
+        execSync('git add -A && git commit --allow-empty -m "init"', {
+          cwd: workDir,
+          stdio: 'pipe',
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: 'redshrimp',
+            GIT_AUTHOR_EMAIL: 'redshrimp@local',
+            GIT_COMMITTER_NAME: 'redshrimp',
+            GIT_COMMITTER_EMAIL: 'redshrimp@local',
+          },
+        })
+      } catch {
+        // Best effort
+      }
+    }
+  }
+
+  const launchPrompt = buildLaunchPrompt(config, existing?.pendingNotificationCount ?? 0)
+  const cmd = buildCommand(agentId, config, launchPrompt)
   log(`Starting ${config.name} (${config.runtime}): ${cmd[0]}`)
 
   const env: Record<string, string> = { ...process.env as Record<string, string> }
@@ -165,7 +394,13 @@ async function startAgent(agentId: string, config: AgentConfig) {
   for (const key of Object.keys(env)) {
     if (key.startsWith('CLAUDE_CODE_')) delete env[key]
   }
+  // Remove empty API keys — they override CLI's own auth and cause "Invalid API key"
+  for (const k of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL',
+                    'OPENAI_API_BASE', 'OPENAI_ORG_ID', 'OPENAI_PROJECT', 'MOONSHOT_API_KEY']) {
+    if (!env[k] || !env[k].trim()) delete env[k]
+  }
   env['FORCE_COLOR'] = '0'
+  if (runtime === 'codex') env['NO_COLOR'] = '1'
 
   const proc = spawn(cmd[0], cmd.slice(1), {
     env,
@@ -173,10 +408,29 @@ async function startAgent(agentId: string, config: AgentConfig) {
     cwd: workDir,
   })
 
-  const ap: AgentProc = { id: agentId, config, proc, sessionId: config.sessionId || null, status: 'active' }
+  const ap: AgentProc = {
+    id: agentId,
+    config,
+    proc,
+    sessionId: config.sessionId || null,
+    status: 'active',
+    pendingNotificationCount: existing?.pendingNotificationCount ?? 0,
+    notificationTimer: null,
+    lastDeliveredMessage: existing?.lastDeliveredMessage ?? null,
+  }
   agents.set(agentId, ap)
 
   sendToServer({ type: 'agent:status', agentId, status: 'active' })
+
+  if (usesStreamingJsonInput(runtime)) {
+    setTimeout(() => {
+      writeAgentInput(ap, launchPrompt)
+    }, 150)
+  }
+
+  if (ap.pendingNotificationCount > 0) {
+    scheduleNotification(agentId, WAKE_NOTIFICATION_DELAY_MS)
+  }
 
   // Parse stdout for trajectory events
   proc.stdout?.on('data', (data: Buffer) => {
@@ -192,7 +446,7 @@ async function startAgent(agentId: string, config: AgentConfig) {
         if (event.type === 'assistant' && event.message?.content) {
           for (const block of event.message.content) {
             if (block.type === 'thinking') {
-              entries.push({ kind: 'thinking', text: (block.thinking || '').slice(0, 500) })
+              entries.push({ kind: 'thinking', text: (block.thinking || '').slice(0, 4000) })
             } else if (block.type === 'text') {
               entries.push({ kind: 'text', text: (block.text || '').slice(0, 2000) })
             } else if (block.type === 'tool_use') {
@@ -204,6 +458,21 @@ async function startAgent(agentId: string, config: AgentConfig) {
           ap.sessionId = event.session_id
           sendToServer({ type: 'agent:session', agentId, sessionId: event.session_id })
           entries.push({ kind: 'turn_end', sessionId: event.session_id })
+        }
+        if (event.role === 'assistant') {
+          const text = typeof event.content === 'string'
+            ? event.content
+            : Array.isArray(event.content)
+              ? event.content
+                  .map((block: any) => typeof block === 'string' ? block : (block?.text || block?.content || ''))
+                  .filter(Boolean)
+                  .join('\n')
+              : ''
+          if (text) entries.push({ kind: 'text', text: text.slice(0, 2000) })
+        }
+        if (event.session_id && typeof event.session_id === 'string') {
+          ap.sessionId = event.session_id
+          sendToServer({ type: 'agent:session', agentId, sessionId: event.session_id })
         }
       } catch {
         // Not JSON, treat as plain log
@@ -231,18 +500,13 @@ async function startAgent(agentId: string, config: AgentConfig) {
 
   proc.on('exit', (code) => {
     ap.proc = null
+    clearNotificationTimer(ap)
     if (code === 0 || code === null) {
-      // Clean exit — agent chose to stop (context window full, or completed task)
-      // Resume with last session if available, otherwise restart fresh
-      log(`Agent ${config.name} exited cleanly, resuming in 3s...`)
+      // Clean exit — keep the session and wait for a future message to wake
+      // the agent back up, like slock's sleeping/resume lifecycle.
+      log(`Agent ${config.name} exited cleanly, entering sleeping state`)
       ap.status = 'sleeping'
       sendToServer({ type: 'agent:status', agentId, status: 'sleeping' })
-      setTimeout(() => {
-        if (ap.status === 'sleeping' && !ap.proc) {
-          startAgent(agentId, ap.sessionId ? { ...ap.config, sessionId: ap.sessionId } : ap.config)
-            .catch(err => log(`Agent ${ap.config.name} resume failed: ${err.message}`))
-        }
-      }, 3_000)
     } else if (code === 143 || code === 137) {
       // Killed by SIGTERM/SIGKILL — intentional stop, don't restart
       log(`Agent ${config.name} stopped (signal)`)
@@ -267,6 +531,7 @@ async function stopAgent(agentId: string) {
   const ap = agents.get(agentId)
   if (!ap?.proc) return
   log(`Stopping agent ${ap.config.name}`)
+  clearNotificationTimer(ap)
   ap.proc.kill('SIGTERM')
   setTimeout(() => ap.proc?.kill('SIGKILL'), 5000)
 }
@@ -282,24 +547,70 @@ async function sleepAgent(agentId: string) {
 
 function deliverMessage(agentId: string, message: unknown) {
   const ap = agents.get(agentId)
-  if (!ap?.proc || !ap.proc.stdin?.writable) {
-    // Agent sleeping — wake it up with resume
-    if (ap?.sessionId && ap.status === 'sleeping') {
+  if (!ap) return
+
+  ap.pendingNotificationCount++
+  ap.lastDeliveredMessage = message as DeliveredMessage
+
+  if (!ap.proc || !ap.proc.stdin?.writable) {
+    if (ap.status === 'sleeping') {
       log(`Waking sleeping agent ${ap.config.name}`)
-      startAgent(agentId, { ...ap.config, sessionId: ap.sessionId })
+      startAgent(agentId, ap.sessionId ? { ...ap.config, sessionId: ap.sessionId } : ap.config)
+        .catch(err => log(`Agent ${ap.config.name} wake failed: ${err.message}`))
     }
     return
   }
-  // Send notification via stdin (Claude Code stream-json format)
-  const notification = `\n[System notification: You have 1 new message waiting. Call receive_message to read it when you're ready.]\n`
-  try {
-    ap.proc.stdin.write(JSON.stringify({
-      type: 'user',
-      message: { role: 'user', content: [{ type: 'text', text: notification }] },
-    }) + '\n')
-  } catch {
-    // stdin may be closed
+
+  if (!supportsStdinNotification(ap.config.runtime || 'claude')) return
+
+  scheduleNotification(agentId)
+}
+
+function clearNotificationTimer(ap: AgentProc) {
+  if (ap.notificationTimer) {
+    clearTimeout(ap.notificationTimer)
+    ap.notificationTimer = null
   }
+}
+
+function formatMessagePreview(message: DeliveredMessage | null): string {
+  if (!message) return ''
+  const channel = message.channel_type === 'dm' ? `DM:@${message.sender_name}` : `#${message.channel_name}`
+  const content = (message.content || '').replace(/\s+/g, ' ').trim()
+  const preview = content.length > 120 ? `${content.slice(0, 117)}...` : content
+  return `Latest: [${channel}] @${message.sender_name}: ${preview}`
+}
+
+function flushNotification(agentId: string) {
+  const ap = agents.get(agentId)
+  if (!ap || ap.pendingNotificationCount <= 0) return
+  if (!ap.proc || !ap.proc.stdin?.writable) return
+
+  const count = ap.pendingNotificationCount
+  const preview = formatMessagePreview(ap.lastDeliveredMessage)
+  const detail = preview ? ` ${preview}` : ''
+  const notification =
+    `\n[System notification: You have ${count} new message(s) waiting. ` +
+    `Call receive_message to read them when you're ready.${detail}]\n`
+
+  ap.pendingNotificationCount = 0
+  ap.lastDeliveredMessage = null
+  clearNotificationTimer(ap)
+
+  try {
+    writeAgentInput(ap, notification)
+  } catch {
+    // stdin may be closed; unread messages remain in backend storage.
+  }
+}
+
+function scheduleNotification(agentId: string, delayMs = NOTIFICATION_BATCH_MS) {
+  const ap = agents.get(agentId)
+  if (!ap || ap.notificationTimer) return
+
+  ap.notificationTimer = setTimeout(() => {
+    flushNotification(agentId)
+  }, delayMs)
 }
 
 // ── WebSocket connection ────────────────────────────────────────────

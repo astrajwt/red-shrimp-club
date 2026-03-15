@@ -5,7 +5,16 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { query, queryOne } from '../db/client.js'
-import { broadcastMessage } from '../socket/index.js'
+import { createStoredMessage, type MessageSenderType } from '../services/message-store.js'
+
+const OPTION_ITEM_RE = /^\[([A-Za-z\d])\]\s+(.+)$/
+
+interface ParsedDecisionItem {
+  index: number
+  label: string
+  text: string
+  details: string[]
+}
 
 // Parse @mentions from message content, returns array of { name, id? }
 function parseMentions(content: string): { name: string }[] {
@@ -18,12 +27,63 @@ function parseMentions(content: string): { name: string }[] {
   return mentions
 }
 
-const MSG_COLUMNS = `id, channel_id, sender_id, sender_type, sender_name, content, seq, attachments, mentions, created_at`
+function parseDecisionItems(content: string): ParsedDecisionItem[] {
+  const lines = content.split(/\r?\n/)
+  const items: ParsedDecisionItem[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i] ?? ''
+    const trimmed = rawLine.trim()
+    const optionMatch = trimmed.match(OPTION_ITEM_RE)
+    if (!optionMatch) continue
+
+    const details: string[] = []
+    for (let j = i + 1; j < lines.length; j++) {
+      const detailRaw = lines[j] ?? ''
+      const detailTrimmed = detailRaw.trim()
+      if (!detailTrimmed) continue
+      if (detailTrimmed.match(OPTION_ITEM_RE)) break
+      if (!/^\s+/.test(detailRaw) && !detailTrimmed.startsWith('>')) break
+      details.push(detailTrimmed.replace(/^>\s?/, ''))
+      i = j
+    }
+
+    items.push({
+      index: items.length,
+      label: optionMatch[1]!.toUpperCase(),
+      text: optionMatch[2]!.trim(),
+      details,
+    })
+  }
+
+  return items
+}
+
+const MSG_COLUMNS = `m.id, m.channel_id, m.sender_id, m.sender_type, m.sender_name, m.content, m.seq, m.attachments, m.mentions, m.thinking, m.created_at`
 
 export const messageRoutes: FastifyPluginAsync = async (app) => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS message_feedbacks (
+      message_id  UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      item_index  INT NOT NULL,
+      verdict     VARCHAR(10) NOT NULL CHECK (verdict IN ('correct', 'wrong', 'selected')),
+      item_label  VARCHAR(20),
+      item_text   TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (message_id, user_id, item_index)
+    )
+  `).catch(() => {})
+  await query(`
+    ALTER TABLE message_feedbacks
+      ADD COLUMN IF NOT EXISTS item_label VARCHAR(20),
+      ADD COLUMN IF NOT EXISTS item_text TEXT
+  `).catch(() => {})
 
   // ── GET /api/messages/channel/:channelId ─────────────────────────
   app.get('/channel/:channelId', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const caller = req.user as { sub: string }
     const { channelId } = req.params as { channelId: string }
     const { limit = '50', before } = req.query as { limit?: string; before?: string }
 
@@ -34,22 +94,32 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
 
     if (before) {
       sql = `
-        SELECT ${MSG_COLUMNS}
-        FROM messages
-        WHERE channel_id = $1 AND seq < $2
-        ORDER BY seq DESC
+        SELECT ${MSG_COLUMNS},
+               COALESCE((
+                 SELECT jsonb_object_agg(mf.item_index::text, mf.verdict)
+                 FROM message_feedbacks mf
+                 WHERE mf.message_id = m.id AND mf.user_id = $4
+               ), '{}'::jsonb) AS feedback
+        FROM messages m
+        WHERE m.channel_id = $1 AND m.seq < $2
+        ORDER BY m.seq DESC
         LIMIT $3
       `
-      params = [channelId, Number(before), lim]
+      params = [channelId, Number(before), lim, caller.sub]
     } else {
       sql = `
-        SELECT ${MSG_COLUMNS}
-        FROM messages
-        WHERE channel_id = $1
-        ORDER BY seq DESC
+        SELECT ${MSG_COLUMNS},
+               COALESCE((
+                 SELECT jsonb_object_agg(mf.item_index::text, mf.verdict)
+                 FROM message_feedbacks mf
+                 WHERE mf.message_id = m.id AND mf.user_id = $3
+               ), '{}'::jsonb) AS feedback
+        FROM messages m
+        WHERE m.channel_id = $1
+        ORDER BY m.seq DESC
         LIMIT $2
       `
-      params = [channelId, lim]
+      params = [channelId, lim, caller.sub]
     }
 
     const msgs = await query(sql, params)
@@ -127,26 +197,107 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Atomically increment channel sequence
-    const seqRow = await queryOne<{ last_seq: string }>(
-      `INSERT INTO channel_sequences (channel_id, last_seq) VALUES ($1, 1)
-       ON CONFLICT (channel_id) DO UPDATE SET last_seq = channel_sequences.last_seq + 1
-       RETURNING last_seq`,
-      [channelId]
-    )
-    const seq = Number(seqRow?.last_seq ?? 1)
-
-    const [msg] = await query(
-      `INSERT INTO messages
-         (channel_id, sender_id, sender_type, sender_name, content, seq, attachments, mentions)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [channelId, senderId, senderType, senderName, content.trim(), seq,
-       JSON.stringify(attachments), JSON.stringify(mentions)]
-    )
-
-    broadcastMessage(channelId, msg)
+    const msg = await createStoredMessage({
+      channelId,
+      senderId,
+      senderType: senderType as MessageSenderType,
+      senderName,
+      content,
+      attachments,
+      mentions,
+    })
     return msg
+  })
+
+  // ── POST /api/messages/:messageId/feedback ──────────────────────
+  app.post('/:messageId/feedback', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const caller = req.user as { sub: string }
+    const { messageId } = req.params as { messageId: string }
+    const { itemIndex, verdict } = req.body as { itemIndex?: number; verdict?: string }
+
+    const user = await queryOne<{ id: string; name: string }>(
+      'SELECT id, name FROM users WHERE id = $1',
+      [caller.sub]
+    )
+    if (!user) return reply.code(403).send({ error: 'Only human users can submit message feedback' })
+    if (!Number.isInteger(itemIndex) || Number(itemIndex) < 0) {
+      return reply.code(400).send({ error: 'itemIndex must be a non-negative integer' })
+    }
+    if (verdict !== 'correct' && verdict !== 'wrong' && verdict !== 'selected') {
+      return reply.code(400).send({ error: 'verdict must be "correct", "wrong", or "selected"' })
+    }
+
+    const message = await queryOne<{
+      id: string
+      channel_id: string
+      sender_name: string
+      content: string
+    }>(
+      'SELECT id, channel_id, sender_name, content FROM messages WHERE id = $1',
+      [messageId]
+    )
+    if (!message) return reply.code(404).send({ error: 'Message not found' })
+
+    let itemLabel: string | null = null
+    let itemText: string | null = null
+    let shouldEchoSelection = false
+
+    if (verdict === 'selected') {
+      const parsedOptions = parseDecisionItems(message.content)
+      const selectedItem = parsedOptions.find(item => item.index === Number(itemIndex))
+      if (!selectedItem) {
+        return reply.code(400).send({ error: 'Selected itemIndex must point to a Donovan decision option' })
+      }
+
+      itemLabel = selectedItem.label
+      itemText = [selectedItem.text, ...selectedItem.details].join('\n').trim()
+
+      const existingSelected = await queryOne<{ item_index: number }>(
+        `SELECT item_index
+         FROM message_feedbacks
+         WHERE message_id = $1 AND user_id = $2 AND verdict = 'selected'`,
+        [messageId, caller.sub]
+      )
+
+      shouldEchoSelection = existingSelected?.item_index !== Number(itemIndex)
+
+      await query(
+        `DELETE FROM message_feedbacks
+         WHERE message_id = $1 AND user_id = $2 AND verdict = 'selected' AND item_index <> $3`,
+        [messageId, caller.sub, Number(itemIndex)]
+      )
+    }
+
+    await query(
+      `INSERT INTO message_feedbacks (message_id, user_id, item_index, verdict, item_label, item_text)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (message_id, user_id, item_index)
+       DO UPDATE SET
+         verdict = EXCLUDED.verdict,
+         item_label = EXCLUDED.item_label,
+         item_text = EXCLUDED.item_text,
+         updated_at = NOW()`,
+      [messageId, caller.sub, Number(itemIndex), verdict, itemLabel, itemText]
+    )
+
+    if (verdict === 'selected' && shouldEchoSelection && itemLabel && itemText) {
+      await createStoredMessage({
+        channelId: message.channel_id,
+        senderId: caller.sub,
+        senderType: 'human',
+        senderName: user.name,
+        content: `我选择了 ${message.sender_name} 的方案 [${itemLabel}] ${itemText.split('\n')[0]}`,
+      })
+    }
+
+    const feedbackRow = await queryOne<{ feedback: Record<string, 'correct' | 'wrong' | 'selected'> }>(
+      `SELECT COALESCE(jsonb_object_agg(item_index::text, verdict), '{}'::jsonb) AS feedback
+       FROM message_feedbacks
+       WHERE message_id = $1 AND user_id = $2`,
+      [messageId, caller.sub]
+    )
+
+    return { ok: true, feedback: feedbackRow?.feedback ?? {} }
   })
 
   // ── GET /api/messages/sync/:channelId?after= ────────────────────
@@ -156,7 +307,7 @@ export const messageRoutes: FastifyPluginAsync = async (app) => {
     const { after = '0' } = req.query as { after?: string }
 
     const msgs = await query(
-      `SELECT ${MSG_COLUMNS} FROM messages WHERE channel_id = $1 AND seq > $2 ORDER BY seq`,
+      `SELECT ${MSG_COLUMNS} FROM messages m WHERE m.channel_id = $1 AND m.seq > $2 ORDER BY m.seq`,
       [channelId, Number(after)]
     )
     return { messages: msgs }

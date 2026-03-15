@@ -8,6 +8,9 @@ import { createHash } from 'crypto'
 import { query, queryOne } from '../db/client.js'
 import { machineConnectionManager } from '../daemon/machine-connection.js'
 import { emitAgentLog } from '../daemon/events.js'
+import { pushThinking } from '../services/thinking-buffer.js'
+import { processManager } from '../daemon/process-manager.js'
+import { resolveServerUrl } from '../server-url.js'
 
 function hashKey(key: string) {
   return createHash('sha256').update(key).digest('hex')
@@ -54,8 +57,7 @@ export const daemonSocketRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const machineId = machine.id
-      const serverUrl = process.env.SERVER_URL
-        ?? `http://${process.env.HOST ?? '127.0.0.1'}:${process.env.PORT ?? 3001}`
+      const serverUrl = resolveServerUrl(req)
 
       // Register connection
       const machineState = machineConnectionManager.add(machineId, machine.server_id, socket as any)
@@ -137,6 +139,7 @@ export const daemonSocketRoutes: FastifyPluginAsync = async (app) => {
             const existing = machineState.agents.get(agentId) ?? { status: 'inactive' }
             existing.sessionId = sessionId
             machineState.agents.set(agentId, existing)
+            await query(`UPDATE agents SET session_id = $1 WHERE id = $2`, [sessionId ?? null, agentId]).catch(() => {})
             break
           }
 
@@ -154,6 +157,7 @@ export const daemonSocketRoutes: FastifyPluginAsync = async (app) => {
               let content = ''
               if (entry.kind === 'thinking') {
                 level = 'INFO'; content = `[thinking] ${entry.text ?? ''}`
+                pushThinking(agentId, entry.text ?? '')
               } else if (entry.kind === 'text') {
                 level = 'INFO'; content = entry.text ?? ''
               } else if (entry.kind === 'tool_start') {
@@ -239,9 +243,9 @@ async function startAgentsOnMachine(
   runningAgents: Map<string, { status: string }>
 ) {
   const agents = await query<{
-    id: string; name: string; description: string | null; model_id: string; runtime: string;
+    id: string; name: string; description: string | null; model_id: string; runtime: string; reasoning_effort: string; session_id: string | null;
   }>(
-    `SELECT id, name, description, model_id, runtime FROM agents
+    `SELECT id, name, description, model_id, runtime, reasoning_effort, session_id FROM agents
      WHERE server_id = $1
        AND (machine_id = $2 OR machine_id IS NULL)
      ORDER BY name`,
@@ -255,6 +259,10 @@ async function startAgentsOnMachine(
 
   console.log(`[daemon-ws] Starting ${agents.length} agent(s) on machine ${machineId}`)
   for (const agent of agents) {
+    if (processManager.isRunning(agent.id)) {
+      await processManager.stop(agent.id).catch(() => {})
+      console.log(`[daemon-ws] Stopped local process for ${agent.name} before daemon handoff`)
+    }
     // Skip if this daemon already reports it as active
     if (runningAgents.get(agent.id)?.status === 'active') {
       console.log(`[daemon-ws] Agent ${agent.name} already active on this machine, skipping`)

@@ -100,8 +100,8 @@ const del  = <T>(path: string) => request<T>(path, { method: 'DELETE' })
 // ─── Auth ──────────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  login:    (email: string) =>
-    post<{ accessToken: string; refreshToken: string; user: User }>('/auth/login', { email }),
+  login:    (identity: string) =>
+    post<{ accessToken: string; refreshToken: string; user: User }>('/auth/login', { identity }),
   register: (email: string, name?: string) =>
     post<{ accessToken: string; refreshToken: string; user: User }>('/auth/register', { email, name }),
   me:       () => get<User>('/auth/me'),
@@ -132,6 +132,16 @@ export const messagesApi = {
     get<Message[]>(`/messages/channel/${channelId}?limit=${limit}${before ? `&before=${before}` : ''}`),
   send: (channelId: string, content: string, fileIds?: string[]) =>
     post<Message>('/messages', { channelId, content, fileIds }),
+  feedback: (messageId: string, itemIndex: number, verdict: MessageFeedbackVerdict) =>
+    post<{ ok: boolean; feedback: Record<string, MessageFeedbackVerdict> }>(
+      `/messages/${messageId}/feedback`,
+      { itemIndex, verdict }
+    ),
+}
+
+export const searchApi = {
+  query: (q: string, limit = 12) =>
+    get<SearchResults>(`/search?q=${encodeURIComponent(q)}&limit=${limit}`),
 }
 
 // ─── Agents ───────────────────────────────────────────────────────────────────
@@ -139,8 +149,15 @@ export const messagesApi = {
 export const agentsApi = {
   list:   () => get<Agent[]>('/agents'),
   get:    (id: string) => get<Agent>(`/agents/${id}`),
-  create: (data: { name: string; modelId: string; description?: string; role?: string; workspacePath?: string; runtime?: string; machineId?: string; systemPrompt?: string }) =>
+  memory: (id: string) => get<AgentMemory>(`/agents/${id}/memory`),
+  authoredDocs: (id: string) => get<{ docs: AgentAuthoredDoc[] }>(`/agents/${id}/authored-docs`),
+  todos:  (id: string) => get<{ todos: AgentTodo[] }>(`/agents/${id}/todos`),
+  updateNote: (id: string, note: string) => patch<{ agent: { id: string; note: string | null } }>(`/agents/${id}/note`, { note }),
+  updateModel: (id: string, modelId: string) => patch<{ agent: { id: string; model_id: string } }>(`/agents/${id}/model`, { modelId }),
+  create: (data: { name: string; modelId: string; description?: string; role?: string; workspacePath?: string; runtime?: string; machineId?: string; systemPrompt?: string; parentAgentId?: string; reasoningEffort?: string }) =>
     post<{ agent: Agent }>('/agents', data),
+  reconnectAll: () =>
+    post<{ ok: boolean; count: number; results: Array<{ agentId: string; name: string; ok: boolean; message?: string; error?: string }> }>('/agents/reconnect-all'),
   start:  (id: string, channelId?: string) =>
     post<{ ok: boolean }>(`/agents/${id}/start`, { channelId }),
   stop:   (id: string) =>
@@ -152,20 +169,41 @@ export const agentsApi = {
   models: () => get<ModelRegistry>('/models'),
 }
 
+// ─── Shared Skills ────────────────────────────────────────────────────────────
+
+export const skillsApi = {
+  list: () => get<SharedSkillRegistrySnapshot>('/skills'),
+  importRepo: (data: {
+    name?: string
+    repoUrl?: string
+    branch?: string
+    skillPath?: string
+    valuePath?: string
+    localPath?: string
+  }) => post<{
+    ok: boolean
+    source: SharedSkillSource
+    skills: SharedSkillRegistryItem[]
+  }>('/skills/import-repo', data),
+}
+
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export const tasksApi = {
+  reviewSummary: () =>
+    get<{ reviewingCount: number }>('/tasks/review-summary'),
   list:    (channelId?: string) =>
     get<{ tasks: Task[] }>(`/tasks${channelId ? `?channelId=${channelId}` : ''}`),
   get:     (id: string) => get<{ task: Task }>(`/tasks/${id}`),
-  create:  (channelId: string, title: string) =>
-    post<{ tasks: Task[] }>('/tasks', { channelId, tasks: [{ title }] }),
+  create:  (channelId: string, title: string, assigneeAgentId: string) =>
+    post<{ tasks: Task[] }>('/tasks', { channelId, tasks: [{ title, assigneeAgentId }] }),
   intake:  (data: {
     channelId: string
     title: string
     summary?: string
     ownerAgentId?: string
     cleanLevel?: string
+    dueDate?: string
     subtasks?: Array<{ title: string; assigneeAgentId?: string }>
   }) => post<{ ok: boolean; bundle: {
     todoDir: string
@@ -176,10 +214,13 @@ export const tasksApi = {
     subtaskNumbers: number[]
   } }>('/tasks/intake', data),
   claim:   (id: string) => post<{ task: Task }>(`/tasks/${id}/claim`),
+  unclaim: (id: string) => post<{ task: Task }>(`/tasks/${id}/unclaim`),
+  start:   (id: string) => post<{ task: Task }>(`/tasks/${id}/start`),
   submitReview:(id: string) => post<{ task: Task }>(`/tasks/${id}/review`),
   update:  (id: string, data: Partial<Task>) => patch<{ task: Task }>(`/tasks/${id}`, data),
   complete:(id: string) => post<{ task: Task }>(`/tasks/${id}/complete`),
-  reopen:  (id: string) => post<{ task: Task }>(`/tasks/${id}/reopen`),
+  reject:  (id: string, message: string) => post<{ task: Task }>(`/tasks/${id}/reject`, { message }),
+  remove:  (id: string) => del<{ ok: boolean; deletedTask: Task }>(`/tasks/${id}`),
   addMemoryNote: (taskId: string, data: { title: string; content: string }) =>
     post<{ ok: boolean; note: { todoDir: string; docPath: string; docName: string } }>(`/tasks/${taskId}/memory-note`, data),
   // Documents
@@ -194,6 +235,17 @@ export const tasksApi = {
     post(`/tasks/${taskId}/skills`, { skillId }),
   removeSkill:(taskId: string, skillId: string) =>
     del(`/tasks/${taskId}/skills/${skillId}`),
+
+  // Subtasks
+  approve:    (id: string) =>
+    post<{ task: Task }>(`/tasks/${id}/approve`, {}),
+  setEstimate:(id: string, estimatedMinutes: number) =>
+    patch<{ task: Task }>(`/tasks/${id}/estimate`, { estimatedMinutes }),
+  // Feedback
+  addFeedback: (id: string, data: { verdict: 'accept' | 'reject' | 'revise'; reasonCategory?: string; reasonText?: string }) =>
+    post<{ feedback: TaskFeedback }>(`/tasks/${id}/feedback`, data),
+  getFeedback: (id: string) =>
+    get<{ feedbacks: TaskFeedback[] }>(`/tasks/${id}/feedback`),
 }
 
 // ─── Files ────────────────────────────────────────────────────────────────────
@@ -238,14 +290,27 @@ export const machinesApi = {
 export const obsidianApi = {
   tree: (path = '') => get<{ path: string; items: ObsidianEntry[] }>(`/daemon/obsidian/tree?path=${encodeURIComponent(path)}`),
   file: (path: string) => get<{ path: string; content: string }>(`/daemon/obsidian/file?path=${encodeURIComponent(path)}`),
+  backlinks: (path: string) => get<{ target: string; backlinks: Backlink[] }>(`/daemon/obsidian/backlinks?path=${encodeURIComponent(path)}`),
+  assetUrl: (path: string, relativeTo?: string) =>
+    `${API_BASE}/daemon/obsidian/asset?path=${encodeURIComponent(path)}${relativeTo ? `&relativeTo=${encodeURIComponent(relativeTo)}` : ''}`,
   sync: () => post('/daemon/obsidian/sync'),
+}
+
+// ─── Memory Sources (git imports) ────────────────────────────────────────────
+
+export const memoryApi = {
+  listSources: () => get<{ sources: MemorySource[] }>('/daemon/memory/sources'),
+  addSource: (data: { name: string; gitUrl: string; branch?: string; authMethod?: 'none' | 'ssh' | 'pat' }) =>
+    post<{ source: MemorySource }>('/daemon/memory/sources', data),
+  syncSource: (id: string) => post<{ ok: boolean }>(`/daemon/memory/sources/${id}/sync`),
+  deleteSource: (id: string) => del(`/daemon/memory/sources/${id}`),
 }
 
 // ─── Ask / AI Q&A ─────────────────────────────────────────────────────────────
 
 export const askApi = {
-  ask: (question: string, filePath?: string, model?: string) =>
-    post<{ answer: string; model: string }>('/ask', { question, filePath, model }),
+  ask: (question: string, filePath?: string, model?: string, systemPrompt?: string) =>
+    post<{ answer: string; model: string }>('/ask', { question, filePath, model, systemPrompt }),
 
   // SSE streaming version — calls onChunk for each text delta, returns full text
   askStream: async (
@@ -254,6 +319,7 @@ export const askApi = {
     filePath?: string,
     model?: string,
     signal?: AbortSignal,
+    systemPrompt?: string,
   ): Promise<string> => {
     const token = tokenStore.getAccess()
     let res: Response
@@ -264,7 +330,7 @@ export const askApi = {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ question, filePath, model }),
+        body: JSON.stringify({ question, filePath, model, systemPrompt }),
         signal,
       })
       markServiceReachable()
@@ -312,9 +378,49 @@ export const askApi = {
 // ─── Setup / Onboarding ───────────────────────────────────────────────────────
 
 export const setupApi = {
-  getKeys: () => get<{ anthropic: boolean; moonshot: boolean; openai: boolean; obsidian_root: string }>('/setup/keys'),
-  saveKeys: (data: { anthropicKey?: string; moonshotKey?: string; openaiKey?: string; obsidianRoot?: string }) =>
+  getKeys: () => get<{
+    anthropic: boolean
+    moonshot: boolean
+    openai: boolean
+    obsidian_root: string
+    vault_git_url: string
+    skill_path: string
+    memory_path: string
+    feishu_app_id: string
+    feishu_app_secret: boolean
+    feishu_verification_token: boolean
+    feishu_webhook_base_url: string
+  }>('/setup/keys'),
+  saveKeys: (data: {
+    anthropicKey?: string
+    moonshotKey?: string
+    openaiKey?: string
+    obsidianRoot?: string
+    vaultGitUrl?: string
+    skillPath?: string
+    memoryPath?: string
+    feishuAppId?: string
+    feishuAppSecret?: string
+    feishuVerificationToken?: string
+    feishuWebhookBaseUrl?: string
+  }) =>
     post<{ ok: boolean }>('/setup/keys', data),
+}
+
+export const feishuApi = {
+  relay: () => get<{
+    config: {
+      appId: string
+      appSecretSet: boolean
+      verificationTokenSet: boolean
+    }
+    relay: FeishuRelayBinding | null
+    webhookPath: string
+    webhookUrl: string | null
+  }>('/feishu/relay'),
+  saveRelay: (data: { agentId?: string; enabled?: boolean; resetBinding?: boolean }) =>
+    post<{ ok: boolean; relay: FeishuRelayBinding }>('/feishu/relay', data),
+  testRelay: () => post<{ ok: boolean }>('/feishu/relay/test'),
 }
 
 // ─── Cron Jobs ────────────────────────────────────────────────────────────────
@@ -328,7 +434,81 @@ export const cronApi = {
   delete: (id: string) => del(`/daemon/cron/${id}`),
 }
 
+export const bulletinApi = {
+  list:      (params?: { category?: string; limit?: number; before?: string }) =>
+    get<{ bulletins: Bulletin[] }>(`/bulletins${toQuery(params)}`),
+  create:    (data: { category: string; title: string; content?: string; priority?: string; linked_file?: string; linked_url?: string; linked_task_id?: string; metadata?: Record<string, unknown>; pinned?: boolean }) =>
+    post<{ bulletin: Bulletin }>('/bulletins', data),
+  update:    (id: string, data: Partial<Bulletin>) =>
+    patch<{ bulletin: Bulletin }>(`/bulletins/${id}`, data),
+  delete:    (id: string) => del<{ ok: boolean }>(`/bulletins/${id}`),
+  dashboard: () => get<DashboardData>('/bulletins/dashboard'),
+}
+
+function toQuery(params?: Record<string, unknown>): string {
+  if (!params) return ''
+  const entries = Object.entries(params).filter(([, v]) => v != null)
+  if (entries.length === 0) return ''
+  return '?' + entries.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
+}
+
 // ─── Data types ───────────────────────────────────────────────────────────────
+
+export interface Bulletin {
+  id: string
+  server_id: string
+  category: string
+  title: string
+  content?: string | null
+  author_id: string
+  author_type: string
+  author_name: string
+  priority: string
+  linked_file?: string | null
+  linked_url?: string | null
+  linked_task_id?: string | null
+  metadata: Record<string, unknown>
+  pinned: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface DashboardData {
+  leaders: DashboardAgent[]
+  activeTasks: DashboardTask[]
+  recentActivity: DashboardActivity[]
+  bookmarks: Bulletin[]
+  stickies: Bulletin[]
+}
+
+export interface DashboardAgent {
+  id: string
+  name: string
+  role: string
+  status: string
+  last_heartbeat_at: string | null
+  parent_agent_id: string | null
+  description: string | null
+}
+
+export interface DashboardTask {
+  id: string
+  title: string
+  status: string
+  display_number: string | null
+  assigned_agent_id: string | null
+  agent_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DashboardActivity {
+  agent_id: string
+  agent_name: string
+  level: string
+  content: string
+  created_at: string
+}
 
 export interface User {
   id: string
@@ -358,6 +538,19 @@ export interface ChannelMember {
   joined_at: string
 }
 
+export interface FeishuRelayBinding {
+  id: string
+  user_id: string
+  server_id: string
+  agent_id: string
+  agent_name: string
+  feishu_open_id: string | null
+  feishu_chat_id: string | null
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface UnreadCount {
   channel_id: string
   count: number
@@ -377,6 +570,8 @@ export interface MessageMention {
   type: 'agent' | 'human'
 }
 
+export type MessageFeedbackVerdict = 'correct' | 'wrong' | 'selected'
+
 export interface Message {
   id: string
   channel_id: string
@@ -387,16 +582,52 @@ export interface Message {
   seq: number
   attachments?: MessageAttachment[]
   mentions?: MessageMention[]
+  thinking?: string | null
+  feedback?: Record<string, MessageFeedbackVerdict>
   created_at: string
+}
+
+export interface SearchMessageHit {
+  id: string
+  channel_id: string
+  channel_name: string
+  channel_type: 'channel' | 'dm'
+  sender_name: string
+  sender_type: 'human' | 'agent'
+  seq: number
+  created_at: string
+  content: string
+  snippet: string
+}
+
+export interface SearchDocHit {
+  path: string
+  title: string
+  snippet: string
+  updated_at: string | null
+}
+
+export interface SearchResults {
+  query: string
+  messages: SearchMessageHit[]
+  docs: SearchDocHit[]
 }
 
 export interface Agent {
   id: string
   name: string
-  status: 'idle' | 'running' | 'online' | 'offline' | 'error' | 'starting'
+  status: 'idle' | 'running' | 'online' | 'offline' | 'error' | 'starting' | 'sleeping'
   model_id: string
   model_provider: string | null
   runtime: string
+  reasoning_effort?: string | null
+  machine_id?: string | null
+  machine_name?: string | null
+  machine_hostname?: string | null
+  machine_status?: string | null
+  current_project_id?: string | null
+  current_project_name?: string | null
+  current_project_slug?: string | null
   workspace_path: string | null
   system_prompt: string | null
   tokens_used_today: number
@@ -405,6 +636,7 @@ export interface Agent {
   role: string | null
   parent_agent_id: string | null
   description: string | null
+  note?: string | null
 }
 
 export interface Machine {
@@ -415,6 +647,7 @@ export interface Machine {
   os: string | null
   daemon_version: string | null
   agent_count: number
+  runtimes?: string[]
   last_seen_at: string | null
   created_at: string
 }
@@ -428,23 +661,106 @@ export interface AgentLog {
   created_at: string
 }
 
+export interface AgentMemory {
+  path: string
+  content: string
+  updatedAt: string | null
+  workspacePath?: string | null
+  memory?: {
+    path: string
+    content: string
+    updatedAt: string | null
+  }
+  knowledge?: {
+    path: string
+    content: string
+    updatedAt: string | null
+  }
+  notesIndex?: {
+    path: string
+    content: string
+    updatedAt: string | null
+  }
+}
+
+export interface AgentTodoDoc {
+  id: string
+  doc_path: string
+  doc_name: string
+  status: 'writing' | 'unread' | 'read'
+}
+
+export interface AgentTodo {
+  id: string
+  channel_id: string
+  channel_name: string
+  title: string
+  number: number
+  status: 'open' | 'claimed' | 'in_progress' | 'reviewing' | 'completed'
+  claimed_by_id: string | null
+  claimed_by_name: string | null
+  claimed_at: string | null
+  completed_at: string | null
+  created_at: string
+  docs: AgentTodoDoc[]
+}
+
+export interface AgentAuthoredDoc {
+  path: string
+  title: string
+  author: string[]
+  date: string | null
+  type: string | null
+  tags: string[]
+  youtube: string | null
+  source: string | null
+  updatedAt: string | null
+}
+
 export interface Task {
   id: string
   title: string
-  description: string | null
-  status: 'open' | 'claimed' | 'reviewing' | 'completed'
+  status: 'open' | 'claimed' | 'in_progress' | 'reviewing' | 'completed'
   channel_id: string
-  claimed_by_agent_id: string | null
-  seq: number
+  number: number
+  claimed_by_id: string | null
+  claimed_by_type: 'human' | 'agent' | null
+  claimed_by_name: string | null
+  claimed_at: string | null
+  review_feedback?: string | null
+  review_feedback_at?: string | null
+  review_feedback_by_name?: string | null
+  completed_at: string | null
   created_at: string
+  estimated_minutes?: number | null
+  started_at?: string | null
+  parent_task_id?: string | null
+  parent_task_number?: number | null
+  source_doc_path?: string | null
+  is_candidate?: boolean
+  due_date?: string | null
   docs?: TaskDoc[]
-  skills?: Skill[]
+  skills?: string[]
+  subtasks?: Task[]
+}
+
+export interface TaskFeedback {
+  id: string
+  task_id: string
+  reviewer_id: string
+  reviewer_type: 'human' | 'agent'
+  reviewer_name: string
+  verdict: 'accept' | 'reject' | 'revise'
+  reason_category?: string | null
+  reason_text?: string | null
+  created_at: string
 }
 
 export interface TaskDoc {
   id: string
   task_id: string
   doc_path: string
+  doc_name?: string
   status: 'writing' | 'unread' | 'read'
   created_at: string
 }
@@ -453,6 +769,33 @@ export interface Skill {
   id: string
   name: string
   description: string | null
+}
+
+export interface SharedSkillSource {
+  name: string
+  repoUrl: string
+  branch: string
+  skillPath: string | null
+  repoPath: string
+  skills: string[]
+  skillEntries: Array<{ name: string; relativePath: string }>
+  head: string | null
+  lastSyncAt: string
+}
+
+export interface SharedSkillRegistryItem {
+  name: string
+  description: string | null
+  sourceName: string
+  repoUrl: string | null
+  path: string
+  runtimes: Array<'codex' | 'claude'>
+}
+
+export interface SharedSkillRegistrySnapshot {
+  root: string
+  sources: SharedSkillSource[]
+  skills: SharedSkillRegistryItem[]
 }
 
 export interface UploadedFile {
@@ -467,6 +810,26 @@ export interface ObsidianEntry {
   name: string
   type: 'file' | 'directory'
   path: string
+}
+
+export interface Backlink {
+  path: string
+  name: string
+  context: string
+}
+
+export interface MemorySource {
+  id: string
+  server_id: string
+  name: string
+  git_url: string
+  branch: string
+  local_path: string
+  auth_method: 'none' | 'ssh' | 'pat'
+  status: 'pending' | 'cloning' | 'synced' | 'error'
+  last_synced: string | null
+  last_error: string | null
+  created_at: string
 }
 
 export interface CronJob {
