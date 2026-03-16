@@ -14,7 +14,6 @@ import {
   emitTokenHandoff,
   eventBus,
 } from './events.js'
-import { llmClient } from './llm-client.js'
 import { heartbeatChecker } from './heartbeat-checker.js'
 import { machineConnectionManager } from './machine-connection.js'
 import { resolveServerUrl } from '../server-url.js'
@@ -60,6 +59,7 @@ const REVIEW_REMINDER_COOLDOWN_MS = 30 * 60_000
 class Scheduler {
   // node-cron task handles keyed by cron_job.id
   private cronHandles = new Map<string, cron.ScheduledTask>()
+  private cronSignatures = new Map<string, string>()
 
   // Intervals for built-in monitors
   private tokenTimer: NodeJS.Timeout | null = null
@@ -234,13 +234,31 @@ class Scheduler {
       if (!activeIds.has(id)) {
         task.stop()
         this.cronHandles.delete(id)
+        this.cronSignatures.delete(id)
         console.log(`[scheduler] Removed cron job ${id}`)
       }
     }
 
-    // Add new jobs
+    // Add or refresh jobs
     for (const job of jobs) {
-      if (this.cronHandles.has(job.id)) continue  // already running
+      const signature = [
+        job.agent_id,
+        job.cron_expr,
+        job.prompt,
+        job.channel_id ?? '',
+        job.model_override ?? '',
+      ].join('::')
+
+      const existing = this.cronHandles.get(job.id)
+      const previousSignature = this.cronSignatures.get(job.id)
+      if (existing && previousSignature === signature) continue
+
+      if (existing) {
+        existing.stop()
+        this.cronHandles.delete(job.id)
+        this.cronSignatures.delete(job.id)
+        console.log(`[scheduler] Rescheduled cron job ${job.id}`)
+      }
 
       if (!cron.validate(job.cron_expr)) {
         console.warn(`[scheduler] Invalid cron expr for job ${job.id}: "${job.cron_expr}"`)
@@ -251,6 +269,7 @@ class Scheduler {
         timezone: 'Asia/Shanghai',
       })
       this.cronHandles.set(job.id, task)
+      this.cronSignatures.set(job.id, signature)
       console.log(`[scheduler] Scheduled job ${job.id} (${job.agent_name}): ${job.cron_expr}`)
     }
   }
@@ -259,34 +278,69 @@ class Scheduler {
     console.log(`[scheduler] Running cron job ${job.id} for agent ${job.agent_name}`)
 
     try {
-      // Create a run record for this scheduled invocation
-      const [run] = await query(
-        `INSERT INTO agent_runs (agent_id, status)
-         VALUES ($1, 'running') RETURNING id`,
-        [job.agent_id]
-      )
+      const channelId = await this.resolveCronChannel(job)
+      const senderId = '00000000-0000-0000-0000-00000000c001'
+      const senderName = 'chrono'
+      const content = job.prompt.trim()
 
-      // Dispatch to LLM with the job's prompt
-      const response = await llmClient.complete({
-        model: job.model_override ?? undefined,
-        prompt: job.prompt,
-        agentId: job.agent_id,
-        runId: run.id,
-      })
-
-      // If a channelId is set, post the response as an agent message
-      if (job.channel_id && response.text) {
-        await this.postMessage(job.agent_id, job.channel_id, response.text)
+      if (!content) {
+        console.warn(`[scheduler] Cron job ${job.id} skipped: empty prompt`)
+        return
       }
 
-      await query(
-        `UPDATE agent_runs SET status = 'completed', tokens_used = $1, ended_at = NOW()
-         WHERE id = $2`,
-        [response.tokensUsed, run.id]
+      const msg = await createStoredMessage({
+        channelId,
+        senderId,
+        senderType: 'human',
+        senderName,
+        content,
+        mentions: [],
+        attachments: [],
+        thinking: null,
+      })
+
+      console.log(
+        `[scheduler] Delivered cron job ${job.id} to channel ${channelId} as message ${msg.id}`
       )
     } catch (err: any) {
       console.error(`[scheduler] Cron job ${job.id} failed:`, err.message)
     }
+  }
+
+  private async resolveCronChannel(job: CronJobRow): Promise<string> {
+    if (job.channel_id) return job.channel_id
+
+    const context = await queryOne<{
+      server_id: string
+      owner_user_id: string | null
+      all_channel_id: string | null
+    }>(
+      `SELECT a.server_id,
+              owner_member.user_id AS owner_user_id,
+              all_channel.id AS all_channel_id
+         FROM agents a
+         LEFT JOIN server_members owner_member
+           ON owner_member.server_id = a.server_id
+          AND owner_member.role = 'owner'
+         LEFT JOIN channels all_channel
+           ON all_channel.server_id = a.server_id
+          AND all_channel.name = 'all'
+        WHERE a.id = $1
+        LIMIT 1`,
+      [job.agent_id]
+    )
+
+    if (!context?.server_id) {
+      throw new Error(`Agent ${job.agent_id} has no server context`)
+    }
+
+    if (context.owner_user_id) {
+      return this.ensureHumanAgentDm(context.server_id, context.owner_user_id, job.agent_id)
+    }
+
+    if (context.all_channel_id) return context.all_channel_id
+
+    throw new Error(`No channel available for cron job ${job.id}`)
   }
 
   // ─── Token exhaustion monitor ─────────────────────────────────────────────

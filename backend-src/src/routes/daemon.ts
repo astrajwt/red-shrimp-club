@@ -7,6 +7,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { query, queryOne } from '../db/client.js'
 import { processManager } from '../daemon/process-manager.js'
 import { heartbeatChecker } from '../daemon/heartbeat-checker.js'
+import { scheduler } from '../daemon/scheduler.js'
 import { execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
@@ -130,6 +131,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [agentId, cronExpr, prompt, channelId ?? null, modelOverride ?? null]
     )
+    await scheduler.reloadCronJobs()
     return { job }
   })
 
@@ -150,6 +152,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
        WHERE id = $4 RETURNING *`,
       [enabled ?? null, cronExpr ?? null, prompt ?? null, id]
     )
+    await scheduler.reloadCronJobs()
     return { job }
   })
 
@@ -158,6 +161,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     const [deleted] = await query('DELETE FROM cron_jobs WHERE id = $1 RETURNING id', [id])
     if (!deleted) return reply.code(404).send({ error: 'Cron job not found' })
+    await scheduler.reloadCronJobs()
     return { ok: true }
   })
 
