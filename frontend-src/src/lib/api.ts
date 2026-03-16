@@ -845,9 +845,11 @@ export interface CronJob {
 }
 
 export interface ModelRegistry {
-  anthropic: ModelInfo[]
-  moonshot:  ModelInfo[]
-  openai:    ModelInfo[]
+  anthropic:  ModelInfo[]
+  moonshot:   ModelInfo[]
+  openai:     ModelInfo[]
+  zhipu?:     ModelInfo[]
+  dashscope?: ModelInfo[]
 }
 
 export interface ModelInfo {

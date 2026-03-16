@@ -4,8 +4,9 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   channelsApi, messagesApi, tasksApi, agentsApi, filesApi, obsidianApi,
   type Channel, type Message, type Task, type Agent, type AgentAuthoredDoc, type AgentLog, type AgentMemory, type AgentTodo,
-  type MessageAttachment, type MessageMention, type MessageFeedbackVerdict,
+  type MessageAttachment, type MessageMention, type MessageFeedbackVerdict, type ModelRegistry,
 } from '../lib/api'
+import { agentModelsForRuntime, type AgentRuntime } from '../lib/agent-runtime'
 import { markSent } from '../lib/sent-tracker'
 import { AgentAvatar } from '../components/AgentAvatar'
 import { MenuButton, MenuShell } from '../components/Menu'
@@ -22,7 +23,7 @@ import 'katex/dist/katex.min.css'
 
 type WorkspaceSectionKey = 'memory' | 'knowledge' | 'notes' | 'docs'
 
-export default function ChannelsView({ requestedChannelId, onOpenDoc }: { requestedChannelId?: string | null; onOpenDoc?: (path: string) => void }) {
+export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: { requestedChannelId?: string | null; onOpenDoc?: (path: string) => void; onBack?: () => void }) {
   const { user } = useAuthStore()
   const { onCompositionStart, onCompositionEnd, isComposingRef } = useImeGuard()
   const [channels, setChannels]     = useState<Channel[]>([])
@@ -32,6 +33,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
   const [tasks, setTasks]           = useState<Task[]>([])
   const [unread, setUnread]         = useState<Record<string, number>>({})
   const [agents, setAgents]         = useState<Agent[]>([])
+  const [models, setModels]         = useState<ModelRegistry | null>(null)
   const [input, setInput]           = useState('')
   const [sending, setSending]       = useState(false)
   const [uploadingFiles, setUploadingFiles] = useState(false)
@@ -71,6 +73,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
   const [stoppingAgent, setStoppingAgent] = useState(false)
 
   const bottomRef  = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef   = useRef<HTMLInputElement>(null)
   const dragDepthRef = useRef(0)
@@ -79,6 +82,8 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false)
+  const [channelsExpanded, setChannelsExpanded] = useState(true)
+  const [agentsExpanded, setAgentsExpanded] = useState(false)
 
   useEffect(() => {
     setSidebarOpen(!isMobile)
@@ -100,6 +105,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
     }).catch(() => {})
     channelsApi.unread().then(setUnread).catch(() => {})
     agentsApi.list().then(setAgents).catch(() => {})
+    agentsApi.models().then(setModels).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -139,7 +145,8 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
 
   // ── Scroll to bottom ───────────────────────────────────────────────
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = messagesContainerRef.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [messages, agentStreamLines])
 
   // ── Attachment upload ──────────────────────────────────────────────
@@ -271,6 +278,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
         })
       }
       setSending(false)
+      inputRef.current?.focus()
     }
   }, [input, activeId, sending, pendingFiles])
 
@@ -448,7 +456,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
 
   return (
     <div
-      className="flex h-full bg-[#0e0c10] text-[#e7dfd3]"
+      className="flex h-full overflow-x-hidden bg-[#0e0c10] text-[#e7dfd3]"
       style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}
     >
       {/* ── Backdrop for mobile drawers ── */}
@@ -480,8 +488,14 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
 
         {/* Channels section */}
         <div className="px-3 pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[10px] text-[#4a4048] uppercase tracking-[0.1em]">channels</div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <button
+              onClick={() => setChannelsExpanded(v => !v)}
+              className="flex min-w-0 items-center gap-2 text-left"
+            >
+              <span className="text-[10px] uppercase tracking-[0.1em] text-[#4a4048]">channels</span>
+              <span className="text-[10px] text-[#6a6068]">{channelsExpanded ? '▾' : '▸'}</span>
+            </button>
             <button
               onClick={() => { setShowCreateCh(v => !v); setNewChName('') }}
               className="text-[12px] text-[#4a4048] hover:text-[#6bc5e8] px-1 leading-none"
@@ -490,7 +504,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
           </div>
 
           {/* Create channel form */}
-          {showCreateCh && (
+          {channelsExpanded && showCreateCh && (
             <div className="mb-3">
               <input
                 autoFocus
@@ -514,7 +528,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
             </div>
           )}
 
-          {channels.map((ch) => (
+          {channelsExpanded && channels.map((ch) => (
             <button
               key={ch.id}
               onClick={() => { setActiveId(ch.id); if (isMobile) setSidebarOpen(false) }}
@@ -535,8 +549,14 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
         {/* Agents — click to open DM directly */}
         {agents.length > 0 && (
           <div className="px-3 pt-4">
-            <div className="text-[10px] text-[#4a4048] uppercase tracking-[0.1em] mb-2">agents</div>
-            {agents.map(ag => {
+            <button
+              onClick={() => setAgentsExpanded(v => !v)}
+              className="mb-2 flex min-w-0 items-center gap-2 text-left"
+            >
+              <span className="text-[10px] uppercase tracking-[0.1em] text-[#4a4048]">agents</span>
+              <span className="text-[10px] text-[#6a6068]">{agentsExpanded ? '▾' : '▸'}</span>
+            </button>
+            {agentsExpanded && agents.map(ag => {
               // Check if there's already a DM channel open with this agent
               const existingDM = dms.find(d => d.display_name === ag.name || d.name?.includes(ag.name.toLowerCase()))
               const isActive = existingDM?.id === activeId
@@ -593,6 +613,13 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
       <main className="flex-1 flex flex-col border-r-[3px] border-black min-w-0">
         {/* Header */}
         <div className="border-b-[3px] border-black bg-[#141118] px-3 md:px-5 py-3 flex items-center gap-2 md:gap-3 shrink-0">
+          {isMobile && onBack && (
+            <button
+              onClick={onBack}
+              className="text-[16px] text-[#9a8888] hover:text-[#e7dfd3] px-1"
+              title="back"
+            >←</button>
+          )}
           <button
             onClick={() => setSidebarOpen(v => !v)}
             className="text-[18px] text-[#9a8888] hover:text-[#e7dfd3] px-1"
@@ -661,7 +688,6 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
                 )}
               </div>
             )}
-            {!isMobile && <Chip>{tasks.length} tasks</Chip>}
             {isMobile && (
               <button
                 onClick={() => setRightDrawerOpen(true)}
@@ -673,7 +699,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-auto px-3 py-3 md:px-5 md:py-4 space-y-4">
+        <div ref={messagesContainerRef} className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 md:px-5 md:py-4 space-y-4">
           {messages.map((msg, index) => {
             const isAgent = msg.sender_type === 'agent'
             const name = msg.sender_name || (isAgent ? 'agent' : 'user')
@@ -1023,7 +1049,24 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
               <AgentMetaItem label="Name" value={activeAgent.name} />
               <AgentMetaItem label="Role" value={roleLabel(activeAgent.role)} />
               <AgentMetaItem label="Runtime" value={runtimeLabel(activeAgent.runtime)} />
-              <AgentMetaItem label="Model" value={activeAgent.model_id} />
+              <div className="col-span-2 flex items-center gap-2">
+                <span className="text-[10px] text-[#6bc5e8] uppercase w-[60px] shrink-0">Model</span>
+                <select
+                  value={activeAgent.model_id}
+                  onChange={async (e) => {
+                    const newModel = e.target.value
+                    try {
+                      await agentsApi.updateModel(activeAgent.id, newModel)
+                      setAgents(prev => prev.map(a => a.id === activeAgent.id ? { ...a, model_id: newModel } : a))
+                    } catch { /* ignore */ }
+                  }}
+                  className="flex-1 border-[2px] border-black bg-[#0e0c10] text-[#e7dfd3] px-2 py-0.5 text-[11px] outline-none min-w-0"
+                >
+                  {agentModelsForRuntime(models, activeAgent.runtime as AgentRuntime).map(m => (
+                    <option key={m.id} value={m.id}>{m.label ?? m.id}</option>
+                  ))}
+                </select>
+              </div>
               <AgentMetaItem label="Reasoning" value={reasoningLabel(activeAgent.reasoning_effort)} />
               <AgentMetaItem label="Machine" value={machineLabel(activeAgent)} />
               <AgentMetaItem label="Connected" value={connectedLabel(activeAgent)} />
@@ -1043,9 +1086,11 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
                 {activeAgent.note?.trim() || 'no note yet'}
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className={`mt-3 grid gap-2 ${isMobile ? 'grid-cols-2' : 'grid-cols-3'}`}>
               <SidebarMiniButton active={agentPanelTab === 'workspace'} onClick={() => setAgentPanelTab('workspace')}>workspace</SidebarMiniButton>
-              <SidebarMiniButton active={agentPanelTab === 'tasks'} onClick={() => setAgentPanelTab('tasks')}>tasks</SidebarMiniButton>
+              {!isMobile && (
+                <SidebarMiniButton active={agentPanelTab === 'tasks'} onClick={() => setAgentPanelTab('tasks')}>tasks</SidebarMiniButton>
+              )}
               <SidebarMiniButton active={agentPanelTab === 'activity'} onClick={() => setAgentPanelTab('activity')}>activity</SidebarMiniButton>
             </div>
           </div>
@@ -1362,6 +1407,54 @@ function TodoDocStatusDot({ status }: { status: string }) {
 const IMG_MD = /!\[([^\]]*)\]\(([^)]+)\)/g
 const ZERO_WIDTH = '\u200b'
 const FEEDBACK_ITEM_RE = /^(?:[-*•]\s+|\d+[.)、]\s+|[一二三四五六七八九十]+[、.]\s+)(.+)$/
+const VAULT_FILE_EXT_RE = /\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|webp|gif|svg|pdf)$/i
+
+function decodeVaultUrl(raw: string): string {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
+function normalizeVaultPath(raw: string): string | null {
+  const decoded = decodeVaultUrl(raw).trim()
+  if (!decoded) return null
+
+  const withoutHash = decoded.split('#')[0]?.trim() ?? ''
+  const withoutQuery = withoutHash.split('?')[0]?.trim() ?? ''
+  const normalizedSlashes = withoutQuery.replace(/\\/g, '/')
+  const strippedQuotes = normalizedSlashes.replace(/^["'<(]+|[>"')]+$/g, '')
+  const compact = strippedQuotes.replace(/^\/+/, '')
+
+  if (!compact || /^(?:https?:|data:|mailto:|tel:)/i.test(compact)) return null
+  if (compact.startsWith('uploads/')) return null
+
+  if (compact.startsWith('vault://')) {
+    return compact.slice('vault://'.length).replace(/^\/+/, '')
+  }
+
+  const obsidianMatch = compact.match(/^obsidian:\/\/open\?(.*)$/i)
+  if (obsidianMatch) {
+    const params = new URLSearchParams(obsidianMatch[1])
+    const file = params.get('file') ?? params.get('path')
+    return file ? file.replace(/^\/+/, '') : null
+  }
+
+  const jwtVaultMatch = compact.match(/(?:^|\/)JwtVault\/(.+)$/)
+  if (jwtVaultMatch) return jwtVaultMatch[1]
+
+  if (
+    compact.includes('/') &&
+    !compact.startsWith('./') &&
+    !compact.startsWith('../') &&
+    VAULT_FILE_EXT_RE.test(compact)
+  ) {
+    return compact
+  }
+
+  return null
+}
 
 interface FeedbackItem {
   index: number
@@ -1421,16 +1514,15 @@ function MessageContent({
       /(?:\/[\w.-]+)*\/JwtVault\//g,
       ''
     )
-    // 2) Auto-detect vault-relative paths (00_hub/..., 03_knowledge/..., etc.) and wrap as vault links
-    //    Matches both backtick-wrapped (`path.md`) and bare paths
-    //    Supports .md and common file extensions
+    // 2) Auto-detect vault-relative paths and wrap as vault links.
+    //    This accepts general vault paths like notes/foo.md, 00_hub/bar.md,
+    //    Chinese directory names, and paths with -, _, spaces.
     processed = processed.replace(
-      /`((?:\d{2}_\w+\/)[^\s`\])<,;]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|pdf))`/gm,
+      /`((?:[^`\n]+\/)+[^`\n]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|webp|gif|svg|pdf))`/gm,
       (_match, path) => `[${path}](vault://${path})`
     )
-    // Also match bare paths (not in backticks, not already in markdown link syntax)
     processed = processed.replace(
-      /(?<![[(\/`\w])((?:\d{2}_\w+\/)[^\s`\])<,;]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|pdf))(?=[\s,;)\]】}`]|$)/gm,
+      /(?<![\[(/`])((?:[^ \n`()[\]<>]+\/)+[^ \n`()[\]<>]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|webp|gif|svg|pdf))(?=[\s,;)\]】}`]|$)/gm,
       (_match, path) => `[${path}](vault://${path})`
     )
   }
@@ -1470,25 +1562,7 @@ function MessageContent({
             </pre>
           ),
           a: ({ href, children }) => {
-            // Extract vault-relative path from any format:
-            // vault://path, /home/.../JwtVault/path, or bare 00_xxx/... paths
-            const extractVaultPath = (raw: string | undefined): string | null => {
-              if (!raw) return null
-              // vault:// protocol
-              const vaultProto = raw.match(/^vault:\/\/(.+)/)
-              if (vaultProto) return vaultProto[1]
-              // Absolute path containing JwtVault
-              const absMatch = raw.match(/JwtVault\/(.+)/)
-              if (absMatch) return absMatch[1]
-              // Vault-relative path (starts with or contains NN_word/ pattern)
-              const relMatch = raw.match(/((?:^|\/)(\d{2}_\w+\/.+))/)
-              if (relMatch) {
-                // Strip leading slash if present
-                return relMatch[1].replace(/^\//, '')
-              }
-              return null
-            }
-            const vaultPath = extractVaultPath(href)
+            const vaultPath = normalizeVaultPath(href ?? '')
             if (vaultPath && onOpenDoc) {
               return (
                 <span

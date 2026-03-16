@@ -3,10 +3,11 @@ import type { ModelInfo, ModelRegistry } from './api'
 export type AgentRuntime = 'claude' | 'codex' | 'kimi'
 type AgentProvider = keyof ModelRegistry
 
-const PROVIDER_BY_RUNTIME: Record<AgentRuntime, AgentProvider> = {
-  claude: 'anthropic',
-  codex: 'openai',
-  kimi: 'moonshot',
+// Codex runtime aggregates multiple providers (OpenAI + Zhipu GLM + Dashscope Qwen)
+const PROVIDERS_BY_RUNTIME: Record<AgentRuntime, AgentProvider[]> = {
+  claude: ['anthropic'],
+  codex:  ['openai', 'zhipu', 'dashscope'],
+  kimi:   ['moonshot'],
 }
 
 const DEFAULT_MODELS: Record<AgentRuntime, ModelInfo> = {
@@ -30,7 +31,7 @@ export function agentModelsForRuntime(
   runtime: AgentRuntime
 ): ModelInfo[] {
   const defaults = [DEFAULT_MODELS[runtime]]
-  const providerModels = registry?.[PROVIDER_BY_RUNTIME[runtime]] ?? []
+  const providerModels = PROVIDERS_BY_RUNTIME[runtime].flatMap(p => registry?.[p] ?? [])
   const merged = [...defaults, ...providerModels]
 
   return merged.filter((model, index) =>

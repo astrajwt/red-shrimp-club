@@ -92,11 +92,11 @@ export default function AgentsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState({
     name: '',
-    modelId: defaultAgentModelForRuntime('codex'),
+    modelId: defaultAgentModelForRuntime('claude'),
     workspacePath: '',
     description: '',
     role: 'general',
-    runtime: 'codex' as AgentRuntime,
+    runtime: 'claude' as AgentRuntime,
     reasoningEffort: 'medium' as string,
     machineId: '' as string,
     parentAgentId: '' as string, // empty = auto (defaults to Donovan on backend)
@@ -601,7 +601,7 @@ export default function AgentsPage() {
               />
               {!createForm.workspacePath && (
                 <div className="text-[11px] text-[#3abfa0] mt-1">
-                  ✓ MEMORY.md · KNOWLEDGE.md · notes/README.md · GUIDE.md · HEARTBEAT.md will be created automatically
+                  ✓ MEMORY.md · KNOWLEDGE.md · GUIDE.md · HEARTBEAT.md will be created automatically
                 </div>
               )}
             </div>
