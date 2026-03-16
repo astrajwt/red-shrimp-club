@@ -16,7 +16,7 @@ import { cp, mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { query, queryOne } from '../db/client.js'
 import { processManager, SUPPORTED_RUNTIMES } from '../daemon/process-manager.js'
 import type { AgentConfig, RuntimeId } from '../daemon/process-manager.js'
-import { initAgentWorkspace } from '../daemon/workspace-init.js'
+import { initAgentWorkspace, refreshAgentWorkspace } from '../daemon/workspace-init.js'
 import { llmClient } from '../daemon/llm-client.js'
 import { compactAgentContext } from '../services/context-compaction.js'
 import { machineConnectionManager } from '../daemon/machine-connection.js'
@@ -153,6 +153,8 @@ function runtimeForModel(modelId: string): RuntimeId {
   if (provider === 'moonshot') return 'kimi'
   return 'codex'
 }
+
+const DEFAULT_TEAM_CONTEXT = '红虾俱乐部 (Red Shrimp Lab) — multi-agent collaboration system. Team includes human users and AI agents communicating via mcp__chat tools.'
 
 export const agentRoutes: FastifyPluginAsync = async (app) => {
   await query('ALTER TABLE agents ADD COLUMN IF NOT EXISTS note TEXT').catch(() => {})
@@ -423,11 +425,91 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       modelId:      agent.model_id,
       serverUrl,
       channelName:  '#all',
-      teamContext:  '红虾俱乐部 (Red Shrimp Lab) — multi-agent collaboration system. Team includes human users and AI agents communicating via mcp__chat tools.',
+      teamContext:  DEFAULT_TEAM_CONTEXT,
       customPrompt: systemPrompt ?? undefined,
     }).catch(err => console.error(`[workspace] Init failed for ${agent.name}:`, err.message))
 
     return { agent }
+  })
+
+  // ── POST /api/agents/refresh-core-workspaces ─────────────────────
+  app.post('/refresh-core-workspaces', { preHandler: [app.authenticate] }, async (req) => {
+    const caller = req.user as { sub: string }
+    const { restart = true, serverId } = req.body as { restart?: boolean; serverId?: string }
+    const serverUrl = resolveServerUrl(req)
+
+    const agents = await query<AgentControlRow & { role: string; server_id: string; status: string }>(
+      `SELECT a.id, a.server_id, a.name, a.description, a.role, a.runtime, a.model_id, a.machine_id,
+              a.workspace_path, a.session_id, a.reasoning_effort, a.status
+       FROM agents a
+       JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
+       WHERE a.role IN ('coordinator', 'tech-lead', 'ops')
+         AND ($2::uuid IS NULL OR a.server_id = $2::uuid)
+       ORDER BY CASE a.role
+         WHEN 'coordinator' THEN 0
+         WHEN 'tech-lead' THEN 1
+         WHEN 'ops' THEN 2
+         ELSE 9
+       END, a.name`,
+      [caller.sub, serverId ?? null]
+    )
+
+    const results: Array<{ agentId: string; name: string; role: string; refreshed: boolean; restarted: boolean; message?: string; error?: string }> = []
+
+    for (const agent of agents) {
+      try {
+        const workspacePath = agent.workspace_path?.trim() || resolveAgentWorkspacePath(agent.name)
+        const wasRunning = processManager.isRunning(agent.id) || ['running', 'starting', 'online', 'sleeping'].includes(agent.status)
+
+        if (restart && wasRunning) {
+          await stopAgentInstance(agent.id)
+          await new Promise(resolve => setTimeout(resolve, 150))
+        }
+
+        await refreshAgentWorkspace(workspacePath, {
+          agentId: agent.id,
+          agentName: agent.name,
+          description: agent.description ?? null,
+          role: agent.role as any,
+          modelId: agent.model_id,
+          serverUrl,
+          channelName: '#all',
+          teamContext: DEFAULT_TEAM_CONTEXT,
+        })
+
+        await query('UPDATE agents SET workspace_path = $2 WHERE id = $1', [agent.id, workspacePath]).catch(() => {})
+
+        let restarted = false
+        if (restart && wasRunning) {
+          const started = await startAgentInstance(agent, serverUrl, true)
+          restarted = !!started.ok
+        }
+
+        results.push({
+          agentId: agent.id,
+          name: agent.name,
+          role: agent.role,
+          refreshed: true,
+          restarted,
+          message: restart && wasRunning ? 'workspace refreshed and agent restarted' : 'workspace refreshed',
+        })
+      } catch (err: any) {
+        results.push({
+          agentId: agent.id,
+          name: agent.name,
+          role: agent.role,
+          refreshed: false,
+          restarted: false,
+          error: err.message ?? 'Refresh failed',
+        })
+      }
+    }
+
+    return {
+      ok: results.every(item => item.refreshed),
+      count: results.length,
+      results,
+    }
   })
 
   // ── POST /api/agents/reconnect-all ───────────────────────────────

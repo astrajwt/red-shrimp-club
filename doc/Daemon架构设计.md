@@ -192,11 +192,11 @@ After=network.target postgresql.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/node /opt/redshrimp/daemon/index.js
+ExecStart=/usr/bin/node /home/ubuntu/redshrimp/daemon/index.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-WorkingDirectory=/opt/redshrimp
+WorkingDirectory=/home/ubuntu/redshrimp
 
 [Install]
 WantedBy=multi-user.target

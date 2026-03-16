@@ -275,7 +275,7 @@ CREATE TABLE agent_runs (
   status          VARCHAR(20) NOT NULL DEFAULT 'running',  -- running/completed/handoff/failed
   tokens_used     INT NOT NULL DEFAULT 0,
   tokens_limit    INT NOT NULL DEFAULT 200000,
-  context_snapshot JSONB,   -- token 耗尽时保存的上下文快照
+  handoff_file_path TEXT,   -- token 耗尽时的上下文快照文件路径（~/JwtVault/agent-memory/{agentName}/handoff/{runId}.md）
   started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   ended_at        TIMESTAMPTZ
 );
@@ -288,10 +288,10 @@ Agent 每次调用 LLM 后：
   tokens_used += response.usage.total_tokens
   if tokens_used / tokens_limit > 0.90:
     1. 发出 context_exhausted 信号（更新 agent_runs.status = 'handoff'）
-    2. 序列化当前工作状态到 context_snapshot（已完成步骤、剩余任务、关键变量）
+    2. 将当前工作状态写入 markdown 文件 ~/JwtVault/agent-memory/{agentName}/handoff/{runId}.md
     3. Scheduler 检测到 handoff 信号
     4. 选择接班 Agent（同类型空闲 Agent 或启动新实例）
-    5. 将 context_snapshot + 剩余任务作为系统 prompt 注入新 Agent
+    5. 将 handoff markdown 文件内容 + 剩余任务作为系统 prompt 注入新 Agent
     6. 新 Agent 接续工作，在频道发布 "接续 @OldAgent 的工作..."
     7. 原 Agent 标记 idle，等待 context 刷新
 ```

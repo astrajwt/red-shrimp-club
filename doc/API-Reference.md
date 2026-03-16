@@ -1,7 +1,7 @@
 # 红虾俱乐部 — API Reference
 
 > **版本**: v1.0 (Phase 1)
-> **Base URL**: `http://localhost:3000/api`
+> **Base URL**: `http://localhost:3001/api`
 > **认证**: JWT Bearer Token（除特别标注外，所有端点需认证）
 
 ---
@@ -659,11 +659,11 @@ Daemon 健康检查。
 {
   "status": "completed | handoff | failed",
   "tokensUsed": 150000,
-  "contextSnapshot": { "completedSteps": [...], "remaining": [...] }
+  "handoffFilePath": "agent-memory/Alice/handoff/run-uuid.md"
 }
 ```
 
-**说明**: 状态变为 completed/handoff/failed 时自动设置 `ended_at`。
+**说明**: 状态变为 completed/handoff/failed 时自动设置 `ended_at`。`handoffFilePath` 指向 Obsidian vault 中的 markdown 文件（`~/JwtVault/agent-memory/{agentName}/handoff/{runId}.md`），用于存储上下文快照。
 
 ---
 
@@ -794,11 +794,11 @@ Daemon 健康检查。
 
 ## 8. WebSocket 事件
 
-**连接**: `ws://localhost:3000` (Socket.IO)
+**连接**: `ws://localhost:3001` (Socket.IO)
 
 **认证**: Handshake 时传递：
 ```js
-const socket = io('http://localhost:3000', {
+const socket = io('http://localhost:3001', {
   auth: {
     token: accessToken,
     serverId: 'uuid'
@@ -854,7 +854,7 @@ const socket = io('http://localhost:3000', {
 | `DB_USER` | 数据库用户 | `postgres` |
 | `DB_PASSWORD` | 数据库密码 | - |
 | `JWT_SECRET` | JWT 签名密钥 | - |
-| `PORT` | API Server 端口 | `3000` |
+| `PORT` | API Server 端口 | `3001` |
 | `SLOCK_SERVER_URL` | WebSocket 地址 | - |
 | `OBSIDIAN_ROOT` | Obsidian Vault 根目录 | - |
 | `UPLOADS_DIR` | 文件上传目录 | `/var/redshrimp/uploads` |

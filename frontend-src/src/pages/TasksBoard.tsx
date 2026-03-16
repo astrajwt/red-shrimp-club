@@ -115,8 +115,11 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
   const [createError, setCreateError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
-  const [mobileCol, setMobileCol] = useState<ColKey>('open')
+  const [mobileFilter, setMobileFilter] = useState<'all' | ColKey>('all')
   const agentOptions = sortAgentsByHierarchy(agents)
+  const mobileTasks = mobileFilter === 'all'
+    ? tasks
+    : tasks.filter(task => task.status === mobileFilter)
 
   const reload = () => {
     if (!channelId) {
@@ -198,7 +201,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
 
   return (
     <div
-      className="h-full overflow-auto bg-[#0e0c10] text-[#e7dfd3] px-3 py-3 md:p-5"
+      className="h-full overflow-y-auto overflow-x-hidden bg-[#0e0c10] text-[#e7dfd3] px-3 py-3 md:p-5"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -327,72 +330,107 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
         </div>
       )}
 
-      {/* Mobile column selector */}
+      {/* Mobile filter */}
       {isMobile && (
         <div className="sticky top-0 z-10 -mx-3 mb-3 overflow-x-auto border-y-[3px] border-black bg-[#110e12] px-3 py-2 md:hidden">
           <div className="flex gap-1 pb-1">
-          {columns.map(col => {
-            const count = tasks.filter(t => t.status === col.key).length
-            return (
-              <button
-                key={col.key}
-                onClick={() => setMobileCol(col.key)}
-                className={`shrink-0 border-[2px] border-black px-3 py-1.5 text-[11px] uppercase transition-colors ${
-                  mobileCol === col.key ? 'border-b-[3px]' : 'opacity-60'
-                }`}
-                style={{
-                  background: mobileCol === col.key ? col.color : '#0e0c10',
-                  color: col.textColor,
-                  borderBottomColor: mobileCol === col.key ? col.textColor : 'black',
-                }}
-              >
-                {col.label} ({count})
-              </button>
-            )
-          })}
+            <button
+              onClick={() => setMobileFilter('all')}
+              className={`shrink-0 border-[2px] border-black px-3 py-1.5 text-[11px] uppercase transition-colors ${
+                mobileFilter === 'all' ? 'border-b-[3px]' : 'opacity-60'
+              }`}
+              style={{
+                background: mobileFilter === 'all' ? '#1b1820' : '#0e0c10',
+                color: mobileFilter === 'all' ? '#e7dfd3' : '#9a8888',
+                borderBottomColor: mobileFilter === 'all' ? '#6bc5e8' : 'black',
+              }}
+            >
+              all ({tasks.length})
+            </button>
+            {columns.map(col => {
+              const count = tasks.filter(t => t.status === col.key).length
+              return (
+                <button
+                  key={col.key}
+                  onClick={() => setMobileFilter(col.key)}
+                  className={`shrink-0 border-[2px] border-black px-3 py-1.5 text-[11px] uppercase transition-colors ${
+                    mobileFilter === col.key ? 'border-b-[3px]' : 'opacity-60'
+                  }`}
+                  style={{
+                    background: mobileFilter === col.key ? col.color : '#0e0c10',
+                    color: col.textColor,
+                    borderBottomColor: mobileFilter === col.key ? col.textColor : 'black',
+                  }}
+                >
+                  {col.label} ({count})
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
 
-      {/* Kanban columns */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
-        {columns
-          .filter(col => !isMobile || col.key === mobileCol)
-          .map((col) => {
-          const colTasks = tasks.filter(t => t.status === col.key)
-          return (
-            <div key={col.key} className="flex flex-col gap-3">
-              {/* Column header */}
-              <div
-                className="border-[3px] border-black px-4 py-2 flex items-center justify-between"
-                style={{ background: col.color }}
-              >
-                <span className="text-[13px] uppercase" style={{ color: col.textColor }}>
-                  {col.label}
-                </span>
-                <span
-                  className="border-[2px] border-black text-[12px] px-2"
-                  style={{ background: col.color, color: col.textColor }}
-                >
-                  {colTasks.length}
-                </span>
-              </div>
-
-              {/* Cards */}
-              {colTasks.map((task, i) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  cardIndex={i}
-                  onMarkDocRead={markDocRead}
-                  onTaskChanged={reload}
-                  onOpenDoc={onOpenDoc}
-                />
-              ))}
+      {isMobile ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between border-[2px] border-black bg-[#17131a] px-3 py-2">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-[#6bc5e8]">
+              {mobileFilter === 'all' ? 'filtered tasks' : columns.find(col => col.key === mobileFilter)?.label ?? 'filtered tasks'}
             </div>
-          )
-        })}
-      </div>
+            <div className="text-[11px] text-[#9a8888]">{mobileTasks.length}</div>
+          </div>
+          {mobileTasks.length === 0 ? (
+            <div className="border-[3px] border-black bg-[#17131a] px-4 py-6 text-center text-[12px] text-[#4a4048]">
+              no tasks in this filter
+            </div>
+          ) : (
+            mobileTasks.map((task, i) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                cardIndex={i}
+                onMarkDocRead={markDocRead}
+                onTaskChanged={reload}
+                onOpenDoc={onOpenDoc}
+              />
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
+          {columns.map((col) => {
+            const colTasks = tasks.filter(t => t.status === col.key)
+            return (
+              <div key={col.key} className="flex flex-col gap-3">
+                <div
+                  className="border-[3px] border-black px-4 py-2 flex items-center justify-between"
+                  style={{ background: col.color }}
+                >
+                  <span className="text-[13px] uppercase" style={{ color: col.textColor }}>
+                    {col.label}
+                  </span>
+                  <span
+                    className="border-[2px] border-black text-[12px] px-2"
+                    style={{ background: col.color, color: col.textColor }}
+                  >
+                    {colTasks.length}
+                  </span>
+                </div>
+
+                {colTasks.map((task, i) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    cardIndex={i}
+                    onMarkDocRead={markDocRead}
+                    onTaskChanged={reload}
+                    onOpenDoc={onOpenDoc}
+                  />
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -194,10 +194,10 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col bg-[#0e0c10] text-[#e7dfd3]"
+      className="flex flex-col overflow-hidden bg-[#0e0c10] text-[#e7dfd3]"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
-        minHeight: isMobile ? '100dvh' : '100vh',
+        height: isMobile ? '100dvh' : '100vh',
         paddingTop: isMobile ? 'var(--safe-area-top, 0px)' : undefined,
       }}
     >
@@ -209,7 +209,7 @@ export default function App() {
 
       {isMobile ? (
         <>
-          <header className="shrink-0 border-b-[3px] border-black bg-[#110e12] px-4 py-3">
+          <header className="shrink-0 border-b-[3px] border-black bg-[#110e12] px-4 py-3" style={{ display: page === 'channels' ? 'none' : undefined }}>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[10px] text-[#c0392b] uppercase tracking-[0.28em]">red-shrimp</div>
@@ -225,7 +225,7 @@ export default function App() {
               </div>
             </div>
           </header>
-          <nav className="shrink-0 border-b-[3px] border-black bg-[#141118] px-2 py-1.5 overflow-x-auto scrollbar-none">
+          <nav className="shrink-0 border-b-[3px] border-black bg-[#141118] px-2 py-1.5 overflow-x-auto scrollbar-none" style={{ display: page === 'channels' ? 'none' : undefined }}>
             <div className="flex gap-1.5">
               {NAV.map(n => {
                 const active = page === n.id
@@ -290,7 +290,7 @@ export default function App() {
           <HomePage onNavigate={(p, d) => { setPage(p as Page) }} />
         </div>
         <div className="h-full" style={{ display: page === 'channels' ? 'block' : 'none' }}>
-          <ChannelsView requestedChannelId={requestedChannelId} onOpenDoc={openDoc} />
+          <ChannelsView requestedChannelId={requestedChannelId} onOpenDoc={openDoc} onBack={isMobile ? () => setPage('home') : undefined} />
         </div>
         <div className="h-full" style={{ display: page === 'search' ? 'block' : 'none' }}>
           <SearchPage onOpenChannel={openChannelFromSearch} />
@@ -315,8 +315,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Bottom tab bar (mobile only) ── */}
-      {isMobile && (
+      {/* ── Bottom tab bar (mobile only, hidden on channels page) ── */}
+      {isMobile && page !== 'channels' && (
         <nav
           className="fixed bottom-0 left-0 right-0 z-50 flex items-stretch border-t-[3px] border-black bg-[#110e12]"
           style={{ paddingBottom: 'var(--safe-area-bottom, 0px)' }}

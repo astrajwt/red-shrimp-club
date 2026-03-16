@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { obsidianApi, memoryApi, channelsApi, messagesApi, agentsApi, setupApi, type ObsidianEntry, type MemorySource } from '../lib/api'
 import { isImeComposing } from '../lib/ime'
+import { useIsMobile } from '../lib/use-mobile'
 import DocumentViewer from './DocumentViewer'
 
 const LEFT_PANE_DEFAULT_WIDTH = 240
@@ -44,6 +45,7 @@ function ResizeHandle({
 }
 
 export default function MemoryBrowser({ initialPath }: { initialPath?: string | null }) {
+  const isMobile = useIsMobile()
   const [selectedPath, setSelectedPath] = useState<string | null>(initialPath ?? null)
   const [history, setHistory] = useState<string[]>([])
 
@@ -108,7 +110,16 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
   }, [])
 
   useEffect(() => {
+    if (!isMobile) return
+    setLeftCollapsed(true)
+    setRightCollapsed(true)
+    setShowImport(false)
+    setDragging(null)
+  }, [isMobile])
+
+  useEffect(() => {
     if (!dragging) return
+    if (isMobile) return
 
     const onPointerMove = (event: PointerEvent) => {
       const container = containerRef.current
@@ -149,7 +160,56 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [dragging])
+  }, [dragging, isMobile])
+
+  const renderLeftPanel = () => (
+    <>
+      <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
+        <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">obsidian vault</div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goBack}
+              disabled={history.length === 0}
+              title="back"
+              className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            >
+              ←
+            </button>
+            <div className="text-[16px] leading-none">vault</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImport(s => !s)}
+              title="import vault repo"
+              className={`text-[11px] px-1.5 py-0.5 border transition-colors ${
+                showImport
+                  ? 'border-[#c0392b] text-[#c0392b]'
+                  : 'border-[#3a3535] text-[#4a4048] hover:border-[#6bc5e8] hover:text-[#6bc5e8]'
+              }`}
+            >
+              + git
+            </button>
+            <button
+              onClick={() => setLeftCollapsed(true)}
+              title="collapse sidebar"
+              className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
+            >
+              ◂
+            </button>
+          </div>
+        </div>
+      </div>
+      {showImport && <GitImportPanel onImported={() => { refreshTree(); setShowImport(false) }} />}
+      <div className="flex-1 overflow-auto py-1">
+        <TreeNode key={treeKey} path="" depth={0} selectedPath={selectedPath} onSelect={(path) => {
+          navigateTo(path)
+          if (isMobile) setLeftCollapsed(true)
+        }} />
+      </div>
+      <MemorySourcesList onSync={refreshTree} />
+    </>
+  )
 
   return (
     <div
@@ -157,64 +217,57 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
       className="h-full flex overflow-hidden bg-[#0e0c10] text-[#e7dfd3]"
       style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}>
 
-      {/* ── Left: recursive file tree (resizable, collapsible) ── */}
-      <div
-        className="shrink-0 flex flex-col bg-[#141018] transition-all duration-200 overflow-hidden"
-        style={{ width: leftCollapsed ? 0 : leftWidth }}
-      >
-        <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
-          <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">obsidian vault</div>
-          <div className="flex items-center justify-between">
+      {!isMobile && (
+        <>
+          <div
+            className="shrink-0 flex flex-col bg-[#141018] transition-all duration-200 overflow-hidden"
+            style={{ width: leftCollapsed ? 0 : leftWidth }}
+          >
+            {renderLeftPanel()}
+          </div>
+          <ResizeHandle
+            active={dragging === 'left'}
+            onPointerDown={(event) => {
+              event.preventDefault()
+              setDragging('left')
+            }}
+          />
+        </>
+      )}
+
+      {/* ── Center: vault viewer (flex-1) ── */}
+      <div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto relative">
+        {isMobile ? (
+          <div className="sticky top-0 z-20 border-b-[3px] border-black bg-[#141018] px-3 py-2">
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setLeftCollapsed(false)}
+                title="open vault tree"
+                className="border-[2px] border-black bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#6bc5e8]"
+              >
+                vault
+              </button>
               <button
                 onClick={goBack}
                 disabled={history.length === 0}
                 title="back"
-                className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                className="border-[2px] border-black bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#9a8888] disabled:opacity-30"
               >
-                ←
+                back
               </button>
-              <div className="text-[16px] leading-none">vault</div>
-            </div>
-            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1 truncate text-[11px] text-[#4a4048]">
+                {selectedPath ?? 'select a vault file'}
+              </div>
               <button
-                onClick={() => setShowImport(s => !s)}
-                title="import vault repo"
-                className={`text-[11px] px-1.5 py-0.5 border transition-colors ${
-                  showImport
-                    ? 'border-[#c0392b] text-[#c0392b]'
-                    : 'border-[#3a3535] text-[#4a4048] hover:border-[#6bc5e8] hover:text-[#6bc5e8]'
-                }`}
+                onClick={() => setRightCollapsed(false)}
+                title="open ask agent"
+                className="border-[2px] border-black bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#f0b35e]"
               >
-                + git
-              </button>
-              <button
-                onClick={() => setLeftCollapsed(true)}
-                title="collapse sidebar"
-                className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
-              >
-                ◂
+                ask
               </button>
             </div>
           </div>
-        </div>
-        {showImport && <GitImportPanel onImported={() => { refreshTree(); setShowImport(false) }} />}
-        <div className="flex-1 overflow-auto py-1">
-          <TreeNode key={treeKey} path="" depth={0} selectedPath={selectedPath} onSelect={navigateTo} />
-        </div>
-        <MemorySourcesList onSync={refreshTree} />
-      </div>
-      <ResizeHandle
-        active={dragging === 'left'}
-        onPointerDown={(event) => {
-          event.preventDefault()
-          setDragging('left')
-        }}
-      />
-
-      {/* ── Center: vault viewer (flex-1) ── */}
-      <div className="flex-1 min-w-0 overflow-auto relative">
-        {leftCollapsed && (
+        ) : leftCollapsed && (
           <button
             onClick={() => setLeftCollapsed(false)}
             title="expand sidebar"
@@ -234,7 +287,8 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
           </div>
         )}
       </div>
-      {!rightCollapsed && (
+
+      {!isMobile && !rightCollapsed && (
         <ResizeHandle
           active={dragging === 'right'}
           onPointerDown={(event) => {
@@ -244,8 +298,34 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
         />
       )}
 
-      {/* ── Right: Donovan Q&A panel (resizable, collapsible) ── */}
-      <AskPanel filePath={selectedPath} width={rightWidth} collapsed={rightCollapsed} onToggle={() => setRightCollapsed(c => !c)} />
+      {!isMobile && (
+        <AskPanel filePath={selectedPath} width={rightWidth} collapsed={rightCollapsed} onToggle={() => setRightCollapsed(c => !c)} />
+      )}
+
+      {isMobile && (
+        <>
+          {!leftCollapsed && (
+            <button
+              aria-label="close vault tree overlay"
+              className="absolute inset-0 z-30 bg-black/45"
+              onClick={() => setLeftCollapsed(true)}
+            />
+          )}
+          <div
+            className={`absolute inset-y-0 left-0 z-40 flex w-[85vw] max-w-[340px] flex-col bg-[#141018] transition-transform duration-200 ${
+              leftCollapsed ? '-translate-x-full' : 'translate-x-0'
+            }`}
+          >
+            {renderLeftPanel()}
+          </div>
+
+          {!rightCollapsed && (
+            <div className="absolute inset-0 z-40 bg-[#0e0c10]">
+              <AskPanel filePath={selectedPath} width={0} collapsed={false} onToggle={() => setRightCollapsed(true)} isMobileFullscreen />
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -438,7 +518,7 @@ interface AgentOption {
   name: string
 }
 
-function AskPanel({ filePath, width, collapsed, onToggle }: { filePath: string | null; width: number; collapsed: boolean; onToggle: () => void }) {
+function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: { filePath: string | null; width: number; collapsed: boolean; onToggle: () => void; isMobileFullscreen?: boolean }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -608,16 +688,26 @@ function AskPanel({ filePath, width, collapsed, onToggle }: { filePath: string |
   }
 
   return (
-    <div className="shrink-0 flex flex-col bg-[#100e13]" style={{ width }}>
+    <div className="h-full shrink-0 flex flex-col bg-[#100e13]" style={width > 0 ? { width } : undefined}>
       {/* Header */}
       <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
         <div className="flex items-center justify-between">
-          <div className="text-[14px] leading-none">ask agent</div>
-          <button
-            onClick={onToggle}
-            title="collapse panel"
-            className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
-          >▸</button>
+          <div className="flex items-center gap-2">
+            {isMobileFullscreen && (
+              <button
+                onClick={onToggle}
+                className="text-[16px] leading-none text-[#9a8888] hover:text-[#6bc5e8] transition-colors"
+              >←</button>
+            )}
+            <div className="text-[14px] leading-none">ask agent</div>
+          </div>
+          {!isMobileFullscreen && (
+            <button
+              onClick={onToggle}
+              title="collapse panel"
+              className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
+            >▸</button>
+          )}
         </div>
         <div className="flex items-center gap-1 mt-1.5 min-w-0">
           <span className="text-[10px] text-[#4a4048] shrink-0">ctx:</span>
