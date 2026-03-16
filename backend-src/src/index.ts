@@ -4,6 +4,7 @@
 import 'dotenv/config'
 import os from 'os'
 import { resolve, join } from 'path'
+import { execFile } from 'child_process'
 
 // Expand ~ in path-like env vars (dotenv doesn't do shell expansion)
 for (const key of ['OBSIDIAN_ROOT', 'AGENTS_WORKSPACE_DIR', 'UPLOADS_DIR']) {
@@ -140,12 +141,21 @@ async function main() {
       root: frontendDir,
       prefix: '/',
       decorateReply: false,
+      cacheControl: false,
+      setHeaders(res, filePath) {
+        if (filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        } else {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+        }
+      },
     })
     // SPA catch-all: serve index.html for non-API, non-file routes
     app.setNotFoundHandler(async (req, reply) => {
       if (req.url.startsWith('/api/') || req.url.startsWith('/internal/') || req.url.startsWith('/uploads/') || req.url.startsWith('/socket.io') || req.url.startsWith('/daemon/')) {
         return reply.code(404).send({ error: 'Not found' })
       }
+      reply.header('Cache-Control', 'no-cache, no-store, must-revalidate')
       return reply.sendFile('index.html', frontendDir)
     })
   }
@@ -215,6 +225,25 @@ async function main() {
 
   // Start scheduler AFTER server is up
   await scheduler.start()
+
+  // ── Vault git pull — sync remote changes every 30s ─────────────
+  const vaultRoot = process.env.OBSIDIAN_ROOT
+  if (vaultRoot && existsSync(resolve(vaultRoot, '.git'))) {
+    const pullVault = () => {
+      execFile('git', ['-C', vaultRoot, 'pull', '--ff-only', '--no-edit'], { timeout: 15000 }, (err, stdout, stderr) => {
+        if (err) {
+          if (!stderr?.includes('Already up to date')) {
+            console.error(`[vault-sync] git pull failed: ${stderr || err.message}`)
+          }
+        } else if (stdout && !stdout.includes('Already up to date')) {
+          console.log(`[vault-sync] pulled: ${stdout.trim()}`)
+        }
+      })
+    }
+    pullVault()
+    setInterval(pullVault, 30_000)
+    console.log(`[vault-sync] Auto-pull every 30s from ${vaultRoot}`)
+  }
 
   // ── Rolling cleanup — keep DB lean ─────────────────────────────
   const rollingCleanup = async () => {

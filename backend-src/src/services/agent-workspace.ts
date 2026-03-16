@@ -10,9 +10,6 @@ function expandHome(p: string): string {
 }
 
 export function resolveAgentsBaseDir(): string {
-  const explicit = process.env.AGENTS_WORKSPACE_DIR?.trim()
-  if (explicit) return resolve(expandHome(explicit))
-
   const vaultRoot = process.env.OBSIDIAN_ROOT?.trim() || join(homedir(), 'JwtVault')
   return join(resolve(expandHome(vaultRoot)), '00_hub', 'agents')
 }

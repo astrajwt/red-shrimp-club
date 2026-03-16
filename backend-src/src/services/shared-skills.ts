@@ -7,11 +7,9 @@ import { promisify } from 'util'
 const execFileAsync = promisify(execFile)
 const obsidianRoot = process.env.OBSIDIAN_ROOT?.trim()
 
-const sharedSkillsRoot = process.env.REDSHRIMP_SHARED_SKILLS_DIR
-  ? resolve(process.env.REDSHRIMP_SHARED_SKILLS_DIR)
-  : obsidianRoot
-    ? join(resolve(obsidianRoot), '00_hub', 'skills')
-    : join(homedir(), 'JwtVault', '00_hub', 'skills')
+const sharedSkillsRoot = obsidianRoot
+  ? join(resolve(obsidianRoot), '00_hub', 'skills')
+  : join(homedir(), 'JwtVault', '00_hub', 'skills')
 
 const reposRoot = join(sharedSkillsRoot, 'repos')
 const builtinsRoot = join(sharedSkillsRoot, 'builtins')

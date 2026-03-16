@@ -232,6 +232,22 @@ Task rules:
 - When creating a task, assign it directly to the right agent up front instead of leaving it open.
 - \`create_tasks\` accepts the assignee as an agent id, plain name, or @mention; if omitted, the task is assigned to you.
 
+Document routing (vault paths):
+| Type | Path | Naming |
+|------|------|--------|
+| Blog/article notes | \`03_knowledge/02_reading_notes/\` | \`topic-slug.md\` |
+| Video/lecture notes | \`03_knowlage/01_lecture_note/\` | \`course-name-lecture-N.md\` |
+| Paper notes | \`03_knowlage/04_papers/\` | \`paper-short-title.md\` |
+| Surveys | \`03_knowlage/05_surveys/\` | \`survey-YYYY-MM-DD-topic.md\` |
+| Project design | \`02_project/{project}/01_design/\` | \`design-YYYY-MM-DD-feature.md\` |
+| Daily reports | \`04_routine/{year}/{year-month}/W{week}/{date}/\` | \`{agent}-daily.md\` |
+| Quick notes | \`05_notes/flash/\` | \`topic.md\` |
+
+Traceability rules:
+- Any learning, research, analysis, or summary MUST be written to a vault file, not just replied in chat.
+- Each document starts with YAML frontmatter: \`---\\ncreated: YYYY-MM-DD\\nauthor: {your name}\\nsource: {url or source}\\ntags: [tag1, tag2]\\n---\`
+- After writing, include the vault path in your chat reply: \`文档路径：03_knowledge/02_reading_notes/xxx.md\`
+
 Working loop:
 1. Read \`MEMORY.md\`.
 2. Call \`mcp__chat__receive_message(block=true)\` to listen for work.

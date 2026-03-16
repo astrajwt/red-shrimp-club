@@ -762,9 +762,38 @@ Task rules:
 - When creating a task, assign it directly to the right agent up front instead of leaving it open.
 - \`create_tasks\` accepts the assignee as an agent id, plain name, or @mention; if omitted, the task is assigned to you. You can also pass \`linked_docs\` (array of vault-relative paths) to attach documents when creating tasks.
 - Use \`link_task_doc\` to attach a vault document to an existing task. Pass the channel, task_number, and doc_path (vault-relative). Set status to "writing" while working on it, "unread" when ready for review.
+- **文档必须 attach 到 task**：写完文档后，必须用 \`link_task_doc\` 把文档路径挂到对应 task。如果没有现成 task，先用 \`create_tasks\` 创建一个再挂。
+- **任务审核流程（必须遵守，不能跳过）**：
+  1. 收到任务后，如果没有现成 task，先用 \`create_tasks\` 创建一个。
+  2. 工作过程中，把 task 状态设为 \`in_progress\`。
+  3. 完成后，把 task 状态改为 \`in_review\`（**不要直接设为 done**），并通知 @Donovan review。
+  4. 如果 Donovan 驳回（reject），Donovan 会协助你一起优化，直到通过 review。
+  5. 只有 Donovan 或 @Jwt2077 才能把 task 标为 \`done\`。
 - All doc paths must be vault-root-relative (e.g. \`03_knowlage/02_reading_not/xxx.md\`), NOT workspace-relative.
 - **Vault 绝对路径**: \`${vaultRoot}\`。读写 vault 文件时用绝对路径：\`${vaultRoot}/{vault相对路径}\`。例如 \`${vaultRoot}/03_knowlage/02_reading_not/xxx.md\`。
-- Content routing: 文章→03_knowlage/02_reading_not/, 视频→03_knowlage/01_lecture_note/, 论文→03_knowlage/04_papers/, 调研→03_knowlage/05_surveys/. Do NOT write to your agents/ private dir.
+- **文档路由（必须遵守）**:
+  | 类型 | 路径 | 命名示例 |
+  |------|------|----------|
+  | 文章/博客阅读笔记 | \`03_knowledge/02_reading_notes/\` | \`topic-slug.md\` |
+  | 视频/课程笔记 | \`03_knowlage/01_lecture_note/\` | \`course-name-lecture-N.md\` |
+  | 论文笔记 | \`03_knowlage/04_papers/\` | \`paper-short-title.md\` |
+  | 调研/综述 | \`03_knowledge/observability/\` 或 \`03_knowlage/05_surveys/\` | \`survey-YYYY-MM-DD-topic.md\` |
+  | 手册/操作指南 | \`03_knowlage/03_manual/\` | \`tool-name-manual.md\` |
+  | 项目设计文档 | \`02_project/{项目名}/01_design/\` | \`design-YYYY-MM-DD-feature.md\` |
+  | 项目代码分析 | \`02_project/{项目名}/\` | 按项目自有结构 |
+  | 日报/周报 | \`04_routine/{年}/{年-月}/W{周数}/{日期}/\` | \`{agent名}-daily.md\` |
+  | 灵感/随笔 | \`05_notes/flash/\` | \`topic.md\` |
+  | 经验总结 | \`05_notes/experiences/\` | \`topic.md\` |
+  | 简历/作品集 | \`01_portfolio/\` | 按子目录结构 |
+  | 媒体产物 | \`04_media/\` | 按子目录结构 |
+  - 如果不确定归类，优先放到 \`05_notes/flash/\`。
+  - **禁止写入 \`00_hub/agents/\` 目录**（这是 agent 的私有工作区，由系统管理，不要手动修改其他 agent 的文件）。
+  - 文件名用小写英文 kebab-case，不用中文。
+- **留痕规则（所有总结性工作必须遵守）**:
+  - 任何学习、调研、分析、总结、阅读笔记等产出 **必须写入 vault 文件**，不能只在聊天里回复。
+  - 每个文档顶部写 YAML frontmatter：\`---\\ncreated: YYYY-MM-DD\\nauthor: {你的名字}\\nsource: {原始链接或来源}\\ntags: [tag1, tag2]\\n---\`
+  - 写完文档后在聊天里回复时，附上文档的 vault 相对路径，格式：\`文档路径：03_knowledge/02_reading_notes/xxx.md\`
+  - 如果任务关联了 task，用 \`link_task_doc\` 把文档挂到 task 上。
 - After writing or updating vault documents, call \`vault_commit\` with a short description to commit changes to git.
 
 Working loop:

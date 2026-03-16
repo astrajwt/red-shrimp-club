@@ -12,6 +12,7 @@ import {
 import { rollAgentName } from '../lib/agent-name-roll'
 import { DialogShell } from '../components/Dialog'
 import { socketClient } from '../lib/socket'
+import { useIsMobile } from '../lib/use-mobile'
 import DocumentViewer from './DocumentViewer'
 
 type AgentStatus = Agent['status']
@@ -74,6 +75,7 @@ function SidebarFileButton({
 }
 
 export default function AgentsPage() {
+  const isMobile = useIsMobile()
   const [agents, setAgents] = useState<Agent[]>([])
   const [machines, setMachines] = useState<Machine[]>([])
   const [models, setModels] = useState<ModelRegistry | null>(null)
@@ -434,7 +436,7 @@ export default function AgentsPage() {
 
   return (
     <div
-      className="h-full overflow-auto bg-[#0e0c10] text-[#e7dfd3] p-5"
+      className="h-full overflow-auto bg-[#0e0c10] text-[#e7dfd3] px-3 py-3 md:p-5"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -443,23 +445,23 @@ export default function AgentsPage() {
       }}
     >
       {/* Header */}
-      <div className="flex items-end justify-between mb-5">
-        <div>
+      <div className="mb-4 flex flex-col gap-3 md:mb-5 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
           <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-1">management</div>
-          <div className="text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-1">agents</div>
+          <div className="text-[24px] md:text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-1">agents</div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             onClick={handleReconnectAll}
             disabled={reconnectingAll || agents.length === 0}
-            className="border-[3px] border-black bg-[#3abfa0] text-black px-5 py-2 text-[13px] uppercase hover:bg-[#4ed0b0] disabled:opacity-40"
+            className="border-[3px] border-black bg-[#3abfa0] text-black px-4 py-2 text-[12px] md:px-5 md:text-[13px] uppercase hover:bg-[#4ed0b0] disabled:opacity-40"
             style={{ transform: 'rotate(-0.15deg)' }}
           >
             {reconnectingAll ? 'reconnecting...' : 'reconnect all agents'}
           </button>
           <button
             onClick={openCreateModal}
-            className="border-[3px] border-black bg-[#c0392b] text-black px-5 py-2 text-[13px] uppercase hover:bg-[#e04050]"
+            className="border-[3px] border-black bg-[#c0392b] text-black px-4 py-2 text-[12px] md:px-5 md:text-[13px] uppercase hover:bg-[#e04050]"
             style={{ transform: 'rotate(0.2deg)' }}
           >
             + new agent
@@ -846,9 +848,9 @@ export default function AgentsPage() {
           </div>
 
           {/* Detail body — two columns */}
-          <div className="flex h-[calc(100vh-76px)]">
+          <div className="flex flex-col md:flex-row h-[calc(100vh-76px)]">
             {/* Left: info */}
-            <div className="w-[360px] border-r-[3px] border-black bg-[#141118] p-5 space-y-4 overflow-auto">
+            <div className="w-full md:w-[360px] border-b-[3px] md:border-b-0 md:border-r-[3px] border-black bg-[#141118] p-5 space-y-4 overflow-auto shrink-0">
               <div className="border-[3px] border-black bg-[#191619] p-4 space-y-3">
                 <div className="text-[11px] text-[#4a4048] uppercase mb-2">info</div>
                 <MetaRow label="name"      value={detail.name} />

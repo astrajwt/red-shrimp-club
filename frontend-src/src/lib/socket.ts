@@ -78,6 +78,7 @@ export type SocketEventMap = {
 class SocketManager {
   private socket: Socket | null = null
   private listeners = new Map<string, Set<(data: unknown) => void>>()
+  private joinedChannels = new Set<string>()
 
   connect() {
     if (this.socket?.connected) return
@@ -90,6 +91,10 @@ class SocketManager {
 
     this.socket.on('connect', () => {
       console.log('[ws] Connected')
+      // Re-join all channel rooms on reconnect
+      for (const channelId of this.joinedChannels) {
+        this.socket?.emit('join:channel', channelId)
+      }
     })
 
     this.socket.on('disconnect', (reason) => {
@@ -122,10 +127,12 @@ class SocketManager {
 
   // Join a channel room to receive its messages
   joinChannel(channelId: string) {
+    this.joinedChannels.add(channelId)
     this.socket?.emit('join:channel', channelId)
   }
 
   leaveChannel(channelId: string) {
+    this.joinedChannels.delete(channelId)
     this.socket?.emit('leave:channel', channelId)
   }
 

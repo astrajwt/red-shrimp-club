@@ -12,6 +12,7 @@ import { MenuButton, MenuShell } from '../components/Menu'
 import { isImeComposing, useImeGuard } from '../lib/ime'
 import { socketClient } from '../lib/socket'
 import { useAuthStore } from '../store/auth'
+import { useIsMobile } from '../lib/use-mobile'
 import DocumentViewer from './DocumentViewer'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -73,6 +74,16 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef   = useRef<HTMLInputElement>(null)
   const dragDepthRef = useRef(0)
+
+  // Sidebar collapse/drawer state
+  const isMobile = useIsMobile()
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false)
+
+  useEffect(() => {
+    setSidebarOpen(!isMobile)
+    if (!isMobile) setRightDrawerOpen(false)
+  }, [isMobile])
 
   // ── Load initial data ──────────────────────────────────────────────
   useEffect(() => {
@@ -440,8 +451,32 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
       className="flex h-full bg-[#0e0c10] text-[#e7dfd3]"
       style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}
     >
+      {/* ── Backdrop for mobile drawers ── */}
+      {isMobile && (sidebarOpen || rightDrawerOpen) && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50"
+          onClick={() => { setSidebarOpen(false); setRightDrawerOpen(false) }}
+        />
+      )}
+
       {/* ── Channel List ─────────────────────────────────────────────── */}
-      <aside className="w-[200px] border-r-[3px] border-black bg-[#141118] flex flex-col overflow-y-auto">
+      <aside className={
+        isMobile
+          ? `fixed inset-y-0 left-0 z-40 w-[260px] bg-[#141118] flex flex-col overflow-y-auto border-r-[3px] border-black transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+          : `${sidebarOpen ? 'w-[200px]' : 'w-0 overflow-hidden'} border-r-[3px] border-black bg-[#141118] flex flex-col overflow-y-auto transition-all duration-200`
+      }>
+        {isMobile && (
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b-[3px] border-black bg-[#141118] px-3 py-3">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[#6bc5e8]">channels</div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="text-[18px] leading-none text-[#6a6068]"
+              title="close channels"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Channels section */}
         <div className="px-3 pt-3">
@@ -482,7 +517,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
           {channels.map((ch) => (
             <button
               key={ch.id}
-              onClick={() => setActiveId(ch.id)}
+              onClick={() => { setActiveId(ch.id); if (isMobile) setSidebarOpen(false) }}
               className={`w-full flex items-center justify-between px-2 py-1 mb-1 text-left border-l-[3px]
                 ${ch.id === activeId
                   ? 'border-[#c0392b] bg-[#3a1520] text-[#f0e8e8]'
@@ -508,7 +543,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
               return (
               <button
                 key={ag.id}
-                onClick={() => openDM(ag.id)}
+                onClick={() => { openDM(ag.id); if (isMobile) setSidebarOpen(false) }}
                 className={`w-full flex items-center gap-2 px-2 py-1 mb-1 text-left group border-l-[3px]
                   ${isActive
                     ? 'border-[#6bc5e8] bg-[#1a2535] text-[#f0e8e8]'
@@ -557,20 +592,25 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
       {/* ── Message Area ─────────────────────────────────────────────── */}
       <main className="flex-1 flex flex-col border-r-[3px] border-black min-w-0">
         {/* Header */}
-        <div className="border-b-[3px] border-black bg-[#141118] px-5 py-3 flex items-center gap-3 shrink-0">
+        <div className="border-b-[3px] border-black bg-[#141118] px-3 md:px-5 py-3 flex items-center gap-2 md:gap-3 shrink-0">
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            className="text-[18px] text-[#9a8888] hover:text-[#e7dfd3] px-1"
+            title="channels"
+          >{sidebarOpen && !isMobile ? '◂' : '☰'}</button>
           {activeChannel?.type === 'dm'
             ? <div style={activeAgent?.status === 'running' ? { animation: 'agent-glow 1.5s ease-in-out infinite' } : undefined}>
                 <AgentAvatar name={activeChName} size={32} />
               </div>
             : <span className="text-[22px] text-[#c0392b]">#</span>}
-          <div>
-            <div className="text-[16px] flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[14px] md:text-[16px]">
               {activeChName}
               {activeAgent?.status === 'running' && (
                 <span className="w-2 h-2 bg-[#3abfa0]" style={{ animation: 'pulse 1.2s ease-in-out infinite' }} />
               )}
             </div>
-            <div className="text-[11px] text-[#6bc5e8]">
+            <div className="truncate text-[10px] md:text-[11px] text-[#6bc5e8]">
               {activeChannel?.type === 'dm' ? 'direct message' : 'channel'}
             </div>
           </div>
@@ -589,7 +629,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
             </button>
           )}
           <div className="ml-auto flex gap-2 items-center relative">
-            {activeChannel?.type !== 'dm' && (
+            {!isMobile && activeChannel?.type !== 'dm' && (
               <div className="relative">
                 <button
                   onClick={() => setShowInvite(v => !v)}
@@ -621,12 +661,19 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
                 )}
               </div>
             )}
-            <Chip>{tasks.length} tasks</Chip>
+            {!isMobile && <Chip>{tasks.length} tasks</Chip>}
+            {isMobile && (
+              <button
+                onClick={() => setRightDrawerOpen(true)}
+                className="text-[16px] text-[#6bc5e8] hover:text-[#e7dfd3] px-1"
+                title="info panel"
+              >ⓘ</button>
+            )}
           </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-auto px-5 py-4 space-y-4">
+        <div className="flex-1 overflow-auto px-3 py-3 md:px-5 md:py-4 space-y-4">
           {messages.map((msg, index) => {
             const isAgent = msg.sender_type === 'agent'
             const name = msg.sender_name || (isAgent ? 'agent' : 'user')
@@ -645,7 +692,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
                 key={msg.id}
                 className={`flex ${isAgent ? 'justify-start' : 'justify-end'} ${sameAsPrev ? 'mt-2' : 'mt-5'}`}
               >
-                <div className={`flex gap-3 max-w-[78%] ${isAgent ? '' : 'flex-row-reverse'}`}>
+                <div className={`flex gap-2 md:gap-3 max-w-[92%] md:max-w-[78%] ${isAgent ? '' : 'flex-row-reverse'}`}>
                   {sameAsPrev ? (
                     <div className="w-8 shrink-0" />
                   ) : isAgent ? (
@@ -677,7 +724,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
                       <div className={`text-[10px] text-[#4a4048] mb-1 ${isAgent ? '' : 'text-right'}`}>{time}</div>
                     )}
                     <div
-                      className="text-[14px] leading-6 px-3 py-2 border-[2px] border-black"
+                      className="text-[13px] leading-6 md:text-[14px] px-3 py-2 border-[2px] border-black"
                       style={{
                         background: isAgent ? '#161d24' : '#2a1519',
                         color: '#e0d8d0',
@@ -692,7 +739,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
                             <img
                               src={att.url}
                               alt={att.filename}
-                              className="max-w-[420px] max-h-[320px] border-[2px] border-black object-contain cursor-pointer bg-[#0e0c10]"
+                              className="max-w-full md:max-w-[420px] max-h-[320px] border-[2px] border-black object-contain cursor-pointer bg-[#0e0c10]"
                               onClick={() => window.open(att.url, '_blank')}
                               onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
@@ -786,7 +833,10 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
         </div>
 
         {/* Input */}
-        <div className="border-t-[3px] border-black px-4 py-3 bg-[#120f13] relative shrink-0">
+        <div
+          className="border-t-[3px] border-black px-3 py-3 md:px-4 bg-[#120f13] relative shrink-0"
+          style={{ paddingBottom: isMobile ? 'calc(0.75rem + var(--safe-area-bottom, 0px))' : undefined }}
+        >
           {/* Pending attachments */}
           {pendingFiles.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
@@ -829,7 +879,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
 
           {/* @ mention dropdown */}
           {mentionSuggestions.length > 0 && (
-            <MenuShell className="absolute bottom-full left-4 z-20 mb-2 min-w-[190px]">
+            <MenuShell className="absolute bottom-full left-3 md:left-4 z-20 mb-2 min-w-[190px]">
               {mentionSuggestions.map((ag, idx) => (
                 <MenuButton
                   key={ag.id}
@@ -850,7 +900,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
           )}
 
           <div
-            className="flex items-center gap-3 border-[3px] border-black bg-[#191619] px-3 py-2 transition-colors"
+            className="flex items-center gap-2 md:gap-3 border-[3px] border-black bg-[#191619] px-2.5 py-2 md:px-3 transition-colors"
             style={{
               boxShadow: dragActive ? '0 0 0 2px rgba(107,197,232,0.25), 0 0 18px rgba(107,197,232,0.18)' : '0 0 12px rgba(50,120,220,0.10)',
               background: dragActive ? '#161d24' : '#191619',
@@ -877,12 +927,12 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
             >
               {uploadingFiles ? '↑' : '⌅'}
             </button>
-            <span className="text-[#4a4048] text-[13px] shrink-0">
+            <span className="hidden sm:inline text-[#4a4048] text-[13px] shrink-0">
               {activeChannel?.type === 'dm' ? '✉' : '#'}{activeChName}
             </span>
             <input
               ref={inputRef}
-              className="flex-1 bg-transparent text-[14px] text-[#e7dfd3] outline-none placeholder-[#4a4048]"
+              className="min-w-0 flex-1 bg-transparent text-[14px] text-[#e7dfd3] outline-none placeholder-[#4a4048]"
               value={input}
               onChange={handleInputChange}
               onPaste={handlePaste}
@@ -929,7 +979,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
             <button
               onClick={send}
               disabled={sending || (!input.trim() && pendingFiles.length === 0)}
-              className="border-[2px] border-black bg-[#c0392b] text-black px-3 py-1 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
+              className="border-[2px] border-black bg-[#c0392b] text-black px-3 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
             >
               send ↑
             </button>
@@ -939,7 +989,11 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
 
       {/* ── Right Sidebar ─────────────────────────────────────────────── */}
       {activeAgent ? (
-        <aside className="w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black">
+        <aside className={
+          isMobile
+            ? `fixed inset-y-0 right-0 z-40 w-[85vw] max-w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black transition-transform duration-200 ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
+            : 'w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black'
+        }>
           <div className="border-b-[3px] border-black px-4 py-3 bg-[#1a2535] shrink-0">
             <div className="flex items-center gap-3">
               <AgentAvatar name={activeAgent.name} size={34} />
@@ -955,6 +1009,15 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
                   {roleLabel(activeAgent.role)}
                 </div>
               </div>
+              {isMobile && (
+                <button
+                  onClick={() => setRightDrawerOpen(false)}
+                  className="text-[18px] leading-none text-[#6a6068]"
+                  title="close info"
+                >
+                  ×
+                </button>
+              )}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
               <AgentMetaItem label="Name" value={activeAgent.name} />
@@ -1114,7 +1177,11 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc }: { reques
           </div>
         </aside>
       ) : (
-        <aside className="w-[260px] bg-[#141118] flex flex-col">
+        <aside className={
+          isMobile
+            ? `fixed inset-y-0 right-0 z-40 w-[85vw] max-w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black transition-transform duration-200 ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
+            : 'w-[260px] bg-[#141118] flex flex-col'
+        }>
           <div className="border-b-[3px] border-black px-3 py-3 bg-[#c0392b] shrink-0">
             <div className="text-[11px] text-black/60 uppercase">task board</div>
             <div className="text-[20px] text-black"># {activeChannel?.name ?? '...'}</div>
@@ -1374,6 +1441,7 @@ function MessageContent({
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
+        urlTransform={(url) => url}
         components={{
           p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
           strong: ({ children }) => {
@@ -1402,32 +1470,31 @@ function MessageContent({
             </pre>
           ),
           a: ({ href, children }) => {
-            // vault:// protocol links
-            const vaultMatch = href?.match(/^vault:\/\/(.+)/)
-            if (vaultMatch && onOpenDoc) {
-              const vaultPath = vaultMatch[1]
-              const fileName = vaultPath.split('/').pop()?.replace(/\.md$/, '') ?? vaultPath
+            // Extract vault-relative path from any format:
+            // vault://path, /home/.../JwtVault/path, or bare 00_xxx/... paths
+            const extractVaultPath = (raw: string | undefined): string | null => {
+              if (!raw) return null
+              // vault:// protocol
+              const vaultProto = raw.match(/^vault:\/\/(.+)/)
+              if (vaultProto) return vaultProto[1]
+              // Absolute path containing JwtVault
+              const absMatch = raw.match(/JwtVault\/(.+)/)
+              if (absMatch) return absMatch[1]
+              // Vault-relative path (starts with or contains NN_word/ pattern)
+              const relMatch = raw.match(/((?:^|\/)(\d{2}_\w+\/.+))/)
+              if (relMatch) {
+                // Strip leading slash if present
+                return relMatch[1].replace(/^\//, '')
+              }
+              return null
+            }
+            const vaultPath = extractVaultPath(href)
+            if (vaultPath && onOpenDoc) {
               return (
                 <span
                   className="inline-flex items-center gap-0.5 text-[#6bc5e8] hover:text-[#f0b35e] cursor-pointer group"
                   onClick={() => onOpenDoc(vaultPath)}
                   title={vaultPath}
-                >
-                  <svg className="w-3 h-3 shrink-0 opacity-50 group-hover:opacity-100" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M2 2h8l4 4v8H2V2zm8 1v3h3L10 3zM4 8h8v1H4V8zm0 2h6v1H4v-1z"/>
-                  </svg>
-                  <span className="underline underline-offset-2">{children}</span>
-                </span>
-              )
-            }
-            // Regular markdown links that happen to be vault-relative paths
-            if (href && /^\d{2}_\w+\//.test(href) && onOpenDoc) {
-              const fileName = href.split('/').pop()?.replace(/\.md$/, '') ?? href
-              return (
-                <span
-                  className="inline-flex items-center gap-0.5 text-[#6bc5e8] hover:text-[#f0b35e] cursor-pointer group"
-                  onClick={() => onOpenDoc(href)}
-                  title={href}
                 >
                   <svg className="w-3 h-3 shrink-0 opacity-50 group-hover:opacity-100" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M2 2h8l4 4v8H2V2zm8 1v3h3L10 3zM4 8h8v1H4V8zm0 2h6v1H4v-1z"/>

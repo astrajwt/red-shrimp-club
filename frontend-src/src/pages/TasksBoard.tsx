@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { agentsApi, tasksApi, channelsApi, type Task, type TaskDoc, type TaskFeedback, type Channel, type Agent } from '../lib/api'
 import { socketClient } from '../lib/socket'
+import { useIsMobile } from '../lib/use-mobile'
 
 const columns = [
   { key: 'open',        label: 'Unassigned',  color: '#2a2622', textColor: '#9a8888' },
@@ -113,6 +114,8 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
   const [todoDueDate, setTodoDueDate] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const isMobile = useIsMobile()
+  const [mobileCol, setMobileCol] = useState<ColKey>('open')
   const agentOptions = sortAgentsByHierarchy(agents)
 
   const reload = () => {
@@ -195,7 +198,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
 
   return (
     <div
-      className="h-full overflow-auto bg-[#0e0c10] text-[#e7dfd3] p-5"
+      className="h-full overflow-auto bg-[#0e0c10] text-[#e7dfd3] px-3 py-3 md:p-5"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -204,21 +207,21 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
       }}
     >
       {/* Header */}
-      <div className="flex items-end justify-between mb-5">
-        <div>
+      <div className="mb-4 flex flex-col gap-3 md:mb-5 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
           <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-1">
             # {channels.find(ch => ch.id === channelId)?.name ?? 'channel'}
           </div>
-          <div className="text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-1">task board</div>
+          <div className="text-[22px] md:text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-1">task board</div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           <select
             value={channelId ?? ''}
             onChange={e => {
               setChannelId(e.target.value)
               if (!newChannelId) setNewChannelId(e.target.value)
             }}
-            className="rsl-control rsl-select bg-[#0e0c10] border-[3px] border-black text-[#9a8888] text-[11px] px-3 py-2 outline-none"
+            className="rsl-control rsl-select min-w-0 bg-[#0e0c10] border-[3px] border-black text-[#9a8888] text-[11px] px-3 py-2 outline-none sm:min-w-[180px]"
           >
             {channels.map(ch => (
               <option key={ch.id} value={ch.id}>#{ch.name}</option>
@@ -237,7 +240,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
       {/* New task form */}
       {showNew && (
         <div
-          className="border-[3px] border-black bg-[#1e1a20] mb-5 p-4 flex flex-col gap-3"
+          className="border-[3px] border-black bg-[#1e1a20] mb-4 p-3 md:mb-5 md:p-4 flex flex-col gap-3"
           style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.85)' }}
         >
           <input
@@ -266,11 +269,11 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
             rows={4}
             className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[12px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048] w-full resize-none"
           />
-          <div className="flex items-center gap-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto_auto] xl:items-center xl:gap-3">
             <select
               value={newChannelId}
               onChange={e => setNewChannelId(e.target.value)}
-              className="rsl-control rsl-select bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-1 outline-none flex-1"
+              className="rsl-control rsl-select bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
             >
               {channels.map(ch => (
                 <option key={ch.id} value={ch.id}>#{ch.name}</option>
@@ -279,7 +282,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
             <select
               value={todoOwnerAgentId}
               onChange={e => setTodoOwnerAgentId(e.target.value)}
-              className="rsl-control rsl-select bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-1 outline-none flex-1"
+              className="rsl-control rsl-select bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
             >
               {!agents.length && <option value="">no agents</option>}
               {agentOptions.map(option => (
@@ -290,25 +293,25 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
               value={todoCleanLevel}
               onChange={e => setTodoCleanLevel(e.target.value)}
               placeholder="agent memory clean level"
-              className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[11px] px-2 py-1 outline-none flex-1"
+              className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[11px] px-2 py-2 outline-none min-w-0"
             />
             <input
               type="date"
               value={todoDueDate}
               onChange={e => setTodoDueDate(e.target.value)}
-              className="bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-1 outline-none"
+              className="bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
               title="due date"
             />
             <button
               onClick={handleCreate}
               disabled={creating || !newTitle.trim() || !todoOwnerAgentId}
-              className="border-[3px] border-black bg-[#c0392b] text-black text-[12px] uppercase px-4 py-1 hover:bg-[#e04050] disabled:opacity-40"
+              className="border-[3px] border-black bg-[#c0392b] text-black text-[12px] uppercase px-4 py-2 hover:bg-[#e04050] disabled:opacity-40"
             >
               {creating ? '...' : 'intake'}
             </button>
             <button
               onClick={() => setShowNew(false)}
-              className="text-[#4a4048] text-[12px] hover:text-[#9a8888]"
+              className="text-[#4a4048] text-[12px] hover:text-[#9a8888] text-left xl:text-center"
             >
               cancel
             </button>
@@ -324,9 +327,38 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
         </div>
       )}
 
+      {/* Mobile column selector */}
+      {isMobile && (
+        <div className="sticky top-0 z-10 -mx-3 mb-3 overflow-x-auto border-y-[3px] border-black bg-[#110e12] px-3 py-2 md:hidden">
+          <div className="flex gap-1 pb-1">
+          {columns.map(col => {
+            const count = tasks.filter(t => t.status === col.key).length
+            return (
+              <button
+                key={col.key}
+                onClick={() => setMobileCol(col.key)}
+                className={`shrink-0 border-[2px] border-black px-3 py-1.5 text-[11px] uppercase transition-colors ${
+                  mobileCol === col.key ? 'border-b-[3px]' : 'opacity-60'
+                }`}
+                style={{
+                  background: mobileCol === col.key ? col.color : '#0e0c10',
+                  color: col.textColor,
+                  borderBottomColor: mobileCol === col.key ? col.textColor : 'black',
+                }}
+              >
+                {col.label} ({count})
+              </button>
+            )
+          })}
+          </div>
+        </div>
+      )}
+
       {/* Kanban columns */}
-      <div className="grid grid-cols-5 gap-3 items-start">
-        {columns.map((col) => {
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
+        {columns
+          .filter(col => !isMobile || col.key === mobileCol)
+          .map((col) => {
           const colTasks = tasks.filter(t => t.status === col.key)
           return (
             <div key={col.key} className="flex flex-col gap-3">
@@ -386,6 +418,7 @@ function TaskCard({
   onTaskChanged: () => void
   onOpenDoc?: (docPath: string) => void
 }) {
+  const isMobile = useIsMobile()
   const [showDocForm, setShowDocForm] = useState(false)
   const [docPath, setDocPath] = useState('')
   const [linkingDoc, setLinkingDoc] = useState(false)
@@ -491,16 +524,18 @@ function TaskCard({
     <div
       className="border-[3px] border-black bg-[#191619] transition-transform hover:rotate-0 relative"
       style={{
-        transform: `rotate(${wobble.rotate}) translate(${wobble.tx}, ${wobble.ty})`,
-        boxShadow: `${wobble.shadow}, 0 0 10px rgba(50,120,220,0.10)`,
-        clipPath: 'polygon(0% 0%, calc(100% - 18px) 0%, 100% 18px, 100% 100%, 0% 100%)',
+        transform: isMobile ? 'none' : `rotate(${wobble.rotate}) translate(${wobble.tx}, ${wobble.ty})`,
+        boxShadow: `${isMobile ? '2px 3px 0 rgba(0,0,0,0.85)' : wobble.shadow}, 0 0 10px rgba(50,120,220,0.10)`,
+        clipPath: isMobile ? 'none' : 'polygon(0% 0%, calc(100% - 18px) 0%, 100% 18px, 100% 100%, 0% 100%)',
       }}
     >
       {/* Fold triangle */}
-      <div
-        className="absolute top-0 right-0 w-[18px] h-[18px] z-10 border-l border-b border-black/40"
-        style={{ background: 'linear-gradient(135deg, transparent 50%, #2a2628 50%)' }}
-      />
+      {!isMobile && (
+        <div
+          className="absolute top-0 right-0 w-[18px] h-[18px] z-10 border-l border-b border-black/40"
+          style={{ background: 'linear-gradient(135deg, transparent 50%, #2a2628 50%)' }}
+        />
+      )}
       {/* Title bar */}
       <div className="border-b-[3px] border-black px-3 py-2 bg-[#1e1a20]">
         <div className="flex items-center gap-2 mb-1">

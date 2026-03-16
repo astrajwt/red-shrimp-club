@@ -35,6 +35,10 @@ async function doVaultCommit(agentName: string, description?: string): Promise<v
   const diffResult = await run('git', ['diff', '--cached', '--quiet'], cwd).catch(() => 'dirty')
   if (diffResult !== 'dirty') return // nothing to commit
   await run('git', ['commit', '-m', msg, '--no-gpg-sign'], cwd)
+  // Push to remote (best effort, don't block on failure)
+  run('git', ['push'], cwd).catch(err =>
+    console.error('[vault-git] push failed (will retry next commit):', err.message)
+  )
 }
 
 function run(cmd: string, args: string[], cwd: string): Promise<string> {

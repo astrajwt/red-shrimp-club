@@ -452,11 +452,11 @@ class Scheduler {
     )
 
     await query(
-      `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)`,
+      `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
       [channel.id, userId]
     )
     await query(
-      `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2)`,
+      `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
       [channel.id, agentId]
     )
 

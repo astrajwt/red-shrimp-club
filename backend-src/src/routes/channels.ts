@@ -124,17 +124,17 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
 
     // Add both participants
     await query(
-      `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)`,
+      `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
       [channel.id, caller.sub]
     )
     if (targetType === 'agent') {
       await query(
-        `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2)`,
+        `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
         [channel.id, targetId]
       )
     } else {
       await query(
-        `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)`,
+        `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
         [channel.id, targetId]
       )
     }

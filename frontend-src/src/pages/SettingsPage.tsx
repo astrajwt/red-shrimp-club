@@ -27,11 +27,11 @@ export function Section({ title, subtitle, children }: {
       className="border-[3px] border-black bg-[#191619] mb-5"
       style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.85)' }}
     >
-      <div className="border-b-[3px] border-black px-5 py-3 bg-[#1e1a20]">
+      <div className="border-b-[3px] border-black px-3 py-3 md:px-5 bg-[#1e1a20]">
         <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">{subtitle ?? 'config'}</div>
         <div className="text-[20px] leading-none">{title}</div>
       </div>
-      <div className="px-5 py-4">{children}</div>
+      <div className="px-3 py-4 md:px-5">{children}</div>
     </div>
   )
 }
@@ -125,11 +125,11 @@ export function CronSection() {
   return (
     <Section title="cron jobs" subtitle="scheduler">
       {/* New job form */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-[12px] text-[#4a4048]">{jobs.length} job{jobs.length !== 1 ? 's' : ''} scheduled</div>
         <button
           onClick={() => setShowNew(v => !v)}
-          className="border-[3px] border-black bg-[#1a2535] text-[#6bc5e8] px-4 py-1.5 text-[11px] uppercase hover:bg-[#243548]"
+          className="border-[3px] border-black bg-[#1a2535] text-[#6bc5e8] px-4 py-2 text-[11px] uppercase hover:bg-[#243548] self-start sm:self-auto"
         >
           {showNew ? '✕ cancel' : '+ new job'}
         </button>
@@ -140,7 +140,7 @@ export function CronSection() {
           className="border-[3px] border-black bg-[#141018] p-4 mb-4 space-y-3"
           style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.85)' }}
         >
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <div className="text-[11px] text-[#4a4048] uppercase mb-1">agent *</div>
               <select
@@ -165,7 +165,7 @@ export function CronSection() {
                 placeholder="0 9 * * *"
                 className="w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[12px] outline-none font-mono"
               />
-              <div className="text-[10px] text-[#4a4048] mt-0.5">
+              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-[#4a4048]">
                 <CronPreset label="9 AM daily"   expr="0 9 * * *"    onSet={e => setForm(f => ({ ...f, cronExpr: e }))} />
                 <CronPreset label="hourly"        expr="0 * * * *"    onSet={e => setForm(f => ({ ...f, cronExpr: e }))} />
                 <CronPreset label="Mon 9 AM"      expr="0 9 * * 1"   onSet={e => setForm(f => ({ ...f, cronExpr: e }))} />
@@ -185,7 +185,7 @@ export function CronSection() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <div className="text-[11px] text-[#4a4048] uppercase mb-1">model override <span className="text-[#3a3535] normal-case">(optional)</span></div>
               <input
@@ -212,7 +212,7 @@ export function CronSection() {
       )}
 
       {/* Jobs list */}
-      {jobs.length === 0 ? (
+          {jobs.length === 0 ? (
         <div className="text-[12px] text-[#4a4048] text-center py-6 border-[2px] border-dashed border-[#2a2228]">
           no cron jobs scheduled
         </div>
@@ -221,13 +221,13 @@ export function CronSection() {
           {jobs.map(job => (
             <div
               key={job.id}
-              className="border-[3px] border-black bg-[#141018] flex items-start gap-0"
+              className="border-[3px] border-black bg-[#141018] flex items-stretch gap-0"
             >
               {/* Enable toggle */}
               <button
                 onClick={() => toggleJob(job)}
                 disabled={toggling === job.id}
-                className="border-r-[3px] border-black px-4 py-3 text-[13px] hover:bg-[#1e1a20] disabled:opacity-40 shrink-0 self-stretch flex items-center"
+                className="border-r-[3px] border-black px-3 py-3 md:px-4 text-[13px] hover:bg-[#1e1a20] disabled:opacity-40 shrink-0 self-stretch flex items-center"
                 title={job.enabled ? 'disable' : 'enable'}
               >
                 <span style={{ color: job.enabled ? '#3abfa0' : '#3a3535' }}>
@@ -236,8 +236,8 @@ export function CronSection() {
               </button>
 
               {/* Content */}
-              <div className="flex-1 min-w-0 px-4 py-3">
-                <div className="flex items-center gap-3 mb-1.5">
+              <div className="flex-1 min-w-0 px-3 py-3 md:px-4">
+                <div className="mb-1.5 flex flex-wrap items-center gap-2 md:gap-3">
                   <span className="text-[12px] font-mono text-[#6bc5e8] bg-[#0e1520] border border-[#1e3d55] px-2 py-0.5">
                     {job.cron_expr}
                   </span>
@@ -263,7 +263,7 @@ export function CronSection() {
               <button
                 onClick={() => deleteJob(job.id)}
                 disabled={deleting === job.id}
-                className="border-l-[3px] border-black px-3 py-3 text-[#4a4048] hover:text-[#c0392b] hover:bg-[#3a1520] disabled:opacity-40 transition-colors shrink-0 self-stretch flex items-center"
+                className="border-l-[3px] border-black px-2.5 py-3 md:px-3 text-[#4a4048] hover:text-[#c0392b] hover:bg-[#3a1520] disabled:opacity-40 transition-colors shrink-0 self-stretch flex items-center"
                 title="delete"
               >
                 {deleting === job.id ? '…' : '✕'}
@@ -281,7 +281,7 @@ function CronPreset({ label, expr, onSet }: { label: string; expr: string; onSet
     <button
       type="button"
       onClick={() => onSet(expr)}
-      className="mr-2 text-[10px] text-[#4a4048] hover:text-[#6bc5e8] underline"
+      className="text-[10px] text-[#4a4048] hover:text-[#6bc5e8] underline"
     >
       {label}
     </button>

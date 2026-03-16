@@ -66,6 +66,8 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
   }, [initialPath])
   const [showImport, setShowImport] = useState(false)
   const [treeKey, setTreeKey] = useState(0) // bump to force tree reload
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
   const [leftWidth, setLeftWidth] = useState(LEFT_PANE_DEFAULT_WIDTH)
   const [rightWidth, setRightWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [dragging, setDragging] = useState<'left' | 'right' | null>(null)
@@ -155,10 +157,10 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
       className="h-full flex overflow-hidden bg-[#0e0c10] text-[#e7dfd3]"
       style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}>
 
-      {/* ── Left: recursive file tree (resizable) ── */}
+      {/* ── Left: recursive file tree (resizable, collapsible) ── */}
       <div
-        className="shrink-0 flex flex-col bg-[#141018]"
-        style={{ width: leftWidth }}
+        className="shrink-0 flex flex-col bg-[#141018] transition-all duration-200 overflow-hidden"
+        style={{ width: leftCollapsed ? 0 : leftWidth }}
       >
         <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
           <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">obsidian vault</div>
@@ -174,17 +176,26 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
               </button>
               <div className="text-[16px] leading-none">vault</div>
             </div>
-            <button
-              onClick={() => setShowImport(s => !s)}
-              title="import vault repo"
-              className={`text-[11px] px-1.5 py-0.5 border transition-colors ${
-                showImport
-                  ? 'border-[#c0392b] text-[#c0392b]'
-                  : 'border-[#3a3535] text-[#4a4048] hover:border-[#6bc5e8] hover:text-[#6bc5e8]'
-              }`}
-            >
-              + git
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowImport(s => !s)}
+                title="import vault repo"
+                className={`text-[11px] px-1.5 py-0.5 border transition-colors ${
+                  showImport
+                    ? 'border-[#c0392b] text-[#c0392b]'
+                    : 'border-[#3a3535] text-[#4a4048] hover:border-[#6bc5e8] hover:text-[#6bc5e8]'
+                }`}
+              >
+                + git
+              </button>
+              <button
+                onClick={() => setLeftCollapsed(true)}
+                title="collapse sidebar"
+                className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
+              >
+                ◂
+              </button>
+            </div>
           </div>
         </div>
         {showImport && <GitImportPanel onImported={() => { refreshTree(); setShowImport(false) }} />}
@@ -202,7 +213,16 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
       />
 
       {/* ── Center: vault viewer (flex-1) ── */}
-      <div className="flex-1 min-w-0 overflow-auto">
+      <div className="flex-1 min-w-0 overflow-auto relative">
+        {leftCollapsed && (
+          <button
+            onClick={() => setLeftCollapsed(false)}
+            title="expand sidebar"
+            className="absolute top-3 left-3 z-10 text-[16px] text-[#4a4048] hover:text-[#6bc5e8] transition-colors bg-[#141018] border-[2px] border-black px-1.5 py-0.5"
+          >
+            ☰
+          </button>
+        )}
         {selectedPath ? (
           <DocumentViewer filePath={selectedPath} embedded onNavigate={navigateTo} />
         ) : (
@@ -214,16 +234,18 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
           </div>
         )}
       </div>
-      <ResizeHandle
-        active={dragging === 'right'}
-        onPointerDown={(event) => {
-          event.preventDefault()
-          setDragging('right')
-        }}
-      />
+      {!rightCollapsed && (
+        <ResizeHandle
+          active={dragging === 'right'}
+          onPointerDown={(event) => {
+            event.preventDefault()
+            setDragging('right')
+          }}
+        />
+      )}
 
-      {/* ── Right: Donovan Q&A panel (resizable) ── */}
-      <AskPanel filePath={selectedPath} width={rightWidth} />
+      {/* ── Right: Donovan Q&A panel (resizable, collapsible) ── */}
+      <AskPanel filePath={selectedPath} width={rightWidth} collapsed={rightCollapsed} onToggle={() => setRightCollapsed(c => !c)} />
     </div>
   )
 }
@@ -416,7 +438,7 @@ interface AgentOption {
   name: string
 }
 
-function AskPanel({ filePath, width }: { filePath: string | null; width: number }) {
+function AskPanel({ filePath, width, collapsed, onToggle }: { filePath: string | null; width: number; collapsed: boolean; onToggle: () => void }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -572,11 +594,31 @@ function AskPanel({ filePath, width }: { filePath: string | null; width: number 
   const clearCtx = () => { setCtxPath(null); setCtxLocked(true) }
   const toggleLock = () => setCtxLocked(l => !l)
 
+  if (collapsed) {
+    return (
+      <div className="shrink-0 flex flex-col items-center bg-[#100e13] border-l-[3px] border-black py-3 px-1 gap-2">
+        <button
+          onClick={onToggle}
+          title="expand ask agent"
+          className="text-[14px] text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
+        >▸</button>
+        <div className="text-[10px] text-[#4a4048] uppercase" style={{ writingMode: 'vertical-rl' }}>ask agent</div>
+      </div>
+    )
+  }
+
   return (
     <div className="shrink-0 flex flex-col bg-[#100e13]" style={{ width }}>
       {/* Header */}
       <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
-        <div className="text-[14px] leading-none">ask agent</div>
+        <div className="flex items-center justify-between">
+          <div className="text-[14px] leading-none">ask agent</div>
+          <button
+            onClick={onToggle}
+            title="collapse panel"
+            className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
+          >▸</button>
+        </div>
         <div className="flex items-center gap-1 mt-1.5 min-w-0">
           <span className="text-[10px] text-[#4a4048] shrink-0">ctx:</span>
           <span className="text-[10px] text-[#6a5a5a] flex-1 truncate min-w-0" title={ctxPath ?? 'none'}>
