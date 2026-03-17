@@ -10,13 +10,13 @@ export default function DocBrowser() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
 
   return (
-    <div className="h-full flex overflow-hidden bg-[#09090b] text-[#e8e6f0]"
+    <div className="h-full flex overflow-hidden bg-[#0e0c10] text-[#e7dfd3]"
       style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}>
 
       {/* ── Left: recursive file tree (fixed 220px) ── */}
-      <div className="w-[220px] shrink-0 flex flex-col border-r border-white/[0.08] bg-[#141018]">
-        <div className="border-b border-white/[0.08] px-4 py-3 bg-[#1e1a20] shrink-0">
-          <div className="text-[10px] text-[#4ecdc4] uppercase tracking-widest mb-0.5">obsidian vault</div>
+      <div className="w-[220px] shrink-0 flex flex-col border-r-[3px] border-black bg-[#141018]">
+        <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
+          <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">obsidian vault</div>
           <div className="text-[16px] leading-none">documents</div>
         </div>
         <div className="flex-1 overflow-auto py-1">
@@ -25,14 +25,14 @@ export default function DocBrowser() {
       </div>
 
       {/* ── Center: document viewer (flex-1) ── */}
-      <div className="flex-1 overflow-auto border-r border-white/[0.08]">
+      <div className="flex-1 overflow-auto border-r-[3px] border-black">
         {selectedPath ? (
           <DocumentViewer filePath={selectedPath} embedded />
         ) : (
           <div className="h-full flex items-center justify-center text-center">
             <div>
               <div className="text-[48px] mb-3 opacity-10">⊡</div>
-              <div className="text-[13px] text-[#4a4a60]">select a file to view</div>
+              <div className="text-[13px] text-[#4a4048]">select a file to view</div>
             </div>
           </div>
         )}
@@ -186,12 +186,12 @@ function AskPanel({ filePath }: { filePath: string | null }) {
   return (
     <div className="w-[280px] shrink-0 flex flex-col bg-[#100e13]">
       {/* Header */}
-      <div className="border-b border-white/[0.08] px-4 py-3 bg-[#1e1a20] shrink-0">
-        <div className="text-[10px] text-[#4ecdc4] uppercase tracking-widest mb-0.5">ai assistant</div>
+      <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
+        <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">ai assistant</div>
         <div className="text-[14px] leading-none">ask anything</div>
         {/* ctx row */}
         <div className="flex items-center gap-1 mt-1.5 min-w-0">
-          <span className="text-[10px] text-[#4a4a60] shrink-0">ctx:</span>
+          <span className="text-[10px] text-[#4a4048] shrink-0">ctx:</span>
           <span className="text-[10px] text-[#6a5a5a] flex-1 truncate min-w-0" title={ctxPath ?? 'none'}>
             {ctxPath ? ctxPath.split('/').pop() : 'none'}
           </span>
@@ -210,13 +210,13 @@ function AskPanel({ filePath }: { filePath: string | null }) {
             <button
               onClick={clearCtx}
               title="clear context"
-              className="text-[12px] text-[#4a4a60] hover:text-[#c0392b] px-0.5 shrink-0 leading-none"
+              className="text-[12px] text-[#4a4048] hover:text-[#c0392b] px-0.5 shrink-0 leading-none"
             >x</button>
           )}
         </div>
         {/* model selector row */}
         <div className="flex items-center gap-1 mt-1.5">
-          <span className="text-[10px] text-[#4a4a60] shrink-0">model:</span>
+          <span className="text-[10px] text-[#4a4048] shrink-0">model:</span>
           <select
             value={selectedModel}
             onChange={e => onModelChange(e.target.value)}
@@ -247,11 +247,11 @@ function AskPanel({ filePath }: { filePath: string | null }) {
           return (
             <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
               {m.role === 'user' ? (
-                <span className="inline-block bg-[#2a1a1a] border-[2px] border-[#c0392b] text-[#e8e6f0] text-[12px] px-3 py-2 max-w-[220px] text-left break-words">
+                <span className="inline-block bg-[#2a1a1a] border-[2px] border-[#c0392b] text-[#e7dfd3] text-[12px] px-3 py-2 max-w-[220px] text-left break-words">
                   {m.text}
                 </span>
               ) : (
-                <span className="inline-block bg-[#1a2535] border-[2px] border-[#1e3d55] text-[#8a8aa8] text-[12px] px-3 py-2 max-w-[240px] text-left break-words whitespace-pre-wrap">
+                <span className="inline-block bg-[#1a2535] border-[2px] border-[#1e3d55] text-[#c8bdb8] text-[12px] px-3 py-2 max-w-[240px] text-left break-words whitespace-pre-wrap">
                   {m.text}
                   {isStreamingThis && m.text && (
                     <span
@@ -272,20 +272,20 @@ function AskPanel({ filePath }: { filePath: string | null }) {
       </div>
 
       {/* Input */}
-      <div className="border-t border-white/[0.08] px-3 py-3 shrink-0">
+      <div className="border-t-[3px] border-black px-3 py-3 shrink-0">
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={onKey}
           placeholder="ask a question..."
           rows={3}
-          className="w-full bg-[#1e1a20] border-[2px] border-[#2a2228] text-[#e8e6f0] text-[12px] px-3 py-2 resize-none outline-none focus:border-[#c0392b] placeholder-[#3a3535]"
+          className="w-full bg-[#1e1a20] border-[2px] border-[#2a2228] text-[#e7dfd3] text-[12px] px-3 py-2 resize-none outline-none focus:border-[#c0392b] placeholder-[#3a3535]"
           style={{ fontFamily: 'inherit' }}
         />
         <button
           onClick={send}
           disabled={loading || !input.trim()}
-          className="mt-2 w-full py-1.5 text-[12px] uppercase tracking-wider bg-[#1e1a20] border-[2px] border-[#2a2228] text-[#9a8888] hover:bg-[#2a1a1a] hover:border-[#c0392b] hover:text-[#e8e6f0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="mt-2 w-full py-1.5 text-[12px] uppercase tracking-wider bg-[#1e1a20] border-[2px] border-[#2a2228] text-[#9a8888] hover:bg-[#2a1a1a] hover:border-[#c0392b] hover:text-[#e7dfd3] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? '⟳ processing...' : 'ask →'}
         </button>
@@ -338,7 +338,7 @@ function TreeNode({ path, depth, selectedPath, onSelect }: TreeNodeProps) {
   return (
     <div>
       {loading && depth === 0 && (
-        <div className="text-[11px] text-[#4a4a60] px-4 pt-4">loading...</div>
+        <div className="text-[11px] text-[#4a4048] px-4 pt-4">loading...</div>
       )}
       {(expanded || depth === 0) && (
         <>
@@ -361,12 +361,12 @@ function TreeNode({ path, depth, selectedPath, onSelect }: TreeNodeProps) {
                   : 'hover:bg-[#1e1a20] border-l-[3px] border-l-transparent'}`}
               style={{ paddingLeft: (depth + 1) * 12 + 4 }}
             >
-              <span className="text-[11px] text-[#4a4a60] shrink-0">·</span>
+              <span className="text-[11px] text-[#4a4048] shrink-0">·</span>
               <span className="text-[12px] text-[#9a8888] truncate">{entry.name}</span>
             </button>
           ))}
           {entries.length === 0 && loaded && depth === 0 && (
-            <div className="text-[11px] text-[#4a4a60] px-4 pt-4">
+            <div className="text-[11px] text-[#4a4048] px-4 pt-4">
               OBSIDIAN_ROOT not configured
             </div>
           )}
@@ -411,10 +411,10 @@ function DirNode({ entry, depth, selectedPath, onSelect }: DirNodeProps) {
         className="w-full flex items-center gap-1.5 text-left py-1 border-b border-[#1a1620] hover:bg-[#1e1a20] transition-colors border-l-[3px] border-l-transparent"
         style={{ paddingLeft: depth * 12 + 4 }}
       >
-        <span className="text-[11px] text-[#4ecdc4] shrink-0">
+        <span className="text-[11px] text-[#6bc5e8] shrink-0">
           {loading ? '…' : expanded ? '▾' : '▸'}
         </span>
-        <span className="text-[12px] text-[#8a8aa8] truncate">{entry.name}</span>
+        <span className="text-[12px] text-[#c8bdb8] truncate">{entry.name}</span>
       </button>
       {expanded && (
         <div>
@@ -431,7 +431,7 @@ function DirNode({ entry, depth, selectedPath, onSelect }: DirNodeProps) {
                   : 'hover:bg-[#1e1a20] border-l-[3px] border-l-transparent'}`}
               style={{ paddingLeft: (depth + 1) * 12 + 4 }}
             >
-              <span className="text-[11px] text-[#4a4a60] shrink-0">·</span>
+              <span className="text-[11px] text-[#4a4048] shrink-0">·</span>
               <span className="text-[12px] text-[#9a8888] truncate">{f.name}</span>
             </button>
           ))}

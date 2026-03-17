@@ -19,9 +19,9 @@ type AgentStatus = Agent['status']
 type MemorySectionKey = 'memory' | 'knowledge' | 'notes'
 
 const statusColor = (s: AgentStatus) => {
-  if (s === 'running' || s === 'online') return { dot: '#4ecdc4', text: '#4ecdc4', label: 'running', pulse: true }
+  if (s === 'running' || s === 'online') return { dot: '#3abfa0', text: '#3abfa0', label: 'running', pulse: true }
   if (s === 'starting')                  return { dot: '#f0b35e', text: '#f0b35e', label: 'starting', pulse: true }
-  if (s === 'idle' || s === 'sleeping')  return { dot: '#4ecdc4', text: '#4ecdc4', label: s === 'sleeping' ? 'sleeping' : 'idle', pulse: false }
+  if (s === 'idle' || s === 'sleeping')  return { dot: '#6bc5e8', text: '#6bc5e8', label: s === 'sleeping' ? 'sleeping' : 'idle', pulse: false }
   if (s === 'offline')                   return { dot: '#c0392b', text: '#c0392b', label: 'offline', pulse: false }
   return                                        { dot: '#e04050', text: '#e04050', label: 'error',   pulse: false }
 }
@@ -37,10 +37,10 @@ function SidebarNavButton({
   return (
     <button
       onClick={onClick}
-      className="w-full text-left border border-white/[0.08] px-3 py-2 text-[11px] uppercase"
+      className="w-full text-left border-[2px] border-black px-3 py-2 text-[11px] uppercase"
       style={{
         background: active ? '#1a2535' : '#141018',
-        color: active ? '#4ecdc4' : accent === 'refresh' ? '#4ecdc4' : '#4a4a60',
+        color: active ? '#6bc5e8' : accent === 'refresh' ? '#6bc5e8' : '#4a4048',
       }}
     >
       {children}
@@ -62,14 +62,14 @@ function SidebarFileButton({
   return (
     <button
       onClick={onClick}
-      className="w-full text-left border border-white/[0.08] px-3 py-2"
+      className="w-full text-left border-[2px] border-black px-3 py-2"
       style={{
-        background: active ? '#1a2535' : '#0f0f14',
-        color: active ? '#e8e6f0' : '#9a8888',
+        background: active ? '#1a2535' : '#120f13',
+        color: active ? '#e7dfd3' : '#9a8888',
       }}
     >
       <div className="text-[11px] uppercase">{label}</div>
-      <div className="text-[10px] text-[#4a4a60] mt-1 truncate">{path}</div>
+      <div className="text-[10px] text-[#4a4048] mt-1 truncate">{path}</div>
     </button>
   )
 }
@@ -446,7 +446,7 @@ export default function AgentsPage() {
 
   return (
     <div
-      className="h-full overflow-auto bg-[#09090b] text-[#e8e6f0] px-3 py-3 md:p-5"
+      className="h-full overflow-auto bg-[#0e0c10] text-[#e7dfd3] px-3 py-3 md:p-5"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -457,21 +457,21 @@ export default function AgentsPage() {
       {/* Header */}
       <div className="mb-4 flex flex-col gap-3 md:mb-5 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
-          <div className="text-[11px] text-[#4ecdc4] uppercase tracking-widest mb-1">management</div>
+          <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-1">management</div>
           <div className="text-[24px] md:text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-1">agents</div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             onClick={handleReconnectAll}
             disabled={reconnectingAll || agents.length === 0}
-            className="border border-white/[0.08] rounded bg-[#4ecdc4] text-black px-4 py-2 text-[12px] md:px-5 md:text-[13px] uppercase hover:bg-[#4ed0b0] disabled:opacity-40"
+            className="border-[3px] border-black bg-[#3abfa0] text-black px-4 py-2 text-[12px] md:px-5 md:text-[13px] uppercase hover:bg-[#4ed0b0] disabled:opacity-40"
             style={{ transform: 'rotate(-0.15deg)' }}
           >
             {reconnectingAll ? 'reconnecting...' : 'reconnect all agents'}
           </button>
           <button
             onClick={openCreateModal}
-            className="border border-white/[0.08] rounded bg-[#c0392b] text-black px-4 py-2 text-[12px] md:px-5 md:text-[13px] uppercase hover:bg-[#e04050]"
+            className="border-[3px] border-black bg-[#c0392b] text-black px-4 py-2 text-[12px] md:px-5 md:text-[13px] uppercase hover:bg-[#e04050]"
             style={{ transform: 'rotate(0.2deg)' }}
           >
             + new agent
@@ -481,29 +481,29 @@ export default function AgentsPage() {
 
       {reconnectAllResult && (
         <div
-          className="mb-5 border border-white/[0.08] rounded bg-[#141018]"
+          className="mb-5 border-[3px] border-black bg-[#141018]"
           style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.85), 0 0 16px rgba(50,120,220,0.10)' }}
         >
-          <div className="border-b border-white/[0.08] px-4 py-2 bg-[#1e1a20] flex items-center justify-between">
-            <div className="text-[13px] uppercase" style={{ color: reconnectAllResult.ok ? '#4ecdc4' : '#c0392b' }}>
+          <div className="border-b-[3px] border-black px-4 py-2 bg-[#1e1a20] flex items-center justify-between">
+            <div className="text-[13px] uppercase" style={{ color: reconnectAllResult.ok ? '#3abfa0' : '#c0392b' }}>
               reconnect all agents
             </div>
-            <button onClick={() => setReconnectAllResult(null)} className="text-[#4a4a60] hover:text-[#e8e6f0] text-[18px] leading-none">×</button>
+            <button onClick={() => setReconnectAllResult(null)} className="text-[#4a4048] hover:text-[#e7dfd3] text-[18px] leading-none">×</button>
           </div>
           <div className="px-4 py-3">
-            <div className="text-[12px] text-[#8a8aa8] mb-3">
+            <div className="text-[12px] text-[#c8bdb8] mb-3">
               {reconnectAllResult.results.filter(result => result.ok).length}/{reconnectAllResult.count} agents restarted
             </div>
             <div className="space-y-2 max-h-48 overflow-auto">
               {reconnectAllResult.results.map(result => (
-                <div key={result.agentId} className="border border-white/[0.08] bg-[#0f0f14] px-3 py-2 text-[11px]">
+                <div key={result.agentId} className="border-[2px] border-black bg-[#120f13] px-3 py-2 text-[11px]">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-[#e8e6f0]">{result.name}</span>
-                    <span style={{ color: result.ok ? '#4ecdc4' : '#c0392b' }}>
+                    <span className="text-[#e7dfd3]">{result.name}</span>
+                    <span style={{ color: result.ok ? '#3abfa0' : '#c0392b' }}>
                       {result.ok ? 'ok' : 'error'}
                     </span>
                   </div>
-                  <div className="text-[#4a4a60] mt-1 break-words">{result.message ?? result.error ?? 'done'}</div>
+                  <div className="text-[#4a4048] mt-1 break-words">{result.message ?? result.error ?? 'done'}</div>
                 </div>
               ))}
             </div>
@@ -522,7 +522,7 @@ export default function AgentsPage() {
             <div className="grid grid-cols-2">
               <button
                 onClick={() => { setShowCreate(false); setCreateError(null) }}
-                className="border-r border-white/[0.08] py-3 text-[12px] uppercase text-[#4a4a60] hover:bg-[#1e1a20] hover:text-[#e8e6f0]"
+                className="border-r-[3px] border-black py-3 text-[12px] uppercase text-[#4a4048] hover:bg-[#1e1a20] hover:text-[#e7dfd3]"
               >
                 cancel
               </button>
@@ -539,11 +539,11 @@ export default function AgentsPage() {
           <div className="space-y-3">
             <div>
               <div className="flex items-center justify-between gap-3 mb-1">
-                <div className="text-[11px] text-[#4a4a60] uppercase">name *</div>
+                <div className="text-[11px] text-[#4a4048] uppercase">name *</div>
                 <button
                   type="button"
                   onClick={rollCreateName}
-                  className="border border-white/[0.08] bg-[#1a2535] text-[#4ecdc4] px-2 py-0.5 text-[10px] uppercase hover:bg-[#243548]"
+                  className="border-[2px] border-black bg-[#1a2535] text-[#6bc5e8] px-2 py-0.5 text-[10px] uppercase hover:bg-[#243548]"
                 >
                   roll
                 </button>
@@ -554,11 +554,11 @@ export default function AgentsPage() {
                 onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
                 onKeyDown={e => e.key === 'Enter' && handleCreate()}
                 placeholder="e.g. Donovan, Akara..."
-                className="w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[13px] outline-none placeholder:text-[#4a4a60]"
+                className="w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[13px] outline-none placeholder:text-[#4a4048]"
               />
             </div>
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">machine *</div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">machine *</div>
               <select
                 value={createForm.machineId}
                 onChange={e => {
@@ -566,7 +566,7 @@ export default function AgentsPage() {
                   setCreateForm(f => ({ ...f, machineId: nextMachineId }))
                   if (nextMachineId) setCreateError(null)
                 }}
-                className="rsl-control rsl-select w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[13px] outline-none"
+                className="rsl-control rsl-select w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[13px] outline-none"
               >
                 <option value="" disabled>select machine</option>
                 <option value="__local__">本机 (local)</option>
@@ -582,11 +582,11 @@ export default function AgentsPage() {
               </div>
             </div>
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">model</div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">model</div>
               <select
                 value={createForm.modelId}
                 onChange={e => setCreateForm(f => ({ ...f, modelId: e.target.value }))}
-                className="rsl-control rsl-select w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[13px] outline-none"
+                className="rsl-control rsl-select w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[13px] outline-none"
               >
                 {runtimeModelOptions.length > 0 ? (
                   runtimeModelOptions.map(m => (
@@ -603,25 +603,25 @@ export default function AgentsPage() {
               </div>
             </div>
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">workspace path <span className="text-[#3a3535]">(auto-generated if empty)</span></div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">workspace path <span className="text-[#3a3535]">(auto-generated if empty)</span></div>
               <input
                 value={createForm.workspacePath}
                 onChange={e => setCreateForm(f => ({ ...f, workspacePath: e.target.value }))}
                 placeholder={`<vault>/00_hub/agents/${createForm.name.trim() || '<name>'}`}
-                className="w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[13px] outline-none placeholder:text-[#3a3535]"
+                className="w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[13px] outline-none placeholder:text-[#3a3535]"
               />
               {!createForm.workspacePath && (
-                <div className="text-[11px] text-[#4ecdc4] mt-1">
+                <div className="text-[11px] text-[#3abfa0] mt-1">
                   ✓ MEMORY.md · KNOWLEDGE.md · GUIDE.md · HEARTBEAT.md will be created automatically
                 </div>
               )}
             </div>
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">runtime</div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">runtime</div>
               <div className="grid grid-cols-3 gap-2">
                 {(['claude', 'codex', 'kimi'] as const).map(rt => {
                   const active = createForm.runtime === rt
-                  const accentColor = rt === 'codex' ? '#7ecf50' : rt === 'kimi' ? '#a07ef0' : '#4ecdc4'
+                  const accentColor = rt === 'codex' ? '#7ecf50' : rt === 'kimi' ? '#a07ef0' : '#3abfa0'
                   const bgColor = rt === 'codex' ? '#1a2010' : rt === 'kimi' ? '#1a1535' : '#0f1a18'
                   return (
                     <button
@@ -634,10 +634,10 @@ export default function AgentsPage() {
                           modelId: syncAgentModelForRuntime(models, rt, f.modelId),
                         }))
                       }}
-                      className="border border-white/[0.08] rounded py-2 text-[11px] uppercase transition-colors"
+                      className="border-[3px] border-black py-2 text-[11px] uppercase transition-colors"
                       style={{
                         background: active ? bgColor : '#1e1a20',
-                        color: active ? accentColor : '#4a4a60',
+                        color: active ? accentColor : '#4a4048',
                         outline: active ? `2px solid ${accentColor}` : 'none',
                         outlineOffset: '-4px',
                       }}
@@ -650,7 +650,7 @@ export default function AgentsPage() {
             </div>
             {createForm.runtime === 'codex' && (
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">reasoning effort</div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">reasoning effort</div>
               <div className="grid grid-cols-4 gap-2">
                 {(['low', 'medium', 'high', 'extra_high'] as const).map(level => {
                   const active = createForm.reasoningEffort === level
@@ -660,11 +660,11 @@ export default function AgentsPage() {
                       key={level}
                       type="button"
                       onClick={() => setCreateForm(f => ({ ...f, reasoningEffort: level }))}
-                      className="border border-white/[0.08] rounded py-1.5 text-[10px] uppercase transition-colors"
+                      className="border-[3px] border-black py-1.5 text-[10px] uppercase transition-colors"
                       style={{
                         background: active ? '#1a2535' : '#1e1a20',
-                        color: active ? '#4ecdc4' : '#4a4a60',
-                        outline: active ? '2px solid #4ecdc4' : 'none',
+                        color: active ? '#6bc5e8' : '#4a4048',
+                        outline: active ? '2px solid #6bc5e8' : 'none',
                         outlineOffset: '-4px',
                       }}
                     >
@@ -676,11 +676,11 @@ export default function AgentsPage() {
             </div>
             )}
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">role</div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">role</div>
               <select
                 value={createForm.role}
                 onChange={e => setCreateForm(f => ({ ...f, role: e.target.value }))}
-                className="rsl-control rsl-select w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[13px] outline-none"
+                className="rsl-control rsl-select w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[13px] outline-none"
               >
                 <optgroup label="Core">
                   <option value="coordinator">coordinator — 协调员</option>
@@ -707,11 +707,11 @@ export default function AgentsPage() {
               </select>
             </div>
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">reports to <span className="text-[#3a3535]">(默认汇报给 donovan)</span></div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">reports to <span className="text-[#3a3535]">(默认汇报给 donovan)</span></div>
               <select
                 value={createForm.parentAgentId}
                 onChange={e => setCreateForm(f => ({ ...f, parentAgentId: e.target.value }))}
-                className="rsl-control rsl-select w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[13px] outline-none"
+                className="rsl-control rsl-select w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[13px] outline-none"
               >
                 <option value="">auto (donovan)</option>
                 {agents.map(a => (
@@ -720,12 +720,12 @@ export default function AgentsPage() {
               </select>
             </div>
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">description <span className="text-[#3a3535]">(optional)</span></div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">description <span className="text-[#3a3535]">(optional)</span></div>
               <input
                 value={createForm.description}
                 onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="这位酒保负责什么？"
-                className="w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[13px] outline-none placeholder:text-[#4a4a60]"
+                className="w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[13px] outline-none placeholder:text-[#4a4048]"
               />
             </div>
           </div>
@@ -749,7 +749,7 @@ export default function AgentsPage() {
           onClose={() => setLogsAgent(null)}
         >
           {logsData.length === 0 ? (
-            <div className="text-[12px] text-[#4a4a60] text-center py-8">no logs yet</div>
+            <div className="text-[12px] text-[#4a4048] text-center py-8">no logs yet</div>
           ) : logsData.map((log, i) => {
             const time = new Date(log.created_at).toLocaleTimeString('zh-CN', { hour12: false })
             const lvlColor = log.level === 'ERROR' ? '#ff4444' : log.level === 'WARN' ? '#d4a017' : '#9a8888'
@@ -759,9 +759,9 @@ export default function AgentsPage() {
                 className="border-b border-[#1a1620] flex gap-0 text-[12px]"
                 style={{ background: i % 2 === 0 ? '#141018' : '#100e13' }}
               >
-                <div className="px-3 py-1 text-[#4a4a60] w-[72px] shrink-0 border-r border-[#1a1620]">{time}</div>
+                <div className="px-3 py-1 text-[#4a4048] w-[72px] shrink-0 border-r border-[#1a1620]">{time}</div>
                 <div className="px-2 py-1 w-[60px] shrink-0 border-r border-[#1a1620]" style={{ color: lvlColor }}>{log.level}</div>
-                <div className="px-3 py-1 text-[#8a8aa8] flex-1 break-words">{log.content}</div>
+                <div className="px-3 py-1 text-[#c8bdb8] flex-1 break-words">{log.content}</div>
               </div>
             )
           })}
@@ -781,7 +781,7 @@ export default function AgentsPage() {
             <div className="grid grid-cols-2">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="border-r border-white/[0.08] py-3 text-[12px] uppercase text-[#4a4a60] hover:bg-[#1e1a20]"
+                className="border-r-[3px] border-black py-3 text-[12px] uppercase text-[#4a4048] hover:bg-[#1e1a20]"
               >
                 cancel
               </button>
@@ -795,27 +795,27 @@ export default function AgentsPage() {
             </div>
           )}
         >
-          <div className="text-[14px] text-[#e8e6f0] mb-2">
+          <div className="text-[14px] text-[#e7dfd3] mb-2">
             确定要让 <span className="text-[#c0392b]">{deleteConfirm.name}</span> 离开俱乐部吗？
           </div>
-          <div className="text-[11px] text-[#4a4a60]">此操作不可恢复。日志和运行记录将一并删除。</div>
+          <div className="text-[11px] text-[#4a4048]">此操作不可恢复。日志和运行记录将一并删除。</div>
         </DialogShell>
       )}
 
       {/* ── Shrimp Detail View ──────────────────────────────────────── */}
       {detail && (
-        <div className="fixed inset-0 z-50 bg-[#09090b] overflow-auto"
+        <div className="fixed inset-0 z-50 bg-[#0e0c10] overflow-auto"
           style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}>
           {/* Detail header */}
-          <div className="border-b border-white/[0.08] bg-[#0f0f14] px-6 py-4 flex items-center gap-4 sticky top-0 z-10">
+          <div className="border-b-[3px] border-black bg-[#141118] px-6 py-4 flex items-center gap-4 sticky top-0 z-10">
             <button
               onClick={() => setDetail(null)}
-              className="text-[#4a4a60] hover:text-[#e8e6f0] text-[18px]"
+              className="text-[#4a4048] hover:text-[#e7dfd3] text-[18px]"
             >
               ← back
             </button>
             <div
-              className={`w-12 h-12 border border-white/[0.08] rounded flex items-center justify-center text-[20px]
+              className={`w-12 h-12 border-[3px] border-black flex items-center justify-center text-[20px]
                 ${detail.status === 'running' || detail.status === 'online' ? 'agent-running-blink' : ''}`}
               style={{
                 background: '#3a1520',
@@ -828,7 +828,7 @@ export default function AgentsPage() {
             </div>
             <div className="flex-1">
               <div className="text-[22px]">{detail.name}</div>
-              <div className="text-[12px] text-[#4ecdc4] uppercase">{detail.role ?? 'general'} · {detail.model_id}</div>
+              <div className="text-[12px] text-[#6bc5e8] uppercase">{detail.role ?? 'general'} · {detail.model_id}</div>
             </div>
             <div className="flex items-center gap-3">
               <span
@@ -844,22 +844,22 @@ export default function AgentsPage() {
               <button
                 onClick={() => toggleAgent(detail)}
                 disabled={busy === detail.id}
-                className="border border-white/[0.08] px-4 py-1.5 text-[12px] uppercase hover:bg-[#2a2535] disabled:opacity-40"
-                style={{ color: detail.status === 'running' ? '#c0392b' : '#4ecdc4' }}
+                className="border-[2px] border-black px-4 py-1.5 text-[12px] uppercase hover:bg-[#2a2535] disabled:opacity-40"
+                style={{ color: detail.status === 'running' ? '#c0392b' : '#3abfa0' }}
               >
                 {busy === detail.id ? '...' : detail.status === 'running' ? 'stop' : 'start'}
               </button>
               <button
                 onClick={() => handleRestart(detail)}
                 disabled={busy === detail.id}
-                className="border border-white/[0.08] px-4 py-1.5 text-[12px] text-[#e8c86b] uppercase hover:bg-[#2a2010] disabled:opacity-40"
+                className="border-[2px] border-black px-4 py-1.5 text-[12px] text-[#e8c86b] uppercase hover:bg-[#2a2010] disabled:opacity-40"
                 title="stop then start fresh"
               >
                 restart
               </button>
               <button
                 onClick={() => { setDetail(null); setDeleteConfirm(detail) }}
-                className="border border-white/[0.08] px-4 py-1.5 text-[12px] text-[#6a3535] uppercase hover:bg-[#3a1520] hover:text-[#c0392b]"
+                className="border-[2px] border-black px-4 py-1.5 text-[12px] text-[#6a3535] uppercase hover:bg-[#3a1520] hover:text-[#c0392b]"
               >
                 delete
               </button>
@@ -869,13 +869,13 @@ export default function AgentsPage() {
           {/* Detail body — two columns */}
           <div className="flex flex-col md:flex-row h-[calc(100vh-76px)]">
             {/* Left: info */}
-            <div className="w-full md:w-[360px] border-b-[3px] md:border-b-0 md:border-r border-white/[0.08] bg-[#0f0f14] p-5 space-y-4 overflow-auto shrink-0">
-              <div className="border border-white/[0.08] rounded bg-[#191619] p-4 space-y-3">
-                <div className="text-[11px] text-[#4a4a60] uppercase mb-2">info</div>
+            <div className="w-full md:w-[360px] border-b-[3px] md:border-b-0 md:border-r-[3px] border-black bg-[#141118] p-5 space-y-4 overflow-auto shrink-0">
+              <div className="border-[3px] border-black bg-[#191619] p-4 space-y-3">
+                <div className="text-[11px] text-[#4a4048] uppercase mb-2">info</div>
                 <MetaRow label="name"      value={detail.name} />
                 <MetaRow label="role"      value={detail.role ?? 'general'} />
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-[#4a4a60] w-[72px] shrink-0 uppercase">model</span>
+                  <span className="text-[11px] text-[#4a4048] w-[72px] shrink-0 uppercase">model</span>
                   <select
                     value={detail.model_id}
                     onChange={async (e) => {
@@ -886,7 +886,7 @@ export default function AgentsPage() {
                         reload()
                       } catch (err: any) { console.error(err.message) }
                     }}
-                    className="rsl-control rsl-select flex-1 border border-white/[0.08] bg-[#09090b] text-[#e8e6f0] px-2 py-0.5 text-[12px] outline-none"
+                    className="rsl-control rsl-select flex-1 border-[2px] border-black bg-[#0e0c10] text-[#e7dfd3] px-2 py-0.5 text-[12px] outline-none"
                   >
                     {agentModelsForRuntime(models, detail.runtime as any).map(m => (
                       <option key={m.id} value={m.id}>{m.label ?? m.id}</option>
@@ -903,19 +903,19 @@ export default function AgentsPage() {
               </div>
 
               {detail.description && (
-                <div className="border border-white/[0.08] rounded bg-[#191619] p-4">
-                  <div className="text-[11px] text-[#4a4a60] uppercase mb-2">description</div>
-                  <div className="text-[13px] text-[#8a8aa8] leading-5">{detail.description}</div>
+                <div className="border-[3px] border-black bg-[#191619] p-4">
+                  <div className="text-[11px] text-[#4a4048] uppercase mb-2">description</div>
+                  <div className="text-[13px] text-[#c8bdb8] leading-5">{detail.description}</div>
                 </div>
               )}
 
-              <div className="border border-white/[0.08] rounded bg-[#191619] p-4">
+              <div className="border-[3px] border-black bg-[#191619] p-4">
                 <div className="flex items-center justify-between gap-3 mb-2">
-                  <div className="text-[11px] text-[#4a4a60] uppercase">agent note</div>
+                  <div className="text-[11px] text-[#4a4048] uppercase">agent note</div>
                   <button
                     onClick={handleSaveAgentNote}
                     disabled={savingAgentNote || agentNoteDraft.trim() === (detail.note ?? '').trim()}
-                    className="border border-white/[0.08] px-2 py-1 text-[10px] uppercase text-[#4ecdc4] hover:bg-[#1a2535] disabled:opacity-40"
+                    className="border-[2px] border-black px-2 py-1 text-[10px] uppercase text-[#6bc5e8] hover:bg-[#1a2535] disabled:opacity-40"
                   >
                     {savingAgentNote ? 'saving...' : 'save'}
                   </button>
@@ -924,17 +924,17 @@ export default function AgentsPage() {
                   value={agentNoteDraft}
                   onChange={e => setAgentNoteDraft(e.target.value)}
                   placeholder="add a private note for this agent..."
-                  className="w-full min-h-[112px] resize-y border border-white/[0.08] rounded bg-[#09090b] text-[#8a8aa8] px-3 py-2 text-[12px] leading-6 outline-none placeholder:text-[#4a4a60]"
+                  className="w-full min-h-[112px] resize-y border-[3px] border-black bg-[#0e0c10] text-[#c8bdb8] px-3 py-2 text-[12px] leading-6 outline-none placeholder:text-[#4a4048]"
                 />
               </div>
 
             </div>
 
             {/* Right: file-style sidebar + content */}
-            <div className="flex-1 flex bg-[#09090b] min-w-0">
-              <div className="w-[248px] shrink-0 border-r border-white/[0.08] bg-[#141018] flex flex-col">
-                <div className="border-b border-white/[0.08] px-4 py-3 bg-[#1e1a20] shrink-0">
-                  <div className="text-[10px] text-[#4ecdc4] uppercase tracking-widest mb-0.5">workspace</div>
+            <div className="flex-1 flex bg-[#0e0c10] min-w-0">
+              <div className="w-[248px] shrink-0 border-r-[3px] border-black bg-[#141018] flex flex-col">
+                <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
+                  <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">workspace</div>
                   <div className="text-[16px] leading-none">files</div>
                 </div>
                 <div className="flex-1 overflow-auto px-2 py-3">
@@ -947,7 +947,7 @@ export default function AgentsPage() {
                   </div>
 
                   <div className="mt-4 border-t border-[#221d24] pt-3">
-                    <div className="px-2 pb-2 text-[10px] text-[#4a4a60] uppercase">memory</div>
+                    <div className="px-2 pb-2 text-[10px] text-[#4a4048] uppercase">memory</div>
                     <div className="space-y-1">
                       <SidebarFileButton
                         active={detailTab === 'memory' && detailMemorySection === 'memory'}
@@ -975,15 +975,15 @@ export default function AgentsPage() {
               <div className="flex-1 min-w-0 flex flex-col">
                 {detailTab === 'memory' && (
                   <div className="flex-1 overflow-auto p-5">
-                    <div className="h-full border border-white/[0.08] rounded bg-[#141018] flex flex-col">
-                      <div className="border-b border-white/[0.08] px-4 py-3 bg-[#191619] flex items-center justify-between shrink-0 gap-4">
+                    <div className="h-full border-[3px] border-black bg-[#141018] flex flex-col">
+                      <div className="border-b-[3px] border-black px-4 py-3 bg-[#191619] flex items-center justify-between shrink-0 gap-4">
                         <div className="min-w-0 flex-1">
-                          <div className="text-[13px] uppercase text-[#4ecdc4]">{detailMemorySection}</div>
-                          <div className="text-[11px] text-[#4a4a60] mt-2 break-all">
+                          <div className="text-[13px] uppercase text-[#6bc5e8]">{detailMemorySection}</div>
+                          <div className="text-[11px] text-[#4a4048] mt-2 break-all">
                             {getAgentMemorySection(detailMemory, detailMemorySection)?.path ?? (detail.workspace_path ?? 'workspace unknown')}
                           </div>
                         </div>
-                        <div className="text-[11px] text-[#4a4a60] text-right shrink-0">
+                        <div className="text-[11px] text-[#4a4048] text-right shrink-0">
                           {getAgentMemorySection(detailMemory, detailMemorySection)?.updatedAt
                             ? new Date(getAgentMemorySection(detailMemory, detailMemorySection)!.updatedAt!).toLocaleString('zh-CN')
                             : 'not written yet'}
@@ -991,13 +991,13 @@ export default function AgentsPage() {
                       </div>
                       <div className="flex-1 overflow-auto">
                         {detailMemoryLoading ? (
-                          <div className="text-[12px] text-[#4a4a60] text-center py-8">loading memory...</div>
+                          <div className="text-[12px] text-[#4a4048] text-center py-8">loading memory...</div>
                         ) : getAgentMemorySection(detailMemory, detailMemorySection)?.content ? (
-                          <pre className="px-4 py-4 text-[12px] leading-6 text-[#8a8aa8] whitespace-pre-wrap break-words">
+                          <pre className="px-4 py-4 text-[12px] leading-6 text-[#c8bdb8] whitespace-pre-wrap break-words">
                             {getAgentMemorySection(detailMemory, detailMemorySection)?.content}
                           </pre>
                         ) : (
-                          <div className="text-[12px] text-[#4a4a60] text-center py-8">
+                          <div className="text-[12px] text-[#4a4048] text-center py-8">
                             {detailMemorySection === 'memory'
                               ? 'no MEMORY.md content yet'
                               : detailMemorySection === 'knowledge'
@@ -1012,35 +1012,35 @@ export default function AgentsPage() {
 
                 {detailTab === 'docs' && (
                   <div className="flex-1 overflow-hidden grid" style={{ gridTemplateColumns: '340px minmax(0, 1fr)' }}>
-                    <div className="border-r border-white/[0.08] bg-[#141018] overflow-auto p-4 space-y-3">
+                    <div className="border-r-[3px] border-black bg-[#141018] overflow-auto p-4 space-y-3">
                       {detailAuthoredDocsLoading ? (
-                        <div className="text-[12px] text-[#4a4a60] text-center py-8">loading docs...</div>
+                        <div className="text-[12px] text-[#4a4048] text-center py-8">loading docs...</div>
                       ) : detailAuthoredDocs.length === 0 ? (
-                        <div className="text-[12px] text-[#4a4a60] text-center py-8">no authored docs found</div>
+                        <div className="text-[12px] text-[#4a4048] text-center py-8">no authored docs found</div>
                       ) : detailAuthoredDocs.map((doc) => {
                         const active = doc.path === selectedAuthoredDocPath
                         return (
                           <button
                             key={doc.path}
                             onClick={() => setSelectedAuthoredDocPath(doc.path)}
-                            className="w-full text-left border border-white/[0.08] rounded bg-[#191619] hover:bg-[#1a2535]"
+                            className="w-full text-left border-[3px] border-black bg-[#191619] hover:bg-[#1a2535]"
                             style={{ boxShadow: active ? '4px 5px 0 rgba(0,0,0,0.9)' : '3px 4px 0 rgba(0,0,0,0.72)', background: active ? '#1a2535' : '#191619' }}
                           >
-                            <div className="border-b border-white/[0.08] px-3 py-2 bg-[#1e1a20]">
-                              <div className="text-[10px] text-[#4a4a60] uppercase">
+                            <div className="border-b-[3px] border-black px-3 py-2 bg-[#1e1a20]">
+                              <div className="text-[10px] text-[#4a4048] uppercase">
                                 {doc.type ?? 'doc'}{doc.date ? ` · ${doc.date}` : ''}
                               </div>
                               <div className="text-[13px] mt-1 leading-5">{doc.title}</div>
                             </div>
                             <div className="px-3 py-2 space-y-2">
-                              <div className="text-[11px] text-[#4ecdc4] truncate">{doc.path}</div>
+                              <div className="text-[11px] text-[#6bc5e8] truncate">{doc.path}</div>
                               {doc.author.length > 0 && (
                                 <div className="text-[11px] text-[#9a8888] truncate">author: {doc.author.join(', ')}</div>
                               )}
                               {doc.tags.length > 0 && (
                                 <div className="flex flex-wrap gap-1">
                                   {doc.tags.slice(0, 4).map(tag => (
-                                    <span key={tag} className="border border-black bg-[#0f0f14] px-1.5 py-0.5 text-[10px] text-[#4ecdc4]">
+                                    <span key={tag} className="border border-black bg-[#120f13] px-1.5 py-0.5 text-[10px] text-[#6bc5e8]">
                                       {tag}
                                     </span>
                                   ))}
@@ -1052,7 +1052,7 @@ export default function AgentsPage() {
                       })}
                     </div>
 
-                    <div className="overflow-auto bg-[#09090b]">
+                    <div className="overflow-auto bg-[#0e0c10]">
                       {selectedAuthoredDocPath ? (
                         <DocumentViewer
                           filePath={selectedAuthoredDocPath}
@@ -1060,7 +1060,7 @@ export default function AgentsPage() {
                           onNavigate={setSelectedAuthoredDocPath}
                         />
                       ) : (
-                        <div className="h-full flex items-center justify-center text-[12px] text-[#4a4a60]">
+                        <div className="h-full flex items-center justify-center text-[12px] text-[#4a4048]">
                           select an authored doc from the left
                         </div>
                       )}
@@ -1070,46 +1070,46 @@ export default function AgentsPage() {
 
                 {detailTab === 'todos' && (
                 <div className="flex-1 overflow-hidden grid" style={{ gridTemplateColumns: '360px minmax(0, 1fr)' }}>
-                  <div className="border-r border-white/[0.08] bg-[#141018] overflow-auto p-4 space-y-3">
+                  <div className="border-r-[3px] border-black bg-[#141018] overflow-auto p-4 space-y-3">
                     {detailTodosLoading ? (
-                      <div className="text-[12px] text-[#4a4a60] text-center py-8">loading todos...</div>
+                      <div className="text-[12px] text-[#4a4048] text-center py-8">loading todos...</div>
                     ) : detailTodos.length === 0 ? (
-                      <div className="text-[12px] text-[#4a4a60] text-center py-8">no assigned todos</div>
+                      <div className="text-[12px] text-[#4a4048] text-center py-8">no assigned todos</div>
                     ) : detailTodos.map((todo) => {
                       const hasActiveDoc = todo.docs.some(doc => doc.doc_path === todoPreviewPath)
                       return (
                         <div
                           key={todo.id}
-                          className="border border-white/[0.08] rounded bg-[#191619]"
+                          className="border-[3px] border-black bg-[#191619]"
                           style={{ boxShadow: hasActiveDoc ? '4px 5px 0 rgba(0,0,0,0.9)' : '3px 4px 0 rgba(0,0,0,0.72)' }}
                         >
-                          <div className="border-b border-white/[0.08] px-3 py-2 bg-[#1e1a20]">
+                          <div className="border-b-[3px] border-black px-3 py-2 bg-[#1e1a20]">
                             <div className="flex items-center justify-between gap-3">
-                              <div className="text-[10px] text-[#4a4a60] uppercase">#{todo.number} · #{todo.channel_name}</div>
+                              <div className="text-[10px] text-[#4a4048] uppercase">#{todo.number} · #{todo.channel_name}</div>
                               <TodoStatusPill status={todo.status} />
                             </div>
                             <div className="text-[13px] mt-1 leading-5">{todo.title}</div>
                           </div>
-                          <div className="px-3 py-2 text-[11px] text-[#4a4a60] border-b border-white/[0.08]">
+                          <div className="px-3 py-2 text-[11px] text-[#6a6068] border-b-[3px] border-black">
                             {todo.docs.length} linked doc{todo.docs.length === 1 ? '' : 's'}
                           </div>
                           <div className="px-3 py-2 space-y-2">
                             {todo.docs.length === 0 ? (
-                              <div className="text-[11px] text-[#4a4a60]">no linked todo docs</div>
+                              <div className="text-[11px] text-[#4a4048]">no linked todo docs</div>
                             ) : todo.docs.map((doc) => {
                               const active = doc.doc_path === todoPreviewPath
                               return (
                                 <button
                                   key={doc.id}
                                   onClick={() => loadTodoPreview(doc.doc_path)}
-                                  className="w-full text-left border border-white/[0.08] px-2 py-2 hover:bg-[#243548]"
-                                  style={{ background: active ? '#1a2535' : '#0f0f14' }}
+                                  className="w-full text-left border-[2px] border-black px-2 py-2 hover:bg-[#243548]"
+                                  style={{ background: active ? '#1a2535' : '#120f13' }}
                                 >
                                   <div className="flex items-center gap-2">
                                     <TodoDocDot status={doc.status} />
-                                    <span className="text-[11px] text-[#e8e6f0] truncate">{doc.doc_name}</span>
+                                    <span className="text-[11px] text-[#e7dfd3] truncate">{doc.doc_name}</span>
                                   </div>
-                                  <div className="text-[10px] text-[#4a4a60] mt-1 truncate">{doc.doc_path}</div>
+                                  <div className="text-[10px] text-[#4a4048] mt-1 truncate">{doc.doc_path}</div>
                                 </button>
                               )
                             })}
@@ -1120,20 +1120,20 @@ export default function AgentsPage() {
                   </div>
 
                   <div className="overflow-auto p-5">
-                    <div className="h-full border border-white/[0.08] rounded bg-[#141018] flex flex-col">
-                      <div className="border-b border-white/[0.08] px-4 py-3 bg-[#191619] shrink-0">
-                        <div className="text-[13px] uppercase text-[#4ecdc4]">todo preview</div>
-                        <div className="text-[11px] text-[#4a4a60]">{todoPreviewPath ?? 'select a linked todo doc'}</div>
+                    <div className="h-full border-[3px] border-black bg-[#141018] flex flex-col">
+                      <div className="border-b-[3px] border-black px-4 py-3 bg-[#191619] shrink-0">
+                        <div className="text-[13px] uppercase text-[#6bc5e8]">todo preview</div>
+                        <div className="text-[11px] text-[#4a4048]">{todoPreviewPath ?? 'select a linked todo doc'}</div>
                       </div>
                       <div className="flex-1 overflow-auto">
                         {todoPreviewLoading ? (
-                          <div className="text-[12px] text-[#4a4a60] text-center py-8">loading doc...</div>
+                          <div className="text-[12px] text-[#4a4048] text-center py-8">loading doc...</div>
                         ) : todoPreviewError ? (
                           <div className="text-[12px] text-[#c0392b] text-center py-8">{todoPreviewError}</div>
                         ) : todoPreviewContent ? (
-                          <pre className="px-4 py-4 text-[12px] leading-6 text-[#8a8aa8] whitespace-pre-wrap break-words">{todoPreviewContent}</pre>
+                          <pre className="px-4 py-4 text-[12px] leading-6 text-[#c8bdb8] whitespace-pre-wrap break-words">{todoPreviewContent}</pre>
                         ) : (
-                          <div className="text-[12px] text-[#4a4a60] text-center py-8">pick a todo note from the left</div>
+                          <div className="text-[12px] text-[#4a4048] text-center py-8">pick a todo note from the left</div>
                         )}
                       </div>
                     </div>
@@ -1144,16 +1144,16 @@ export default function AgentsPage() {
                 {detailTab === 'logs' && (
                   <div className="flex-1 overflow-auto font-mono">
                     {detailLogs.length === 0 ? (
-                      <div className="text-[12px] text-[#4a4a60] text-center py-8">no logs yet — start the agent to see activity</div>
+                      <div className="text-[12px] text-[#4a4048] text-center py-8">no logs yet — start the agent to see activity</div>
                     ) : detailLogs.map((log, i) => {
                       const time = new Date(log.created_at).toLocaleTimeString('zh-CN', { hour12: false })
                       const lvlColor = log.level === 'ERROR' ? '#ff4444' : log.level === 'WARN' ? '#d4a017' : '#9a8888'
                       return (
                         <div key={log.id ?? i} className="border-b border-[#1a1620] flex gap-0 text-[12px]"
-                          style={{ background: i % 2 === 0 ? '#09090b' : '#100e13' }}>
-                          <div className="px-3 py-1 text-[#4a4a60] w-[72px] shrink-0 border-r border-[#1a1620]">{time}</div>
+                          style={{ background: i % 2 === 0 ? '#0e0c10' : '#100e13' }}>
+                          <div className="px-3 py-1 text-[#4a4048] w-[72px] shrink-0 border-r border-[#1a1620]">{time}</div>
                           <div className="px-2 py-1 w-[60px] shrink-0 border-r border-[#1a1620]" style={{ color: lvlColor }}>{log.level}</div>
-                          <div className="px-3 py-1 text-[#8a8aa8] flex-1 break-words whitespace-pre-wrap">{log.content}</div>
+                          <div className="px-3 py-1 text-[#c8bdb8] flex-1 break-words whitespace-pre-wrap">{log.content}</div>
                         </div>
                       )
                     })}
@@ -1169,11 +1169,11 @@ export default function AgentsPage() {
       {/* Hierarchy tree */}
       {agents.length > 0 && (
         <div
-          className="mb-5 border border-white/[0.08] rounded bg-[#141018]"
+          className="mb-5 border-[3px] border-black bg-[#141018]"
           style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.9)' }}
         >
-          <div className="border-b border-white/[0.08] px-4 py-2 bg-[#1e1a20] flex items-center gap-3">
-            <span className="text-[11px] text-[#4a4a60] uppercase tracking-wider">汇报树</span>
+          <div className="border-b-[3px] border-black px-4 py-2 bg-[#1e1a20] flex items-center gap-3">
+            <span className="text-[11px] text-[#4a4048] uppercase tracking-wider">汇报树</span>
             <span className="text-[11px] text-[#3a3535]">reporting hierarchy</span>
           </div>
           <div className="px-3 py-2">
@@ -1194,7 +1194,7 @@ export default function AgentsPage() {
           return (
             <div
               key={agent.id}
-              className="border border-white/[0.08] rounded bg-[#191619] cursor-pointer hover:border-[#4a4a60] transition-colors"
+              className="border-[3px] border-black bg-[#191619] cursor-pointer hover:border-[#4a4048] transition-colors"
               onClick={() => openDetail(agent)}
               style={{
                 transform: `rotate(${i % 2 === 0 ? '-0.2deg' : '0.2deg'})`,
@@ -1205,10 +1205,10 @@ export default function AgentsPage() {
               }}
             >
               {/* Card header */}
-              <div className="border-b border-white/[0.08] px-4 py-3 bg-[#1e1a20] flex items-center justify-between">
+              <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 border border-white/[0.08] rounded flex items-center justify-center text-[16px]
+                    className={`w-10 h-10 border-[3px] border-black flex items-center justify-center text-[16px]
                       ${agent.status === 'running' || agent.status === 'online' ? 'agent-running-blink' : ''}`}
                     style={{
                       background: '#3a1520',
@@ -1221,7 +1221,7 @@ export default function AgentsPage() {
                   </div>
                   <div>
                     <div className="text-[16px]">{agent.name}</div>
-                    <div className="text-[11px] text-[#4ecdc4] uppercase">
+                    <div className="text-[11px] text-[#6bc5e8] uppercase">
                       {(agent.role ?? 'general')} · {agent.runtime}
                     </div>
                   </div>
@@ -1231,7 +1231,7 @@ export default function AgentsPage() {
                     <button
                       onClick={e => { e.stopPropagation(); toggleAgent(agent) }}
                       disabled={busy === agent.id}
-                      className="border border-white/[0.08] bg-[#3a1520] px-2 py-1 text-[10px] text-[#c0392b]
+                      className="border-[2px] border-black bg-[#3a1520] px-2 py-1 text-[10px] text-[#c0392b]
                                  uppercase hover:bg-[#5a1520] hover:text-[#ff4050] disabled:opacity-40 transition-colors"
                       title="stop agent"
                     >
@@ -1250,7 +1250,7 @@ export default function AgentsPage() {
               </div>
 
               {/* System prompt preview */}
-              <div className="px-4 py-2 text-[13px] text-[#9a8888] border-b border-white/[0.08] bg-[#0f0f14] truncate">
+              <div className="px-4 py-2 text-[13px] text-[#9a8888] border-b-[3px] border-black bg-[#120f13] truncate">
                 {agent.system_prompt?.slice(0, 80) ?? 'no system prompt'}
               </div>
 
@@ -1261,9 +1261,9 @@ export default function AgentsPage() {
                 <MetaRow label="workspace" value={agent.workspace_path ?? '—'} small />
                 <MetaRow label="last seen" value={lastSeen} />
 
-                <div className="border border-white/[0.08] bg-[#0f0f14] px-3 py-2">
-                  <div className="text-[10px] text-[#4a4a60] uppercase mb-1">note</div>
-                  <div className="text-[12px] text-[#8a8aa8] leading-5 whitespace-pre-wrap break-words max-h-[4.5rem] overflow-hidden">
+                <div className="border-[2px] border-black bg-[#120f13] px-3 py-2">
+                  <div className="text-[10px] text-[#4a4048] uppercase mb-1">note</div>
+                  <div className="text-[12px] text-[#c8bdb8] leading-5 whitespace-pre-wrap break-words max-h-[4.5rem] overflow-hidden">
                     {agent.note?.trim() || 'no note yet'}
                   </div>
                 </div>
@@ -1272,11 +1272,11 @@ export default function AgentsPage() {
 
               {/* Streaming indicator */}
               {streamingAgents[agent.id] !== undefined && (
-                <div className="border-t border-white/[0.08] px-3 py-2 bg-[#161d24]" onClick={e => e.stopPropagation()}>
+                <div className="border-t-[3px] border-black px-3 py-2 bg-[#161d24]" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="w-2 h-2 bg-[#4ecdc4] animate-pulse" />
-                    <span className="text-[10px] text-[#4ecdc4] uppercase tracking-wider">responding</span>
-                    <span className="text-[10px] text-[#4a4a60] ml-auto">
+                    <span className="w-2 h-2 bg-[#3abfa0] animate-pulse" />
+                    <span className="text-[10px] text-[#6bc5e8] uppercase tracking-wider">responding</span>
+                    <span className="text-[10px] text-[#4a4048] ml-auto">
                       {streamingAgents[agent.id].length > 0 ? `${streamingAgents[agent.id].length} lines` : ''}
                     </span>
                   </div>
@@ -1289,18 +1289,18 @@ export default function AgentsPage() {
               )}
 
               {/* Actions */}
-              <div className="border-t border-white/[0.08] grid grid-cols-4" onClick={e => e.stopPropagation()}>
+              <div className="border-t-[3px] border-black grid grid-cols-4" onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => toggleAgent(agent)}
                   disabled={busy === agent.id}
-                  className="border-r border-white/[0.08] py-2 text-[11px] uppercase hover:bg-[#2a2535] hover:text-[#c0392b] disabled:opacity-40 transition-colors"
-                  style={{ color: agent.status === 'running' ? '#c0392b' : '#4ecdc4' }}
+                  className="border-r-[3px] border-black py-2 text-[11px] uppercase hover:bg-[#2a2535] hover:text-[#c0392b] disabled:opacity-40 transition-colors"
+                  style={{ color: agent.status === 'running' ? '#c0392b' : '#3abfa0' }}
                 >
                   {busy === agent.id ? '...' : agent.status === 'running' ? 'stop' : 'start'}
                 </button>
                 <button
                   onClick={() => openLogs(agent)}
-                  className="border-r border-white/[0.08] py-2 text-[11px] text-[#9a8888] uppercase hover:bg-[#2a2535] hover:text-[#4ecdc4] transition-colors"
+                  className="border-r-[3px] border-black py-2 text-[11px] text-[#9a8888] uppercase hover:bg-[#2a2535] hover:text-[#6bc5e8] transition-colors"
                 >
                   logs
                 </button>
@@ -1316,7 +1316,7 @@ export default function AgentsPage() {
         })}
 
         {agents.length === 0 && (
-          <div className="text-[14px] text-[#4a4a60] col-span-full pt-8 text-center">
+          <div className="text-[14px] text-[#4a4048] col-span-full pt-8 text-center">
             no agents — create one to get started
           </div>
         )}
@@ -1328,8 +1328,8 @@ export default function AgentsPage() {
 function MetaRow({ label, value, small }: { label: string; value: string; small?: boolean }) {
   return (
     <div className="flex gap-3">
-      <span className="text-[11px] text-[#4a4a60] uppercase w-[80px] shrink-0">{label}</span>
-      <span className={`${small ? 'text-[11px]' : 'text-[13px]'} text-[#8a8aa8] truncate`}>{value}</span>
+      <span className="text-[11px] text-[#4a4048] uppercase w-[80px] shrink-0">{label}</span>
+      <span className={`${small ? 'text-[11px]' : 'text-[13px]'} text-[#c8bdb8] truncate`}>{value}</span>
     </div>
   )
 }
@@ -1339,14 +1339,14 @@ function TodoStatusPill({ status }: { status: AgentTodo['status'] }) {
     pending_discussion: { bg: '#1e1a10', text: '#c8a840', label: 'discussing' },
     open:        { bg: '#2a2622', text: '#9a8888', label: 'unassigned' },
     claimed:     { bg: '#2a1a35', text: '#b08cd9', label: 'assigned' },
-    in_progress: { bg: '#1a2535', text: '#4ecdc4', label: 'in progress' },
+    in_progress: { bg: '#1a2535', text: '#6bc5e8', label: 'in progress' },
     reviewing:   { bg: '#352515', text: '#f0b35e', label: 'in review' },
     completed:   { bg: '#1e2e26', text: '#7ecfa8', label: 'done' },
   }
   const palette = states[status]
   return (
     <span
-      className="border border-white/[0.08] px-2 py-0.5 text-[10px] uppercase"
+      className="border-[2px] border-black px-2 py-0.5 text-[10px] uppercase"
       style={{ background: palette.bg, color: palette.text }}
     >
       {palette.label}
@@ -1407,12 +1407,12 @@ function SwarmPanel({
       onClick={onClose}
     >
       <div
-        className="border border-white/[0.08] rounded bg-[#141018] w-full max-w-lg max-h-[80vh] flex flex-col"
+        className="border-[3px] border-black bg-[#141018] w-full max-w-lg max-h-[80vh] flex flex-col"
         style={{ boxShadow: '6px 7px 0 rgba(0,0,0,0.9)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="border-b border-white/[0.08] px-4 py-2 bg-[#1e1a20] flex items-center justify-between">
+        <div className="border-b-[3px] border-black px-4 py-2 bg-[#1e1a20] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span
               className="text-[10px] px-2 py-0.5 font-bold"
@@ -1420,12 +1420,12 @@ function SwarmPanel({
             >
               swarm
             </span>
-            <span className="text-[13px] text-[#e8e6f0]">{agent.name}</span>
-            <span className="text-[11px] text-[#4a4a60]">{subAgents.length} sub-agent{subAgents.length !== 1 ? 's' : ''}</span>
+            <span className="text-[13px] text-[#e7dfd3]">{agent.name}</span>
+            <span className="text-[11px] text-[#4a4048]">{subAgents.length} sub-agent{subAgents.length !== 1 ? 's' : ''}</span>
           </div>
           <button
             onClick={onClose}
-            className="text-[11px] text-[#4a4a60] hover:text-[#e8e6f0] px-2"
+            className="text-[11px] text-[#4a4048] hover:text-[#e7dfd3] px-2"
           >
             ✕
           </button>
@@ -1434,7 +1434,7 @@ function SwarmPanel({
         {/* Sub-agent tree */}
         <div className="flex-1 overflow-y-auto px-3 py-2">
           {subAgents.length === 0 ? (
-            <div className="text-[11px] text-[#4a4a60] py-4 text-center">No sub-agents</div>
+            <div className="text-[11px] text-[#4a4048] py-4 text-center">No sub-agents</div>
           ) : (
             <AgentTree
               agents={agents}
@@ -1510,7 +1510,7 @@ function AgentTree({ agents, depth, parentId, onToggle, onLogs, busy }: AgentTre
                 <span className="text-[13px] flex-1 min-w-0 flex items-center gap-1 flex-wrap">
                   {agent.name}
                   {agent.role && (
-                    <span className="ml-1 text-[10px] text-[#4a4a60] uppercase">{agent.role}</span>
+                    <span className="ml-1 text-[10px] text-[#4a4048] uppercase">{agent.role}</span>
                   )}
                   {hasChildren && !showSwarm && (
                     <span className="ml-1 text-[10px] text-[#3a3535]">
@@ -1542,13 +1542,13 @@ function AgentTree({ agents, depth, parentId, onToggle, onLogs, busy }: AgentTre
                     onClick={() => onToggle(agent)}
                     disabled={busy === agent.id}
                     className="text-[10px] px-2 py-0.5 border border-[#2a2228] hover:border-[#c0392b] hover:text-[#c0392b] uppercase transition-colors disabled:opacity-40"
-                    style={{ color: agent.status === 'running' ? '#c0392b' : '#4ecdc4' }}
+                    style={{ color: agent.status === 'running' ? '#c0392b' : '#3abfa0' }}
                   >
                     {busy === agent.id ? '...' : agent.status === 'running' ? 'stop' : 'start'}
                   </button>
                   <button
                     onClick={() => onLogs(agent)}
-                    className="text-[10px] px-2 py-0.5 border border-[#2a2228] hover:border-[#4ecdc4] hover:text-[#4ecdc4] text-[#4a4a60] uppercase transition-colors"
+                    className="text-[10px] px-2 py-0.5 border border-[#2a2228] hover:border-[#6bc5e8] hover:text-[#6bc5e8] text-[#4a4048] uppercase transition-colors"
                   >
                     logs
                   </button>

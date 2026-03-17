@@ -408,7 +408,7 @@ export default function OnboardingPage({ onComplete }: Props) {
                 <div className="border-[3px] border-[#2a1808] bg-[#0e0a06] p-4">
                   <div className="text-[11px] text-[#c0392b] mb-2">在目标机器上运行：</div>
                   <div
-                    className="border border-white/[0.08] rounded bg-[#080608] text-[#4ecdc4] px-4 py-3 text-[13px] font-mono break-all cursor-pointer hover:bg-[#120d10]"
+                    className="border-[3px] border-black bg-[#080608] text-[#3abfa0] px-4 py-3 text-[13px] font-mono break-all cursor-pointer hover:bg-[#120d10]"
                     onClick={() => navigator.clipboard.writeText(connectResult.connect_command)}
                     title="点击复制"
                   >
@@ -440,7 +440,7 @@ export default function OnboardingPage({ onComplete }: Props) {
                             {machine.runtimes?.length ? ` · ${machine.runtimes.join('/')}` : ''}
                           </div>
                         </div>
-                        <div className={`text-[11px] uppercase ${machine.status === 'online' ? 'text-[#4ecdc4]' : 'text-[#c8860a]'}`}>
+                        <div className={`text-[11px] uppercase ${machine.status === 'online' ? 'text-[#3abfa0]' : 'text-[#c8860a]'}`}>
                           {machine.status}
                         </div>
                       </div>
@@ -632,7 +632,7 @@ export default function OnboardingPage({ onComplete }: Props) {
                   {savingVault || loadingVaultDirs ? '...' : '保存并验证'}
                 </button>
                 {vaultSaved && (
-                  <span className="text-[11px] text-[#4ecdc4]">✓ 已保存</span>
+                  <span className="text-[11px] text-[#3abfa0]">✓ 已保存</span>
                 )}
               </div>
 

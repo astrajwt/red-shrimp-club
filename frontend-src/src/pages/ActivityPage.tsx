@@ -8,14 +8,14 @@ const INITIAL_PER_AGENT = 20
 
 const levelStyle = (level: string) => {
   if (level === 'ACTION') return { bg: '#3a1520', text: '#e04050', border: '#c0392b' }
-  if (level === 'FILE')   return { bg: '#0f1a18', text: '#4ecdc4', border: '#1e3d30' }
-  if (level === 'SPAWN')  return { bg: '#1a2535', text: '#4ecdc4', border: '#1e3d55' }
+  if (level === 'FILE')   return { bg: '#0f1a18', text: '#3abfa0', border: '#1e3d30' }
+  if (level === 'SPAWN')  return { bg: '#1a2535', text: '#6bc5e8', border: '#1e3d55' }
   if (level === 'WARN')   return { bg: '#2a2010', text: '#d4a017', border: '#4a3010' }
   if (level === 'ERROR')  return { bg: '#3a1010', text: '#ff4444', border: '#6a1010' }
   return                         { bg: '#1e1a20', text: '#9a8888', border: '#2a2228' }
 }
 
-const agentColors = ['#c0392b', '#4ecdc4', '#4ecdc4', '#d4a017', '#a08cd8']
+const agentColors = ['#c0392b', '#6bc5e8', '#3abfa0', '#d4a017', '#a08cd8']
 
 interface LogRow {
   id: string
@@ -150,7 +150,7 @@ export default function ActivityPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#09090b] text-[#e8e6f0] p-5"
+      className="min-h-screen bg-[#0e0c10] text-[#e7dfd3] p-5"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -161,14 +161,14 @@ export default function ActivityPage() {
       {/* Header */}
       <div className="flex items-end justify-between mb-5">
         <div>
-          <div className="text-[11px] text-[#4ecdc4] uppercase tracking-widest mb-1">real-time</div>
+          <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-1">real-time</div>
           <div className="text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-1">activity log</div>
         </div>
         {/* Agent filter */}
         <div className="flex gap-2">
           <button
             onClick={() => setFilterAgentId(null)}
-            className={`border border-white/[0.08] rounded px-3 py-1 text-[12px] uppercase
+            className={`border-[3px] border-black px-3 py-1 text-[12px] uppercase
               ${!filterAgentId ? 'bg-[#c0392b] text-black' : 'bg-[#1e1a20] text-[#9a8888] hover:bg-[#2a2228]'}`}
           >
             All
@@ -177,8 +177,8 @@ export default function ActivityPage() {
             <button
               key={a.id}
               onClick={() => setFilterAgentId(a.id === filterAgentId ? null : a.id)}
-              className={`border border-white/[0.08] rounded px-3 py-1 text-[12px] uppercase
-                ${filterAgentId === a.id ? 'bg-[#1a2535] text-[#4ecdc4]' : 'bg-[#1e1a20] text-[#9a8888] hover:bg-[#2a2228]'}`}
+              className={`border-[3px] border-black px-3 py-1 text-[12px] uppercase
+                ${filterAgentId === a.id ? 'bg-[#1a2535] text-[#6bc5e8]' : 'bg-[#1e1a20] text-[#9a8888] hover:bg-[#2a2228]'}`}
             >
               {a.name}
             </button>
@@ -191,14 +191,14 @@ export default function ActivityPage() {
 
         {/* ── Log stream ── */}
         <div
-          className="border border-white/[0.08] rounded bg-[#141018]"
+          className="border-[3px] border-black bg-[#141018]"
           style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.85), 0 0 16px rgba(50,120,220,0.10)' }}
         >
-          <div className="border-b border-white/[0.08] px-4 py-2 bg-[#1e1a20] flex items-center gap-3">
-            <span className="text-[13px] uppercase text-[#4a4a60]">log stream</span>
+          <div className="border-b-[3px] border-black px-4 py-2 bg-[#1e1a20] flex items-center gap-3">
+            <span className="text-[13px] uppercase text-[#4a4048]">log stream</span>
             <span className="w-2 h-2 bg-[#c0392b] border border-black" style={{ animation: 'pulse 1s ease-in-out infinite' }} />
             <span className="text-[11px] text-[#c0392b]">live</span>
-            <span className="ml-auto text-[11px] text-[#4a4a60]">{displayed.length} entries</span>
+            <span className="ml-auto text-[11px] text-[#4a4048]">{displayed.length} entries</span>
           </div>
 
           <div ref={containerRef} className="overflow-auto" style={{ maxHeight: '70vh' }}>
@@ -208,7 +208,7 @@ export default function ActivityPage() {
                 <button
                   onClick={loadMore}
                   disabled={loadingMore}
-                  className="text-[11px] text-[#4ecdc4] hover:text-[#4ecdc4] uppercase tracking-wider disabled:opacity-50"
+                  className="text-[11px] text-[#6bc5e8] hover:text-[#3abfa0] uppercase tracking-wider disabled:opacity-50"
                 >
                   {loadingMore ? '↺ loading...' : '↑ load earlier logs'}
                 </button>
@@ -225,17 +225,17 @@ export default function ActivityPage() {
                   style={{ background: i % 2 === 0 ? '#141018' : '#100e13' }}
                 >
                   {/* Time */}
-                  <div className="px-3 py-2 text-[11px] text-[#4a4a60] w-[80px] shrink-0 border-r border-white/[0.08]">
+                  <div className="px-3 py-2 text-[11px] text-[#4a4048] w-[80px] shrink-0 border-r-[3px] border-black">
                     {time}
                   </div>
                   {/* Agent */}
-                  <div className="px-3 py-2 w-[80px] shrink-0 border-r border-white/[0.08]">
+                  <div className="px-3 py-2 w-[80px] shrink-0 border-r-[3px] border-black">
                     <span className="text-[11px]" style={{ color: getColor(log.agentId) }}>
                       {log.agentName}
                     </span>
                   </div>
                   {/* Level */}
-                  <div className="px-2 py-2 w-[72px] shrink-0 border-r border-white/[0.08] flex items-start">
+                  <div className="px-2 py-2 w-[72px] shrink-0 border-r-[3px] border-black flex items-start">
                     <span
                       className="text-[10px] uppercase px-1 border-[2px]"
                       style={{ background: s.bg, color: s.text, borderColor: s.border }}
@@ -244,7 +244,7 @@ export default function ActivityPage() {
                     </span>
                   </div>
                   {/* Content */}
-                  <div className="px-3 py-2 text-[13px] text-[#8a8aa8] flex-1 break-words">
+                  <div className="px-3 py-2 text-[13px] text-[#c8bdb8] flex-1 break-words">
                     {log.content}
                   </div>
                 </div>
@@ -256,43 +256,43 @@ export default function ActivityPage() {
 
         {/* ── Agent tree ── */}
         <div
-          className="border border-white/[0.08] rounded bg-[#141018]"
+          className="border-[3px] border-black bg-[#141018]"
           style={{
             boxShadow: '4px 5px 0 rgba(0,0,0,0.85), 0 0 12px rgba(30,180,120,0.08)',
             alignSelf: 'start',
           }}
         >
-          <div className="border-b border-white/[0.08] px-4 py-2 bg-[#1e1a20]">
-            <div className="text-[13px] uppercase text-[#4a4a60]">agent</div>
+          <div className="border-b-[3px] border-black px-4 py-2 bg-[#1e1a20]">
+            <div className="text-[13px] uppercase text-[#4a4048]">agent</div>
           </div>
           <div className="px-3 py-3 space-y-2">
             {agents.map(agent => {
               const color = getColor(agent.id)
               const pct = Math.min(100, Math.round(((agent.tokens_used_today ?? 0) / 200000) * 100))
               return (
-                <div key={agent.id} className="border border-white/[0.08] rounded bg-[#1e1a20]">
+                <div key={agent.id} className="border-[3px] border-black bg-[#1e1a20]">
                   <div className="flex items-center gap-2 px-3 py-2 bg-[#2a2228]">
                     <span
                       className="w-3 h-3 border border-black shrink-0"
                       style={{
-                        background: agent.status === 'running' ? '#4ecdc4' : '#3a3535',
+                        background: agent.status === 'running' ? '#3abfa0' : '#3a3535',
                         animation: agent.status === 'running' ? 'pulse 1.2s ease-in-out infinite' : 'none',
                       }}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px]">{agent.name}</div>
-                      <div className="text-[10px] text-[#4a4a60] uppercase">{agent.runtime} · {agent.status}</div>
+                      <div className="text-[10px] text-[#4a4048] uppercase">{agent.runtime} · {agent.status}</div>
                     </div>
                     <div className="text-[10px] text-right">
-                      <div style={{ color: pct > 80 ? '#c0392b' : '#4ecdc4' }}>{pct}%</div>
-                      <div className="text-[#4a4a60]">ctx</div>
+                      <div style={{ color: pct > 80 ? '#c0392b' : '#6bc5e8' }}>{pct}%</div>
+                      <div className="text-[#4a4048]">ctx</div>
                     </div>
                   </div>
                 </div>
               )
             })}
             {agents.length === 0 && (
-              <div className="text-[12px] text-[#4a4a60] text-center py-4">暂无 agent</div>
+              <div className="text-[12px] text-[#4a4048] text-center py-4">暂无 agent</div>
             )}
           </div>
         </div>

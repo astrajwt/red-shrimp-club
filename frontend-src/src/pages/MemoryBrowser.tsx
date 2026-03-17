@@ -38,7 +38,7 @@ function ResizeHandle({
       title="drag to resize"
     >
       <div className={`absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors ${
-        active ? 'bg-[#c0392b]' : 'bg-[#2a2228] group-hover:bg-[#4ecdc4]'
+        active ? 'bg-[#c0392b]' : 'bg-[#2a2228] group-hover:bg-[#6bc5e8]'
       }`} />
     </div>
   )
@@ -168,15 +168,15 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
 
   const renderLeftPanel = () => (
     <>
-      <div className="border-b border-white/[0.08] px-4 py-3 bg-[#1e1a20] shrink-0">
-        <div className="text-[10px] text-[#4ecdc4] uppercase tracking-widest mb-0.5">obsidian vault</div>
+      <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
+        <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">obsidian vault</div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button
               onClick={goBack}
               disabled={history.length === 0}
               title="back"
-              className="text-[14px] leading-none text-[#4a4a60] hover:text-[#4ecdc4] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+              className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
             >
               ←
             </button>
@@ -189,7 +189,7 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
               className={`text-[11px] px-1.5 py-0.5 border transition-colors ${
                 showImport
                   ? 'border-[#c0392b] text-[#c0392b]'
-                  : 'border-[#3a3535] text-[#4a4a60] hover:border-[#4ecdc4] hover:text-[#4ecdc4]'
+                  : 'border-[#3a3535] text-[#4a4048] hover:border-[#6bc5e8] hover:text-[#6bc5e8]'
               }`}
             >
               + git
@@ -197,7 +197,7 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
             <button
               onClick={() => setLeftCollapsed(true)}
               title="collapse sidebar"
-              className="text-[14px] leading-none text-[#4a4a60] hover:text-[#4ecdc4] transition-colors"
+              className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
             >
               ◂
             </button>
@@ -218,7 +218,7 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
   return (
     <div
       ref={containerRef}
-      className="h-full flex overflow-hidden bg-[#09090b] text-[#e8e6f0]"
+      className="h-full flex overflow-hidden bg-[#0e0c10] text-[#e7dfd3]"
       style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}>
 
       {!isMobile && (
@@ -242,12 +242,12 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
       {/* ── Center: vault viewer (flex-1) ── */}
       <div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto relative">
         {isMobile ? (
-          <div className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#141018] px-3 py-2">
+          <div className="sticky top-0 z-20 border-b-[3px] border-black bg-[#141018] px-3 py-2">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setLeftCollapsed(false)}
                 title="open vault tree"
-                className="border border-white/[0.08] bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#4ecdc4]"
+                className="border-[2px] border-black bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#6bc5e8]"
               >
                 vault
               </button>
@@ -255,17 +255,17 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
                 onClick={goBack}
                 disabled={history.length === 0}
                 title="back"
-                className="border border-white/[0.08] bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#9a8888] disabled:opacity-30"
+                className="border-[2px] border-black bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#9a8888] disabled:opacity-30"
               >
                 back
               </button>
-              <div className="min-w-0 flex-1 truncate text-[11px] text-[#4a4a60]">
+              <div className="min-w-0 flex-1 truncate text-[11px] text-[#4a4048]">
                 {selectedPath ?? 'select a vault file'}
               </div>
               <button
                 onClick={() => setRightCollapsed(false)}
                 title="open ask agent"
-                className="border border-white/[0.08] bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#f0b35e]"
+                className="border-[2px] border-black bg-[#1e1a20] px-2 py-1 text-[11px] uppercase text-[#f0b35e]"
               >
                 ask
               </button>
@@ -275,7 +275,7 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
           <button
             onClick={() => setLeftCollapsed(false)}
             title="expand sidebar"
-            className="absolute top-3 left-3 z-10 text-[16px] text-[#4a4a60] hover:text-[#4ecdc4] transition-colors bg-[#141018] border border-white/[0.08] px-1.5 py-0.5"
+            className="absolute top-3 left-3 z-10 text-[16px] text-[#4a4048] hover:text-[#6bc5e8] transition-colors bg-[#141018] border-[2px] border-black px-1.5 py-0.5"
           >
             ☰
           </button>
@@ -286,7 +286,7 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
           <div className="h-full flex items-center justify-center text-center">
             <div>
               <div className="text-[48px] mb-3 opacity-10">⊡</div>
-              <div className="text-[13px] text-[#4a4a60]">select a vault file to view</div>
+              <div className="text-[13px] text-[#4a4048]">select a vault file to view</div>
             </div>
           </div>
         )}
@@ -324,7 +324,7 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
           </div>
 
           {!rightCollapsed && (
-            <div className="absolute inset-0 z-40 bg-[#09090b]">
+            <div className="absolute inset-0 z-40 bg-[#0e0c10]">
               <AskPanel filePath={selectedPath} width={0} collapsed={false} onToggle={() => setRightCollapsed(true)} isMobileFullscreen />
             </div>
           )}
@@ -361,20 +361,20 @@ function GitImportPanel({ onImported }: { onImported: () => void }) {
   }
 
   return (
-    <div className="border-b border-white/[0.08] px-3 py-3 bg-[#1a1620] space-y-2">
-      <div className="text-[10px] text-[#4ecdc4] uppercase tracking-widest">import vault repo</div>
+    <div className="border-b-[3px] border-black px-3 py-3 bg-[#1a1620] space-y-2">
+      <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest">import vault repo</div>
       <input
         value={name}
         onChange={e => setName(e.target.value)}
         placeholder="name (e.g. team-notes)"
-        className="w-full bg-[#09090b] border border-[#2a2228] text-[#e8e6f0] text-[11px] px-2 py-1 outline-none focus:border-[#4ecdc4] placeholder-[#3a3535]"
+        className="w-full bg-[#0e0c10] border border-[#2a2228] text-[#e7dfd3] text-[11px] px-2 py-1 outline-none focus:border-[#6bc5e8] placeholder-[#3a3535]"
         style={{ fontFamily: 'inherit' }}
       />
       <input
         value={gitUrl}
         onChange={e => setGitUrl(e.target.value)}
         placeholder="git@github.com:org/repo.git"
-        className="w-full bg-[#09090b] border border-[#2a2228] text-[#e8e6f0] text-[11px] px-2 py-1 outline-none focus:border-[#4ecdc4] placeholder-[#3a3535]"
+        className="w-full bg-[#0e0c10] border border-[#2a2228] text-[#e7dfd3] text-[11px] px-2 py-1 outline-none focus:border-[#6bc5e8] placeholder-[#3a3535]"
         style={{ fontFamily: 'inherit' }}
       />
       <div className="flex gap-2">
@@ -382,13 +382,13 @@ function GitImportPanel({ onImported }: { onImported: () => void }) {
           value={branch}
           onChange={e => setBranch(e.target.value)}
           placeholder="branch"
-          className="flex-1 bg-[#09090b] border border-[#2a2228] text-[#e8e6f0] text-[11px] px-2 py-1 outline-none focus:border-[#4ecdc4] placeholder-[#3a3535]"
+          className="flex-1 bg-[#0e0c10] border border-[#2a2228] text-[#e7dfd3] text-[11px] px-2 py-1 outline-none focus:border-[#6bc5e8] placeholder-[#3a3535]"
           style={{ fontFamily: 'inherit' }}
         />
         <select
           value={authMethod}
           onChange={e => setAuthMethod(e.target.value as 'none' | 'ssh')}
-          className="rsl-control rsl-select bg-[#09090b] border border-[#2a2228] text-[#9a8888] text-[11px] px-1.5 py-1 outline-none cursor-pointer"
+          className="rsl-control rsl-select bg-[#0e0c10] border border-[#2a2228] text-[#9a8888] text-[11px] px-1.5 py-1 outline-none cursor-pointer"
           style={{ fontFamily: 'inherit' }}
         >
           <option value="ssh">SSH</option>
@@ -399,7 +399,7 @@ function GitImportPanel({ onImported }: { onImported: () => void }) {
       <button
         onClick={submit}
         disabled={loading || !name.trim() || !gitUrl.trim()}
-        className="w-full py-1 text-[11px] uppercase tracking-wider bg-[#09090b] border border-[#2a2228] text-[#4ecdc4] hover:bg-[#1a2535] hover:border-[#4ecdc4] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="w-full py-1 text-[11px] uppercase tracking-wider bg-[#0e0c10] border border-[#2a2228] text-[#6bc5e8] hover:bg-[#1a2535] hover:border-[#6bc5e8] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
         {loading ? 'cloning...' : 'import'}
       </button>
@@ -422,13 +422,13 @@ function MemorySourcesList({ onSync }: { onSync: () => void }) {
   if (sources.length === 0) return null
 
   return (
-    <div className="border-t border-white/[0.08] shrink-0">
+    <div className="border-t-[3px] border-black shrink-0">
       <button
         onClick={() => setExpanded(e => !e)}
         className="w-full px-3 py-2 text-left flex items-center gap-1.5 hover:bg-[#1e1a20] transition-colors"
       >
-        <span className="text-[11px] text-[#4ecdc4]">{expanded ? '▾' : '▸'}</span>
-        <span className="text-[10px] text-[#4a4a60] uppercase tracking-widest">vault repos ({sources.length})</span>
+        <span className="text-[11px] text-[#6bc5e8]">{expanded ? '▾' : '▸'}</span>
+        <span className="text-[10px] text-[#4a4048] uppercase tracking-widest">vault repos ({sources.length})</span>
       </button>
       {expanded && sources.map(s => (
         <div key={s.id} className="px-3 py-1.5 border-b border-[#1a1620] text-[11px]">
@@ -438,14 +438,14 @@ function MemorySourcesList({ onSync }: { onSync: () => void }) {
               <button
                 onClick={() => { memoryApi.syncSource(s.id).then(() => { load(); onSync() }).catch(() => {}) }}
                 title="sync"
-                className="text-[9px] text-[#4a4a60] hover:text-[#4ecdc4] px-1"
+                className="text-[9px] text-[#4a4048] hover:text-[#6bc5e8] px-1"
               >
                 ↻
               </button>
               <button
                 onClick={() => { memoryApi.deleteSource(s.id).then(() => { load(); onSync() }).catch(() => {}) }}
                 title="remove"
-                className="text-[9px] text-[#4a4a60] hover:text-[#c0392b] px-1"
+                className="text-[9px] text-[#4a4048] hover:text-[#c0392b] px-1"
               >
                 ×
               </button>
@@ -453,10 +453,10 @@ function MemorySourcesList({ onSync }: { onSync: () => void }) {
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className={`text-[9px] px-1 border ${
-              s.status === 'synced' ? 'border-[#4ecdc4] text-[#4ecdc4]' :
+              s.status === 'synced' ? 'border-[#3abfa0] text-[#3abfa0]' :
               s.status === 'error' ? 'border-[#c0392b] text-[#c0392b]' :
-              s.status === 'cloning' ? 'border-[#4ecdc4] text-[#4ecdc4]' :
-              'border-[#4a4a60] text-[#4a4a60]'
+              s.status === 'cloning' ? 'border-[#6bc5e8] text-[#6bc5e8]' :
+              'border-[#4a4048] text-[#4a4048]'
             }`}>{s.status}</span>
             {s.last_synced && (
               <span className="text-[9px] text-[#3a3535]">
@@ -680,13 +680,13 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
 
   if (collapsed) {
     return (
-      <div className="shrink-0 flex flex-col items-center bg-[#100e13] border-l border-white/[0.08] py-3 px-1 gap-2">
+      <div className="shrink-0 flex flex-col items-center bg-[#100e13] border-l-[3px] border-black py-3 px-1 gap-2">
         <button
           onClick={onToggle}
           title="expand ask agent"
-          className="text-[14px] text-[#4a4a60] hover:text-[#4ecdc4] transition-colors"
+          className="text-[14px] text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
         >▸</button>
-        <div className="text-[10px] text-[#4a4a60] uppercase" style={{ writingMode: 'vertical-rl' }}>ask agent</div>
+        <div className="text-[10px] text-[#4a4048] uppercase" style={{ writingMode: 'vertical-rl' }}>ask agent</div>
       </div>
     )
   }
@@ -694,13 +694,13 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
   return (
     <div className="h-full shrink-0 flex flex-col bg-[#100e13]" style={width > 0 ? { width } : undefined}>
       {/* Header */}
-      <div className="border-b border-white/[0.08] px-4 py-3 bg-[#1e1a20] shrink-0">
+      <div className="border-b-[3px] border-black px-4 py-3 bg-[#1e1a20] shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {isMobileFullscreen && (
               <button
                 onClick={onToggle}
-                className="text-[16px] leading-none text-[#9a8888] hover:text-[#4ecdc4] transition-colors"
+                className="text-[16px] leading-none text-[#9a8888] hover:text-[#6bc5e8] transition-colors"
               >←</button>
             )}
             <div className="text-[14px] leading-none">ask agent</div>
@@ -709,12 +709,12 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
             <button
               onClick={onToggle}
               title="collapse panel"
-              className="text-[14px] leading-none text-[#4a4a60] hover:text-[#4ecdc4] transition-colors"
+              className="text-[14px] leading-none text-[#4a4048] hover:text-[#6bc5e8] transition-colors"
             >▸</button>
           )}
         </div>
         <div className="flex items-center gap-1 mt-1.5 min-w-0">
-          <span className="text-[10px] text-[#4a4a60] shrink-0">ctx:</span>
+          <span className="text-[10px] text-[#4a4048] shrink-0">ctx:</span>
           <span className="text-[10px] text-[#6a5a5a] flex-1 truncate min-w-0" title={ctxPath ?? 'none'}>
             {ctxPath ? ctxPath.split('/').pop() : 'none'}
           </span>
@@ -733,12 +733,12 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
             <button
               onClick={clearCtx}
               title="clear context"
-              className="text-[12px] text-[#4a4a60] hover:text-[#c0392b] px-0.5 shrink-0 leading-none"
+              className="text-[12px] text-[#4a4048] hover:text-[#c0392b] px-0.5 shrink-0 leading-none"
             >x</button>
           )}
         </div>
         <div className="flex items-center gap-1 mt-1.5">
-          <span className="text-[10px] text-[#4a4a60] shrink-0">agent:</span>
+          <span className="text-[10px] text-[#4a4048] shrink-0">agent:</span>
           <select
             value={selectedAgentId ?? ''}
             onChange={e => { setSelectedAgentId(e.target.value || null); setMessages([]) }}
@@ -764,11 +764,11 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
           return (
             <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
               {m.role === 'user' ? (
-                <span className="inline-block bg-[#2a1a1a] border-[2px] border-[#c0392b] text-[#e8e6f0] text-[12px] px-3 py-2 max-w-[220px] text-left break-words">
+                <span className="inline-block bg-[#2a1a1a] border-[2px] border-[#c0392b] text-[#e7dfd3] text-[12px] px-3 py-2 max-w-[220px] text-left break-words">
                   {m.text}
                 </span>
               ) : (
-                <span className="inline-block bg-[#1a2535] border-[2px] border-[#1e3d55] text-[#8a8aa8] text-[12px] px-3 py-2 max-w-[240px] text-left break-words whitespace-pre-wrap">
+                <span className="inline-block bg-[#1a2535] border-[2px] border-[#1e3d55] text-[#c8bdb8] text-[12px] px-3 py-2 max-w-[240px] text-left break-words whitespace-pre-wrap">
                   {m.text}
                 </span>
               )}
@@ -782,18 +782,18 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
       </div>
 
       {/* Input */}
-      <div className="border-t border-white/[0.08] px-3 py-3 shrink-0">
+      <div className="border-t-[3px] border-black px-3 py-3 shrink-0">
         <textarea
           value={input}
           onChange={e => { setInput(e.target.value); if (handoffState) setHandoffState(null) }}
           onKeyDown={onKey}
           placeholder={`message ${selectedAgent?.name ?? 'agent'}...`}
           rows={3}
-          className="w-full bg-[#1e1a20] border-[2px] border-[#2a2228] text-[#e8e6f0] text-[12px] px-3 py-2 resize-none outline-none focus:border-[#c0392b] placeholder-[#3a3535]"
+          className="w-full bg-[#1e1a20] border-[2px] border-[#2a2228] text-[#e7dfd3] text-[12px] px-3 py-2 resize-none outline-none focus:border-[#c0392b] placeholder-[#3a3535]"
           style={{ fontFamily: 'inherit' }}
         />
         {handoffState && (
-          <div className={`mt-2 text-[11px] ${handoffState.startsWith('已发给') ? 'text-[#4ecdc4]' : 'text-[#c0392b]'}`}>
+          <div className={`mt-2 text-[11px] ${handoffState.startsWith('已发给') ? 'text-[#6bc5e8]' : 'text-[#c0392b]'}`}>
             {handoffState}
           </div>
         )}
@@ -801,7 +801,7 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
           <button
             onClick={send}
             disabled={sending || !input.trim()}
-            className="w-full py-1.5 text-[12px] uppercase tracking-wider bg-[#1a2535] border-[2px] border-[#1e3d55] text-[#4ecdc4] hover:bg-[#243548] hover:text-[#e8e6f0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-1.5 text-[12px] uppercase tracking-wider bg-[#1a2535] border-[2px] border-[#1e3d55] text-[#6bc5e8] hover:bg-[#243548] hover:text-[#e7dfd3] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {sending ? '⟳ sending...' : `ask ${selectedAgent?.name ?? 'agent'}`}
           </button>
@@ -854,7 +854,7 @@ function TreeNode({ path, depth, selectedPath, onSelect }: TreeNodeProps) {
   return (
     <div>
       {loading && depth === 0 && (
-        <div className="text-[11px] text-[#4a4a60] px-4 pt-4">loading...</div>
+        <div className="text-[11px] text-[#4a4048] px-4 pt-4">loading...</div>
       )}
       {(expanded || depth === 0) && (
         <>
@@ -877,12 +877,12 @@ function TreeNode({ path, depth, selectedPath, onSelect }: TreeNodeProps) {
                   : 'hover:bg-[#1e1a20] border-l-[3px] border-l-transparent'}`}
               style={{ paddingLeft: (depth + 1) * 12 + 4 }}
             >
-              <span className="text-[11px] text-[#4a4a60] shrink-0">·</span>
+              <span className="text-[11px] text-[#4a4048] shrink-0">·</span>
               <span className="text-[12px] text-[#9a8888] truncate">{entry.name}</span>
             </button>
           ))}
           {entries.length === 0 && loaded && depth === 0 && (
-            <div className="text-[11px] text-[#4a4a60] px-4 pt-4">
+            <div className="text-[11px] text-[#4a4048] px-4 pt-4">
               vault root not configured
             </div>
           )}
@@ -942,10 +942,10 @@ function DirNode({ entry, depth, selectedPath, onSelect }: DirNodeProps) {
         className="w-full flex items-center gap-1.5 text-left py-1 border-b border-[#1a1620] hover:bg-[#1e1a20] transition-colors border-l-[3px] border-l-transparent"
         style={{ paddingLeft: depth * 12 + 4 }}
       >
-        <span className="text-[11px] text-[#4ecdc4] shrink-0">
+        <span className="text-[11px] text-[#6bc5e8] shrink-0">
           {loading ? '…' : expanded ? '▾' : '▸'}
         </span>
-        <span className="text-[12px] text-[#8a8aa8] truncate">{entry.name}</span>
+        <span className="text-[12px] text-[#c8bdb8] truncate">{entry.name}</span>
       </button>
       {expanded && (
         <div>
@@ -962,7 +962,7 @@ function DirNode({ entry, depth, selectedPath, onSelect }: DirNodeProps) {
                   : 'hover:bg-[#1e1a20] border-l-[3px] border-l-transparent'}`}
               style={{ paddingLeft: (depth + 1) * 12 + 4 }}
             >
-              <span className="text-[11px] text-[#4a4a60] shrink-0">·</span>
+              <span className="text-[11px] text-[#4a4048] shrink-0">·</span>
               <span className="text-[12px] text-[#9a8888] truncate">{f.name}</span>
             </button>
           ))}

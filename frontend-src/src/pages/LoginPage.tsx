@@ -34,7 +34,7 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
 
   return (
     <div
-      className="min-h-screen bg-[#09090b] flex items-center justify-center"
+      className="min-h-screen bg-[#0e0c10] flex items-center justify-center"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -46,15 +46,15 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
       <div className="absolute top-6 left-6 flex items-center gap-3 opacity-80">
         <PixelShrimp size={36} />
         <div>
-          <div className="text-[10px] text-[#4ecdc4] uppercase tracking-widest">The Red Shrimp Lab</div>
-          <div className="text-[18px] text-[#e8e6f0]">红虾俱乐部</div>
+          <div className="text-[10px] text-[#6bc5e8] uppercase tracking-widest">The Red Shrimp Lab</div>
+          <div className="text-[18px] text-[#e7dfd3]">红虾俱乐部</div>
         </div>
       </div>
 
       {/* Card */}
       <form
         onSubmit={submit}
-        className="border border-white/[0.08] rounded bg-[#191619] w-full max-w-[420px]"
+        className="border-[3px] border-black bg-[#191619] w-full max-w-[420px]"
         style={{
           transform: 'rotate(-0.3deg)',
           boxShadow:
@@ -64,7 +64,7 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
         }}
       >
         {/* Header */}
-        <div className="border-b border-white/[0.08] bg-[#c0392b] px-6 py-4">
+        <div className="border-b-[3px] border-black bg-[#c0392b] px-6 py-4">
           <div className="text-[11px] uppercase tracking-[0.1em] text-black/60">authentication</div>
           <div className="text-[28px] text-black leading-tight mt-1">
             {mode === 'login' ? 'sign in' : 'register'}
@@ -107,21 +107,21 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
           <button
             type="submit"
             disabled={busy || !service.reachable}
-            className="w-full border border-white/[0.08] rounded bg-[#c0392b] text-black text-[15px] uppercase tracking-[0.08em] py-3 mt-2 hover:bg-[#e04050] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full border-[3px] border-black bg-[#c0392b] text-black text-[15px] uppercase tracking-[0.08em] py-3 mt-2 hover:bg-[#e04050] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             style={{ transform: 'rotate(0.15deg)' }}
           >
             {busy ? 'connecting...' : mode === 'login' ? 'enter →' : 'create →'}
           </button>
 
           {/* Mode toggle */}
-          <div className="border-t border-white/[0.08]/30 pt-4 text-center">
-            <span className="text-[12px] text-[#4ecdc4]">
+          <div className="border-t-[3px] border-black/30 pt-4 text-center">
+            <span className="text-[12px] text-[#6bc5e8]">
               {mode === 'login' ? 'first time here?' : 'already have an account?'}
             </span>{' '}
             <button
               type="button"
               onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError(null) }}
-              className="text-[12px] text-[#4ecdc4] underline hover:text-[#4ecdc4]"
+              className="text-[12px] text-[#3abfa0] underline hover:text-[#6bc5e8]"
             >
               {mode === 'login' ? 'register' : 'sign in'}
             </button>
@@ -129,7 +129,7 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-white/[0.08] bg-[#0f0f14] px-6 py-2 text-[11px] text-[#4a4a60] uppercase tracking-widest">
+        <div className="border-t-[3px] border-black bg-[#120f13] px-6 py-2 text-[11px] text-[#4a4048] uppercase tracking-widest">
           red shrimp lab v0.1.0
         </div>
       </form>
@@ -145,13 +145,13 @@ function Field({
 }) {
   return (
     <div>
-      <div className="text-[11px] text-[#4ecdc4] uppercase tracking-[0.08em] mb-1">{label}</div>
+      <div className="text-[11px] text-[#6bc5e8] uppercase tracking-[0.08em] mb-1">{label}</div>
       <input
         type={type}
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full border border-white/[0.08] rounded bg-[#0f0f14] text-[#e8e6f0] text-[14px] px-3 py-2 placeholder-[#4a4a60] focus:outline-none"
+        className="w-full border-[3px] border-black bg-[#120f13] text-[#e7dfd3] text-[14px] px-3 py-2 placeholder-[#4a4048] focus:outline-none"
         style={{ transition: 'box-shadow 0.2s, border-color 0.2s' }}
         onFocus={e => {
           e.currentTarget.style.borderColor = '#c0392b'

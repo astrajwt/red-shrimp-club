@@ -21,8 +21,8 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  online: '#4ecdc4',
-  running: '#4ecdc4',
+  online: '#6bc5e8',
+  running: '#6bc5e8',
   sleeping: '#f0b35e',
   idle: '#f0b35e',
   offline: '#8d8188',
@@ -31,7 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const TASK_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   open: { label: 'open', color: '#8d8188' },
-  in_progress: { label: '进行中', color: '#4ecdc4' },
+  in_progress: { label: '进行中', color: '#6bc5e8' },
   reviewing: { label: 'review', color: '#f0b35e' },
 }
 
@@ -68,8 +68,8 @@ export default function HomePage({ onNavigate }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#09090b] text-[#8d8188]"
-           style={{  }}>
+      <div className="flex items-center justify-center h-full bg-[#0e0c10] text-[#8d8188]"
+           style={{ fontFamily: '"Share Tech Mono", monospace' }}>
         loading dashboard...
       </div>
     )
@@ -77,8 +77,8 @@ export default function HomePage({ onNavigate }: Props) {
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#09090b] text-[#8d8188]"
-           style={{  }}>
+      <div className="flex items-center justify-center h-full bg-[#0e0c10] text-[#8d8188]"
+           style={{ fontFamily: '"Share Tech Mono", monospace' }}>
         failed to load dashboard — check backend connection
       </div>
     )
@@ -174,8 +174,8 @@ export default function HomePage({ onNavigate }: Props) {
   const stickies = data.stickies ?? []
 
   return (
-    <div className="flex flex-col h-full bg-[#09090b] text-[#e8e6f0] overflow-y-auto"
-         style={{  }}>
+    <div className="flex flex-col h-full bg-[#0e0c10] text-[#e7dfd3] overflow-y-auto"
+         style={{ fontFamily: '"Share Tech Mono", monospace' }}>
       <div className="max-w-[1400px] w-full mx-auto px-6 py-5 space-y-5">
 
         {/* ── Quick Links ────────────────────────────────────── */}
@@ -198,7 +198,7 @@ export default function HomePage({ onNavigate }: Props) {
                   boxShadow: '3px 4px 0 rgba(0,0,0,0.8)',
                 }}
               >
-                <div className="flex items-center gap-3 px-3 py-2 text-[#8d8188] hover:text-[#4ecdc4]">
+                <div className="flex items-center gap-3 px-3 py-2 text-[#8d8188] hover:text-[#6bc5e8]">
                   <span className="text-[12px]">+</span>
                   <span className="text-[11px]">add link</span>
                 </div>
@@ -225,17 +225,17 @@ export default function HomePage({ onNavigate }: Props) {
                       placeholder="title"
                       value={newLink.title}
                       onChange={e => setNewLink(p => ({ ...p, title: e.target.value }))}
-                      className="flex-1 bg-[#141018] text-[11px] text-[#e8e6f0] outline-none border border-[#3a3340] px-2 py-1"
+                      className="flex-1 bg-[#141018] text-[11px] text-[#e7dfd3] outline-none border border-[#3a3340] px-2 py-1"
                       autoFocus
                     />
                     <input
                       placeholder={newLink.type === 'external' ? 'https://...' : 'path/to/file.md'}
                       value={newLink.url}
                       onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))}
-                      className="flex-1 bg-[#141018] text-[11px] text-[#e8e6f0] outline-none border border-[#3a3340] px-2 py-1"
+                      className="flex-1 bg-[#141018] text-[11px] text-[#e7dfd3] outline-none border border-[#3a3340] px-2 py-1"
                     />
                     <button onClick={handleAddBookmark}
-                            className="text-[11px] text-[#4ecdc4] hover:underline shrink-0">save</button>
+                            className="text-[11px] text-[#6bc5e8] hover:underline shrink-0">save</button>
                     <button onClick={() => { setShowAddLink(false); setNewLink({ title: '', url: '', type: 'external' }) }}
                             className="text-[11px] text-[#8d8188] hover:underline shrink-0">×</button>
                   </div>
@@ -267,37 +267,37 @@ export default function HomePage({ onNavigate }: Props) {
                   + new note
                 </button>
               ) : (
-                <div className="border border-white/[0.08] bg-[#191619] p-3 space-y-2
+                <div className="border-[2px] border-black bg-[#191619] p-3 space-y-2
                                 shadow-[3px_4px_0_rgba(0,0,0,0.8)]">
                   <input
                     placeholder="title (optional)"
                     value={newSticky.title}
                     onChange={e => setNewSticky(p => ({ ...p, title: e.target.value }))}
-                    className="w-full bg-transparent text-[11px] text-[#e8e6f0] outline-none
+                    className="w-full bg-transparent text-[11px] text-[#e7dfd3] outline-none
                                border-b border-[#3a3340] pb-1"
                   />
                   <textarea
                     placeholder="write a note..."
                     value={newSticky.content}
                     onChange={e => setNewSticky(p => ({ ...p, content: e.target.value }))}
-                    className="w-full bg-transparent text-[11px] text-[#e8e6f0] outline-none resize-none h-16"
+                    className="w-full bg-transparent text-[11px] text-[#e7dfd3] outline-none resize-none h-16"
                   />
                   <div className="flex items-center gap-2">
-                    {['#f0b35e', '#4ecdc4', '#7ecfa8', '#c0392b'].map(c => (
+                    {['#f0b35e', '#6bc5e8', '#7ecfa8', '#c0392b'].map(c => (
                       <button
                         key={c}
                         onClick={() => setNewSticky(p => ({ ...p, color: c }))}
                         className="w-4 h-4 rounded-full border-2 transition-transform"
                         style={{
                           backgroundColor: c,
-                          borderColor: newSticky.color === c ? '#e8e6f0' : 'transparent',
+                          borderColor: newSticky.color === c ? '#e7dfd3' : 'transparent',
                           transform: newSticky.color === c ? 'scale(1.2)' : 'scale(1)',
                         }}
                       />
                     ))}
                     <div className="flex-1" />
                     <button onClick={handleAddSticky}
-                            className="text-[10px] text-[#4ecdc4] hover:underline">save</button>
+                            className="text-[10px] text-[#6bc5e8] hover:underline">save</button>
                     <button onClick={() => setShowAddSticky(false)}
                             className="text-[10px] text-[#8d8188] hover:underline">cancel</button>
                   </div>
@@ -339,7 +339,7 @@ export default function HomePage({ onNavigate }: Props) {
                   <span className="text-[#8d8188] shrink-0">
                     {new Date(act.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <span className="text-[#4ecdc4] shrink-0">{act.agent_name}</span>
+                  <span className="text-[#6bc5e8] shrink-0">{act.agent_name}</span>
                   <span className="text-[#c8bfb3] truncate">{act.content}</span>
                 </div>
               ))}
@@ -385,11 +385,11 @@ function BookmarkChip({ bookmark, onDelete, onNavigate }: {
         <span className="text-[12px] shrink-0">
           {bookmark.linked_file ? '📄' : '🔗'}
         </span>
-        <span className="text-[12px] text-[#e8e6f0] font-bold truncate flex-1">
+        <span className="text-[12px] text-[#e7dfd3] font-bold truncate flex-1">
           {bookmark.title}
         </span>
         {(bookmark.linked_url || bookmark.linked_file) && (
-          <span className="text-[10px] text-[#4a4a60] truncate max-w-[200px] hidden sm:inline">
+          <span className="text-[10px] text-[#4a4048] truncate max-w-[200px] hidden sm:inline">
             {bookmark.linked_url || bookmark.linked_file}
           </span>
         )}
@@ -415,11 +415,11 @@ function LeaderCard({ leader, subordinates, tasksByAgent }: {
   const isOps = leader.role === 'ops'
 
   return (
-    <div className="border border-white/[0.08] rounded bg-[#191619] shadow-[4px_5px_0_rgba(0,0,0,0.9)]">
+    <div className="border-[3px] border-black bg-[#191619] shadow-[4px_5px_0_rgba(0,0,0,0.9)]">
       {/* Header */}
-      <div className="border-b border-white/[0.08] bg-[#1e1a20] px-4 py-3 flex items-center justify-between">
+      <div className="border-b-[3px] border-black bg-[#1e1a20] px-4 py-3 flex items-center justify-between">
         <div>
-          <div className="text-[14px] text-[#e8e6f0] font-bold">{leader.name}</div>
+          <div className="text-[14px] text-[#e7dfd3] font-bold">{leader.name}</div>
           <div className="text-[10px] text-[#8d8188] uppercase tracking-wider">
             {ROLE_LABELS[leader.role] ?? leader.role}
           </div>
@@ -459,7 +459,7 @@ function LeaderCard({ leader, subordinates, tasksByAgent }: {
               return (
                 <div key={sub.id} className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: sc }} />
-                  <span className="text-[11px] text-[#e8e6f0] shrink-0">{sub.name}</span>
+                  <span className="text-[11px] text-[#e7dfd3] shrink-0">{sub.name}</span>
                   <span className="text-[10px] text-[#8d8188] truncate">
                     {subTasks[0]?.title ?? sub.status}
                   </span>
@@ -512,7 +512,7 @@ function StickyNote({ sticky, onDelete, onResize }: {
   }
 
   return (
-    <div className={`group relative w-full min-h-[40px] border border-white/[0.08] p-3
+    <div className={`group relative w-full min-h-[40px] border-[2px] border-black p-3
                     shadow-[3px_4px_0_rgba(0,0,0,0.8)] hover:shadow-[5px_6px_0_rgba(0,0,0,0.9)]
                     transition-all duration-150 hover:z-10 ${sizeClass}`}
          style={{
@@ -535,7 +535,7 @@ function StickyNote({ sticky, onDelete, onResize }: {
       <div className="absolute bottom-1 right-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onClick={cycleSize}
-          className="text-[10px] text-[#8d8188] hover:text-[#4ecdc4] uppercase"
+          className="text-[10px] text-[#8d8188] hover:text-[#6bc5e8] uppercase"
           title="Resize: S/M/L"
         >
           {size}
@@ -560,7 +560,7 @@ function TaskMini({ task }: { task: DashboardTask }) {
         {st.label}
       </span>
       <span className="text-[11px] text-[#c8bfb3] truncate">
-        {task.display_number && <span className="text-[#4ecdc4]">{task.display_number} </span>}
+        {task.display_number && <span className="text-[#6bc5e8]">{task.display_number} </span>}
         {task.title}
       </span>
     </div>

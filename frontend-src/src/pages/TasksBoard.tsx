@@ -8,7 +8,7 @@ import { useIsMobile } from '../lib/use-mobile'
 const columns = [
   { key: 'open',        label: 'Unassigned',  color: '#2a2622', textColor: '#9a8888' },
   { key: 'claimed',     label: 'Assigned',    color: '#2a1a35', textColor: '#b08cd9' },
-  { key: 'in_progress', label: 'In Progress', color: '#1a2535', textColor: '#4ecdc4' },
+  { key: 'in_progress', label: 'In Progress', color: '#1a2535', textColor: '#6bc5e8' },
   { key: 'reviewing',   label: 'In Review',   color: '#352515', textColor: '#f0b35e' },
   { key: 'completed',   label: 'Done',        color: '#1e2e26', textColor: '#7ecfa8' },
 ] as const
@@ -201,7 +201,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
 
   return (
     <div
-      className="h-full overflow-y-auto overflow-x-hidden bg-[#09090b] text-[#e8e6f0] px-3 py-3 md:p-5"
+      className="h-full overflow-y-auto overflow-x-hidden bg-[#0e0c10] text-[#e7dfd3] px-3 py-3 md:p-5"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -212,7 +212,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
       {/* Header */}
       <div className="mb-4 flex flex-col gap-3 md:mb-5 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
-          <div className="text-[11px] text-[#4ecdc4] uppercase tracking-widest mb-1">
+          <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-1">
             # {channels.find(ch => ch.id === channelId)?.name ?? 'channel'}
           </div>
           <div className="text-[22px] md:text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-1">task board</div>
@@ -224,7 +224,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
               setChannelId(e.target.value)
               if (!newChannelId) setNewChannelId(e.target.value)
             }}
-            className="rsl-control rsl-select min-w-0 bg-[#09090b] border border-white/[0.08] rounded text-[#9a8888] text-[11px] px-3 py-2 outline-none sm:min-w-[180px]"
+            className="rsl-control rsl-select min-w-0 bg-[#0e0c10] border-[3px] border-black text-[#9a8888] text-[11px] px-3 py-2 outline-none sm:min-w-[180px]"
           >
             {channels.map(ch => (
               <option key={ch.id} value={ch.id}>#{ch.name}</option>
@@ -232,7 +232,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
           </select>
           <button
             onClick={() => setShowNew(v => !v)}
-            className="border border-white/[0.08] rounded bg-[#c0392b] text-black text-[12px] uppercase px-4 py-2 hover:bg-[#e04050]"
+            className="border-[3px] border-black bg-[#c0392b] text-black text-[12px] uppercase px-4 py-2 hover:bg-[#e04050]"
             style={{ transform: 'rotate(0.2deg)' }}
           >
             + new task
@@ -243,7 +243,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
       {/* New task form */}
       {showNew && (
         <div
-          className="border border-white/[0.08] rounded bg-[#1e1a20] mb-4 p-3 md:mb-5 md:p-4 flex flex-col gap-3"
+          className="border-[3px] border-black bg-[#1e1a20] mb-4 p-3 md:mb-5 md:p-4 flex flex-col gap-3"
           style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.85)' }}
         >
           <input
@@ -256,27 +256,27 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
               if (e.key === 'Escape') setShowNew(false)
             }}
             placeholder="task title..."
-            className="bg-[#09090b] border border-white/[0.08] text-[#e8e6f0] text-[13px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4a60] w-full"
+            className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[13px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048] w-full"
           />
           <textarea
             value={todoSummary}
             onChange={e => setTodoSummary(e.target.value)}
             placeholder="todo summary / user request..."
             rows={3}
-            className="bg-[#09090b] border border-white/[0.08] text-[#e8e6f0] text-[12px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4a60] w-full resize-none"
+            className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[12px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048] w-full resize-none"
           />
           <textarea
             value={subtasksText}
             onChange={e => setSubtasksText(e.target.value)}
             placeholder={"subtasks, one per line...\nread code\nwrite plan\nprepare review summary"}
             rows={4}
-            className="bg-[#09090b] border border-white/[0.08] text-[#e8e6f0] text-[12px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4a60] w-full resize-none"
+            className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[12px] px-3 py-2 outline-none focus:border-[#c0392b] placeholder:text-[#4a4048] w-full resize-none"
           />
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto_auto] xl:items-center xl:gap-3">
             <select
               value={newChannelId}
               onChange={e => setNewChannelId(e.target.value)}
-              className="rsl-control rsl-select bg-[#09090b] border border-white/[0.08] text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
+              className="rsl-control rsl-select bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
             >
               {channels.map(ch => (
                 <option key={ch.id} value={ch.id}>#{ch.name}</option>
@@ -285,7 +285,7 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
             <select
               value={todoOwnerAgentId}
               onChange={e => setTodoOwnerAgentId(e.target.value)}
-              className="rsl-control rsl-select bg-[#09090b] border border-white/[0.08] text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
+              className="rsl-control rsl-select bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
             >
               {!agents.length && <option value="">no agents</option>}
               {agentOptions.map(option => (
@@ -296,30 +296,30 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
               value={todoCleanLevel}
               onChange={e => setTodoCleanLevel(e.target.value)}
               placeholder="agent memory clean level"
-              className="bg-[#09090b] border border-white/[0.08] text-[#e8e6f0] text-[11px] px-2 py-2 outline-none min-w-0"
+              className="bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[11px] px-2 py-2 outline-none min-w-0"
             />
             <input
               type="date"
               value={todoDueDate}
               onChange={e => setTodoDueDate(e.target.value)}
-              className="bg-[#09090b] border border-white/[0.08] text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
+              className="bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[11px] px-2 py-2 outline-none min-w-0"
               title="due date"
             />
             <button
               onClick={handleCreate}
               disabled={creating || !newTitle.trim() || !todoOwnerAgentId}
-              className="border border-white/[0.08] rounded bg-[#c0392b] text-black text-[12px] uppercase px-4 py-2 hover:bg-[#e04050] disabled:opacity-40"
+              className="border-[3px] border-black bg-[#c0392b] text-black text-[12px] uppercase px-4 py-2 hover:bg-[#e04050] disabled:opacity-40"
             >
               {creating ? '...' : 'intake'}
             </button>
             <button
               onClick={() => setShowNew(false)}
-              className="text-[#4a4a60] text-[12px] hover:text-[#9a8888] text-left xl:text-center"
+              className="text-[#4a4048] text-[12px] hover:text-[#9a8888] text-left xl:text-center"
             >
               cancel
             </button>
           </div>
-          <div className="text-[10px] text-[#4a4a60] leading-4">
+          <div className="text-[10px] text-[#4a4048] leading-4">
             推荐把 root task 先指给上级 agent，再由它沿汇报关系向下分派。subtasks 支持 `@AgentName task title`，例如 `@Akara fix daemon restart`.
           </div>
           {createError && (
@@ -332,17 +332,17 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
 
       {/* Mobile filter */}
       {isMobile && (
-        <div className="sticky top-0 z-10 -mx-3 mb-3 overflow-x-auto border-y-[3px] border-black bg-[#0f0f14] px-3 py-2 md:hidden">
+        <div className="sticky top-0 z-10 -mx-3 mb-3 overflow-x-auto border-y-[3px] border-black bg-[#110e12] px-3 py-2 md:hidden">
           <div className="flex gap-1 pb-1">
             <button
               onClick={() => setMobileFilter('all')}
-              className={`shrink-0 border border-white/[0.08] px-3 py-1.5 text-[11px] uppercase transition-colors ${
+              className={`shrink-0 border-[2px] border-black px-3 py-1.5 text-[11px] uppercase transition-colors ${
                 mobileFilter === 'all' ? 'border-b-[3px]' : 'opacity-60'
               }`}
               style={{
-                background: mobileFilter === 'all' ? '#1b1820' : '#09090b',
-                color: mobileFilter === 'all' ? '#e8e6f0' : '#9a8888',
-                borderBottomColor: mobileFilter === 'all' ? '#4ecdc4' : 'black',
+                background: mobileFilter === 'all' ? '#1b1820' : '#0e0c10',
+                color: mobileFilter === 'all' ? '#e7dfd3' : '#9a8888',
+                borderBottomColor: mobileFilter === 'all' ? '#6bc5e8' : 'black',
               }}
             >
               all ({tasks.length})
@@ -353,11 +353,11 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
                 <button
                   key={col.key}
                   onClick={() => setMobileFilter(col.key)}
-                  className={`shrink-0 border border-white/[0.08] px-3 py-1.5 text-[11px] uppercase transition-colors ${
+                  className={`shrink-0 border-[2px] border-black px-3 py-1.5 text-[11px] uppercase transition-colors ${
                     mobileFilter === col.key ? 'border-b-[3px]' : 'opacity-60'
                   }`}
                   style={{
-                    background: mobileFilter === col.key ? col.color : '#09090b',
+                    background: mobileFilter === col.key ? col.color : '#0e0c10',
                     color: col.textColor,
                     borderBottomColor: mobileFilter === col.key ? col.textColor : 'black',
                   }}
@@ -372,14 +372,14 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
 
       {isMobile ? (
         <div className="space-y-3">
-          <div className="flex items-center justify-between border border-white/[0.08] bg-[#17131a] px-3 py-2">
-            <div className="text-[11px] uppercase tracking-[0.12em] text-[#4ecdc4]">
+          <div className="flex items-center justify-between border-[2px] border-black bg-[#17131a] px-3 py-2">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-[#6bc5e8]">
               {mobileFilter === 'all' ? 'filtered tasks' : columns.find(col => col.key === mobileFilter)?.label ?? 'filtered tasks'}
             </div>
             <div className="text-[11px] text-[#9a8888]">{mobileTasks.length}</div>
           </div>
           {mobileTasks.length === 0 ? (
-            <div className="border border-white/[0.08] rounded bg-[#17131a] px-4 py-6 text-center text-[12px] text-[#4a4a60]">
+            <div className="border-[3px] border-black bg-[#17131a] px-4 py-6 text-center text-[12px] text-[#4a4048]">
               no tasks in this filter
             </div>
           ) : (
@@ -402,14 +402,14 @@ export default function TasksBoard({ onOpenDoc }: { onOpenDoc?: (docPath: string
             return (
               <div key={col.key} className="flex flex-col gap-3">
                 <div
-                  className="border border-white/[0.08] rounded px-4 py-2 flex items-center justify-between"
+                  className="border-[3px] border-black px-4 py-2 flex items-center justify-between"
                   style={{ background: col.color }}
                 >
                   <span className="text-[13px] uppercase" style={{ color: col.textColor }}>
                     {col.label}
                   </span>
                   <span
-                    className="border border-white/[0.08] text-[12px] px-2"
+                    className="border-[2px] border-black text-[12px] px-2"
                     style={{ background: col.color, color: col.textColor }}
                   >
                     {colTasks.length}
@@ -560,7 +560,7 @@ function TaskCard({
 
   return (
     <div
-      className="border border-white/[0.08] rounded bg-[#191619] transition-transform hover:rotate-0 relative"
+      className="border-[3px] border-black bg-[#191619] transition-transform hover:rotate-0 relative"
       style={{
         transform: isMobile ? 'none' : `rotate(${wobble.rotate}) translate(${wobble.tx}, ${wobble.ty})`,
         boxShadow: `${isMobile ? '2px 3px 0 rgba(0,0,0,0.85)' : wobble.shadow}, 0 0 10px rgba(50,120,220,0.10)`,
@@ -575,11 +575,11 @@ function TaskCard({
         />
       )}
       {/* Title bar */}
-      <div className="border-b border-white/[0.08] px-3 py-2 bg-[#1e1a20]">
+      <div className="border-b-[3px] border-black px-3 py-2 bg-[#1e1a20]">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-[10px] text-[#4a4a60] uppercase">#t{task.number}</span>
+          <span className="text-[10px] text-[#4a4048] uppercase">#t{task.number}</span>
           {task.parent_task_number && (
-            <span className="text-[9px] text-[#4ecdc4] bg-[#1a2535] border border-[#4ecdc4]/30 px-1.5 py-0">
+            <span className="text-[9px] text-[#6bc5e8] bg-[#1a2535] border border-[#6bc5e8]/30 px-1.5 py-0">
               ↑ #t{task.parent_task_number}
             </span>
           )}
@@ -589,14 +589,14 @@ function TaskCard({
             </span>
           )}
           {(task as any).subtask_count > 0 && (
-            <span className="text-[9px] text-[#4ecdc4] bg-[#0f1a18] border border-[#4ecdc4]/30 px-1.5 py-0">
+            <span className="text-[9px] text-[#3abfa0] bg-[#0f1a18] border border-[#3abfa0]/30 px-1.5 py-0">
               {(task as any).subtask_count} subtask{(task as any).subtask_count > 1 ? 's' : ''}
             </span>
           )}
         </div>
         <div className="text-[14px] leading-5">{task.title}</div>
         {task.estimated_minutes && (
-          <div className="text-[10px] text-[#4a4a60] mt-1">
+          <div className="text-[10px] text-[#4a4048] mt-1">
             ⏱ est. {task.estimated_minutes >= 60 ? `${Math.round(task.estimated_minutes / 60)}h` : `${task.estimated_minutes}m`}
             {task.started_at && (() => {
               const elapsed = Math.round((Date.now() - new Date(task.started_at).getTime()) / 60000)
@@ -610,7 +610,7 @@ function TaskCard({
             })()}
           </div>
         )}
-        <div className="text-[10px] text-[#4a4a60] mt-1 flex items-center gap-2 flex-wrap">
+        <div className="text-[10px] text-[#4a4048] mt-1 flex items-center gap-2 flex-wrap">
           <span>{new Date(task.created_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })} created</span>
           {task.due_date && (() => {
             const due = new Date(task.due_date)
@@ -630,32 +630,32 @@ function TaskCard({
 
       {/* Agent */}
       {task.claimed_by_name ? (
-        <div className="border-b border-white/[0.08] px-3 py-1 bg-[#0f0f14] flex items-center gap-2">
+        <div className="border-b-[3px] border-black px-3 py-1 bg-[#120f13] flex items-center gap-2">
           <span className="w-2 h-2 bg-[#c0392b] border border-black" />
-          <span className="text-[12px] text-[#4ecdc4]">
+          <span className="text-[12px] text-[#6bc5e8]">
             {task.claimed_by_type === 'agent' ? '@' : ''}
             {task.claimed_by_name}
           </span>
         </div>
       ) : (
-        <div className="border-b border-white/[0.08] px-3 py-1 bg-[#0f0f14]">
-          <span className="text-[12px] text-[#4a4a60]">needs assignment</span>
+        <div className="border-b-[3px] border-black px-3 py-1 bg-[#120f13]">
+          <span className="text-[12px] text-[#4a4048]">needs assignment</span>
         </div>
       )}
 
       {/* Linked docs — inline card chips */}
       {task.docs && task.docs.length > 0 && (
-        <div className="border-b border-white/[0.08] px-3 py-2 bg-[#160f14]">
-          <div className="text-[10px] text-[#4a4a60] uppercase mb-2">linked docs</div>
+        <div className="border-b-[3px] border-black px-3 py-2 bg-[#160f14]">
+          <div className="text-[10px] text-[#4a4048] uppercase mb-2">linked docs</div>
           <div className="flex flex-wrap gap-1.5">
             {task.docs.map((doc) => {
               const borderColor = doc.status === 'unread' ? '#4A90D9' : doc.status === 'writing' ? '#D4A017' : '#3a3535'
               return (
                 <div
                   key={doc.id}
-                  className="cursor-pointer group flex items-center gap-1.5 px-2 py-1 border border-white/[0.08] hover:border-[#f0b35e] transition-colors"
+                  className="cursor-pointer group flex items-center gap-1.5 px-2 py-1 border-[2px] border-black hover:border-[#f0b35e] transition-colors"
                   style={{
-                    background: '#0f0f14',
+                    background: '#120f13',
                     boxShadow: '1px 1px 0 rgba(0,0,0,0.4)',
                   }}
                   onClick={() => {
@@ -664,7 +664,7 @@ function TaskCard({
                   }}
                 >
                   <span className="w-1.5 h-1.5 shrink-0 border border-black" style={{ background: borderColor }} />
-                  <span className="text-[10px] text-[#8a8aa8] truncate max-w-[120px] group-hover:text-[#f0b35e]" title={doc.doc_path}>
+                  <span className="text-[10px] text-[#c8bdb8] truncate max-w-[120px] group-hover:text-[#f0b35e]" title={doc.doc_path}>
                     {doc.doc_path.split('/').pop()?.replace(/\.md$/, '')}
                   </span>
                 </div>
@@ -680,7 +680,7 @@ function TaskCard({
           {task.skills.map((skill) => (
             <span
               key={skill}
-              className="border border-white/[0.08] text-[10px] px-2 py-0.5 bg-[#0f1a18] text-[#4ecdc4]"
+              className="border-[2px] border-black text-[10px] px-2 py-0.5 bg-[#0f1a18] text-[#3abfa0]"
             >
               {skill}
             </span>
@@ -688,7 +688,7 @@ function TaskCard({
         </div>
       )}
 
-      <div className="border-t border-white/[0.08] px-3 py-2 bg-[#141018]">
+      <div className="border-t-[3px] border-black px-3 py-2 bg-[#141018]">
         <div className="mb-2 flex flex-wrap gap-2">
           {task.status === 'claimed' && task.claimed_by_type === 'human' && (
             <ActionButton label="start" busy={acting === 'start'} onClick={() => runAction('start')} />
@@ -724,18 +724,18 @@ function TaskCard({
 
         {/* Feedback form */}
         {showFeedbackForm && (
-          <div className="mb-2 border border-white/[0.08] bg-[#1a1520] p-2 space-y-2">
+          <div className="mb-2 border-[2px] border-black bg-[#1a1520] p-2 space-y-2">
             <div className="flex gap-2">
               {(['accept', 'reject', 'revise'] as const).map(v => (
                 <button
                   key={v}
                   onClick={() => setFeedbackVerdict(v)}
-                  className={`border border-white/[0.08] text-[10px] uppercase px-2 py-0.5 ${
+                  className={`border-[2px] border-black text-[10px] uppercase px-2 py-0.5 ${
                     feedbackVerdict === v
                       ? v === 'accept' ? 'bg-[#1e2e26] text-[#7ecfa8]'
                       : v === 'reject' ? 'bg-[#2a1116] text-[#f3b0b0]'
                       : 'bg-[#352515] text-[#f0b35e]'
-                      : 'bg-[#09090b] text-[#4a4a60]'
+                      : 'bg-[#0e0c10] text-[#4a4048]'
                   }`}
                 >
                   {v}
@@ -746,7 +746,7 @@ function TaskCard({
               <select
                 value={feedbackCategory}
                 onChange={e => setFeedbackCategory(e.target.value)}
-                className="rsl-control rsl-select w-full bg-[#09090b] border border-white/[0.08] text-[#9a8888] text-[10px] px-2 py-1 outline-none"
+                className="rsl-control rsl-select w-full bg-[#0e0c10] border-[2px] border-black text-[#9a8888] text-[10px] px-2 py-1 outline-none"
               >
                 <option value="">reason category (optional)</option>
                 <option value="skill_gap">skill_gap</option>
@@ -761,19 +761,19 @@ function TaskCard({
               value={feedbackText}
               onChange={e => setFeedbackText(e.target.value)}
               placeholder="reason / comment..."
-              className="w-full bg-[#09090b] border border-white/[0.08] text-[#e8e6f0] text-[10px] px-2 py-1 outline-none placeholder:text-[#4a4a60]"
+              className="w-full bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[10px] px-2 py-1 outline-none placeholder:text-[#4a4048]"
             />
             <div className="flex gap-2">
               <ActionButton label="submit" busy={acting === 'feedback'} onClick={submitFeedback} />
-              <button onClick={() => setShowFeedbackForm(false)} className="text-[10px] text-[#4a4a60] hover:text-[#9a8888] uppercase">cancel</button>
+              <button onClick={() => setShowFeedbackForm(false)} className="text-[10px] text-[#4a4048] hover:text-[#9a8888] uppercase">cancel</button>
             </div>
           </div>
         )}
 
         {/* Feedback history */}
         {showFeedbacks && feedbacks.length > 0 && (
-          <div className="mb-2 border border-white/[0.08] bg-[#130f16] p-2 space-y-1">
-            <div className="text-[10px] text-[#4a4a60] uppercase mb-1">feedback history</div>
+          <div className="mb-2 border-[2px] border-black bg-[#130f16] p-2 space-y-1">
+            <div className="text-[10px] text-[#4a4048] uppercase mb-1">feedback history</div>
             {feedbacks.map(fb => (
               <div key={fb.id} className="text-[10px] border-b border-[#1e1a20] pb-1">
                 <span className={
@@ -783,8 +783,8 @@ function TaskCard({
                 }>
                   {fb.verdict}
                 </span>
-                <span className="text-[#4a4a60]"> by {fb.reviewer_name}</span>
-                {fb.reason_category && <span className="text-[#4ecdc4]"> [{fb.reason_category}]</span>}
+                <span className="text-[#4a4048]"> by {fb.reviewer_name}</span>
+                {fb.reason_category && <span className="text-[#6bc5e8]"> [{fb.reason_category}]</span>}
                 {fb.reason_text && <div className="text-[#9a8888] mt-0.5">{fb.reason_text}</div>}
                 <div className="text-[#3a3438] text-[9px]">{new Date(fb.created_at).toLocaleString('zh-CN')}</div>
               </div>
@@ -792,7 +792,7 @@ function TaskCard({
           </div>
         )}
         {showFeedbacks && feedbacks.length === 0 && (
-          <div className="mb-2 text-[10px] text-[#4a4a60]">no feedback yet</div>
+          <div className="mb-2 text-[10px] text-[#4a4048]">no feedback yet</div>
         )}
 
         <button
@@ -800,14 +800,14 @@ function TaskCard({
             setShowDocForm(v => !v)
             setDocError(null)
           }}
-          className="w-full border border-white/[0.08] bg-[#1c1810] text-[#f0b35e] text-[10px] uppercase px-2 py-1 hover:bg-[#2a2416] transition-colors"
+          className="w-full border-[2px] border-black bg-[#1c1810] text-[#f0b35e] text-[10px] uppercase px-2 py-1 hover:bg-[#2a2416] transition-colors"
         >
           {showDocForm ? 'hide doc link' : '+ link doc'}
         </button>
         <button
           onClick={deleteTask}
           disabled={acting === 'delete'}
-          className="mt-2 w-full border border-white/[0.08] bg-[#2b1114] text-[#f3b0b0] text-[10px] uppercase px-2 py-1 hover:bg-[#3a171b] transition-colors disabled:opacity-40"
+          className="mt-2 w-full border-[2px] border-black bg-[#2b1114] text-[#f3b0b0] text-[10px] uppercase px-2 py-1 hover:bg-[#3a171b] transition-colors disabled:opacity-40"
         >
           {acting === 'delete' ? 'deleting...' : 'delete forever'}
         </button>
@@ -817,16 +817,16 @@ function TaskCard({
               value={docPath}
               onChange={e => setDocPath(e.target.value)}
               placeholder="todos/xxx/plan.md"
-              className="w-full bg-[#09090b] border border-white/[0.08] text-[#e8e6f0] text-[11px] px-2 py-1.5 outline-none focus:border-[#f0b35e] placeholder:text-[#4a4a60]"
+              className="w-full bg-[#0e0c10] border-[2px] border-black text-[#e7dfd3] text-[11px] px-2 py-1.5 outline-none focus:border-[#f0b35e] placeholder:text-[#4a4048]"
             />
-            <div className="text-[10px] text-[#4a4a60] leading-4">
+            <div className="text-[10px] text-[#4a4048] leading-4">
               link an existing vault path into this task
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={submitDoc}
                 disabled={linkingDoc || !docPath.trim()}
-                className="border border-white/[0.08] bg-[#d4a017] text-black text-[10px] uppercase px-3 py-1 hover:bg-[#e0b840] disabled:opacity-40"
+                className="border-[2px] border-black bg-[#d4a017] text-black text-[10px] uppercase px-3 py-1 hover:bg-[#e0b840] disabled:opacity-40"
               >
                 {linkingDoc ? '...' : 'link'}
               </button>
@@ -836,7 +836,7 @@ function TaskCard({
                   setDocPath('')
                   setDocError(null)
                 }}
-                className="text-[10px] text-[#4a4a60] hover:text-[#9a8888] uppercase"
+                className="text-[10px] text-[#4a4048] hover:text-[#9a8888] uppercase"
               >
                 cancel
               </button>
@@ -849,7 +849,7 @@ function TaskCard({
           </div>
         )}
         {task.review_feedback?.trim() && (
-          <div className="mt-2 border border-white/[0.08] bg-[#2a1116] px-2 py-2 text-[10px] text-[#f3c6bf]">
+          <div className="mt-2 border-[2px] border-black bg-[#2a1116] px-2 py-2 text-[10px] text-[#f3c6bf]">
             <div className="uppercase text-[#f0b35e] mb-1">
               rejected by {task.review_feedback_by_name ?? 'reviewer'}
               {task.review_feedback_at ? ` · ${new Date(task.review_feedback_at).toLocaleString('zh-CN')}` : ''}
@@ -882,7 +882,7 @@ function ActionButton({ label, busy, onClick }: { label: string; busy: boolean; 
     <button
       onClick={onClick}
       disabled={busy}
-      className="border border-white/[0.08] bg-[#201a26] text-[#e8e6f0] text-[10px] uppercase px-2 py-1 hover:bg-[#2a2232] disabled:opacity-40"
+      className="border-[2px] border-black bg-[#201a26] text-[#e7dfd3] text-[10px] uppercase px-2 py-1 hover:bg-[#2a2232] disabled:opacity-40"
     >
       {busy ? '...' : label}
     </button>

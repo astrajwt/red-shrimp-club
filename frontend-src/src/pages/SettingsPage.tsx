@@ -25,11 +25,11 @@ export function Section({ title, subtitle, children }: {
 }) {
   return (
     <div
-      className="border border-white/[0.08] rounded bg-[#191619] mb-5"
+      className="border-[3px] border-black bg-[#191619] mb-5"
       style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.85)' }}
     >
-      <div className="border-b border-white/[0.08] px-3 py-3 md:px-5 bg-[#1e1a20]">
-        <div className="text-[11px] text-[#4ecdc4] uppercase tracking-widest mb-0.5">{subtitle ?? 'config'}</div>
+      <div className="border-b-[3px] border-black px-3 py-3 md:px-5 bg-[#1e1a20]">
+        <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">{subtitle ?? 'config'}</div>
         <div className="text-[20px] leading-none">{title}</div>
       </div>
       <div className="px-3 py-4 md:px-5">{children}</div>
@@ -45,16 +45,16 @@ export function Field({
 }) {
   return (
     <div className="mb-4">
-      <div className="text-[11px] text-[#4ecdc4] uppercase tracking-[0.08em] mb-1">{label}</div>
+      <div className="text-[11px] text-[#6bc5e8] uppercase tracking-[0.08em] mb-1">{label}</div>
       <input
         type={type}
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full border border-white/[0.08] rounded bg-[#0f0f14] text-[#e8e6f0] text-[13px] px-3 py-2 outline-none placeholder-[#4a4a60] focus:border-[#c0392b]"
+        className="w-full border-[3px] border-black bg-[#120f13] text-[#e7dfd3] text-[13px] px-3 py-2 outline-none placeholder-[#4a4048] focus:border-[#c0392b]"
         style={mono ? { fontFamily: 'monospace' } : undefined}
       />
-      {hint && <div className="text-[11px] text-[#4a4a60] mt-1">{hint}</div>}
+      {hint && <div className="text-[11px] text-[#4a4048] mt-1">{hint}</div>}
     </div>
   )
 }
@@ -127,10 +127,10 @@ export function CronSection() {
     <Section title="cron jobs" subtitle="scheduler">
       {/* New job form */}
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-[12px] text-[#4a4a60]">{jobs.length} job{jobs.length !== 1 ? 's' : ''} scheduled</div>
+        <div className="text-[12px] text-[#4a4048]">{jobs.length} job{jobs.length !== 1 ? 's' : ''} scheduled</div>
         <button
           onClick={() => setShowNew(v => !v)}
-          className="border border-white/[0.08] rounded bg-[#1a2535] text-[#4ecdc4] px-4 py-2 text-[11px] uppercase hover:bg-[#243548] self-start sm:self-auto"
+          className="border-[3px] border-black bg-[#1a2535] text-[#6bc5e8] px-4 py-2 text-[11px] uppercase hover:bg-[#243548] self-start sm:self-auto"
         >
           {showNew ? '✕ cancel' : '+ new job'}
         </button>
@@ -138,16 +138,16 @@ export function CronSection() {
 
       {showNew && (
         <div
-          className="border border-white/[0.08] rounded bg-[#141018] p-4 mb-4 space-y-3"
+          className="border-[3px] border-black bg-[#141018] p-4 mb-4 space-y-3"
           style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.85)' }}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">agent *</div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">agent *</div>
               <select
                 value={form.agentId}
                 onChange={e => setForm(f => ({ ...f, agentId: e.target.value }))}
-                className="rsl-control rsl-select w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[12px] outline-none"
+                className="rsl-control rsl-select w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[12px] outline-none"
               >
                 <option value="">— select agent —</option>
                 {agents.map(a => (
@@ -156,7 +156,7 @@ export function CronSection() {
               </select>
             </div>
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">
                 cron expr *
                 <span className="ml-2 text-[10px] text-[#3a3535] normal-case">min hour day mon dow</span>
               </div>
@@ -164,9 +164,9 @@ export function CronSection() {
                 value={form.cronExpr}
                 onChange={e => setForm(f => ({ ...f, cronExpr: e.target.value }))}
                 placeholder="0 9 * * *"
-                className="w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[12px] outline-none font-mono"
+                className="w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[12px] outline-none font-mono"
               />
-              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-[#4a4a60]">
+              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-[#4a4048]">
                 <CronPreset label="9 AM daily"   expr="0 9 * * *"    onSet={e => setForm(f => ({ ...f, cronExpr: e }))} />
                 <CronPreset label="hourly"        expr="0 * * * *"    onSet={e => setForm(f => ({ ...f, cronExpr: e }))} />
                 <CronPreset label="Mon 9 AM"      expr="0 9 * * 1"   onSet={e => setForm(f => ({ ...f, cronExpr: e }))} />
@@ -176,24 +176,24 @@ export function CronSection() {
           </div>
 
           <div>
-            <div className="text-[11px] text-[#4a4a60] uppercase mb-1">prompt *</div>
+            <div className="text-[11px] text-[#4a4048] uppercase mb-1">prompt *</div>
             <textarea
               value={form.prompt}
               onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))}
               placeholder="What should the agent do when this fires?"
               rows={3}
-              className="w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[12px] outline-none placeholder-[#4a4a60] resize-none"
+              className="w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[12px] outline-none placeholder-[#4a4048] resize-none"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <div className="text-[11px] text-[#4a4a60] uppercase mb-1">model override <span className="text-[#3a3535] normal-case">(optional)</span></div>
+              <div className="text-[11px] text-[#4a4048] uppercase mb-1">model override <span className="text-[#3a3535] normal-case">(optional)</span></div>
               <input
                 value={form.modelOverride}
                 onChange={e => setForm(f => ({ ...f, modelOverride: e.target.value }))}
                 placeholder="claude-sonnet-4-6"
-                className="w-full border border-white/[0.08] rounded bg-[#09090b] text-[#e8e6f0] px-3 py-2 text-[12px] outline-none placeholder-[#4a4a60]"
+                className="w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[12px] outline-none placeholder-[#4a4048]"
               />
             </div>
           </div>
@@ -205,7 +205,7 @@ export function CronSection() {
           <button
             onClick={handleCreate}
             disabled={creating || !form.agentId || !form.cronExpr || !form.prompt.trim()}
-            className="border border-white/[0.08] rounded bg-[#c0392b] text-black px-5 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
+            className="border-[3px] border-black bg-[#c0392b] text-black px-5 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
           >
             {creating ? '...' : 'schedule →'}
           </button>
@@ -214,7 +214,7 @@ export function CronSection() {
 
       {/* Jobs list */}
           {jobs.length === 0 ? (
-        <div className="text-[12px] text-[#4a4a60] text-center py-6 border-[2px] border-dashed border-[#2a2228]">
+        <div className="text-[12px] text-[#4a4048] text-center py-6 border-[2px] border-dashed border-[#2a2228]">
           no cron jobs scheduled
         </div>
       ) : (
@@ -222,16 +222,16 @@ export function CronSection() {
           {jobs.map(job => (
             <div
               key={job.id}
-              className="border border-white/[0.08] rounded bg-[#141018] flex items-stretch gap-0"
+              className="border-[3px] border-black bg-[#141018] flex items-stretch gap-0"
             >
               {/* Enable toggle */}
               <button
                 onClick={() => toggleJob(job)}
                 disabled={toggling === job.id}
-                className="border-r border-white/[0.08] px-3 py-3 md:px-4 text-[13px] hover:bg-[#1e1a20] disabled:opacity-40 shrink-0 self-stretch flex items-center"
+                className="border-r-[3px] border-black px-3 py-3 md:px-4 text-[13px] hover:bg-[#1e1a20] disabled:opacity-40 shrink-0 self-stretch flex items-center"
                 title={job.enabled ? 'disable' : 'enable'}
               >
-                <span style={{ color: job.enabled ? '#4ecdc4' : '#3a3535' }}>
+                <span style={{ color: job.enabled ? '#3abfa0' : '#3a3535' }}>
                   {toggling === job.id ? '…' : job.enabled ? '●' : '○'}
                 </span>
               </button>
@@ -239,12 +239,12 @@ export function CronSection() {
               {/* Content */}
               <div className="flex-1 min-w-0 px-3 py-3 md:px-4">
                 <div className="mb-1.5 flex flex-wrap items-center gap-2 md:gap-3">
-                  <span className="text-[12px] font-mono text-[#4ecdc4] bg-[#0e1520] border border-[#1e3d55] px-2 py-0.5">
+                  <span className="text-[12px] font-mono text-[#6bc5e8] bg-[#0e1520] border border-[#1e3d55] px-2 py-0.5">
                     {job.cron_expr}
                   </span>
                   <span className="text-[12px] text-[#c0392b]">{job.agent_name}</span>
                   {job.model_override && (
-                    <span className="text-[10px] text-[#4a4a60] border border-[#2a2228] px-1.5 py-0.5">
+                    <span className="text-[10px] text-[#4a4048] border border-[#2a2228] px-1.5 py-0.5">
                       {job.model_override}
                     </span>
                   )}
@@ -252,10 +252,10 @@ export function CronSection() {
                     <span className="text-[10px] text-[#6a3535] uppercase">disabled</span>
                   )}
                 </div>
-                <div className="text-[13px] text-[#8a8aa8] leading-5 line-clamp-2">
+                <div className="text-[13px] text-[#c8bdb8] leading-5 line-clamp-2">
                   {job.prompt}
                 </div>
-                <div className="text-[10px] text-[#4a4a60] mt-1">
+                <div className="text-[10px] text-[#4a4048] mt-1">
                   created {new Date(job.created_at).toLocaleString('zh-CN')}
                 </div>
               </div>
@@ -264,7 +264,7 @@ export function CronSection() {
               <button
                 onClick={() => deleteJob(job.id)}
                 disabled={deleting === job.id}
-                className="border-l border-white/[0.08] px-2.5 py-3 md:px-3 text-[#4a4a60] hover:text-[#c0392b] hover:bg-[#3a1520] disabled:opacity-40 transition-colors shrink-0 self-stretch flex items-center"
+                className="border-l-[3px] border-black px-2.5 py-3 md:px-3 text-[#4a4048] hover:text-[#c0392b] hover:bg-[#3a1520] disabled:opacity-40 transition-colors shrink-0 self-stretch flex items-center"
                 title="delete"
               >
                 {deleting === job.id ? '…' : '✕'}
@@ -282,7 +282,7 @@ function CronPreset({ label, expr, onSet }: { label: string; expr: string; onSet
     <button
       type="button"
       onClick={() => onSet(expr)}
-      className="text-[10px] text-[#4a4a60] hover:text-[#4ecdc4] underline"
+      className="text-[10px] text-[#4a4048] hover:text-[#6bc5e8] underline"
     >
       {label}
     </button>
@@ -343,21 +343,21 @@ export function RecipeSection({
 
   const content = (
     <div className="space-y-5">
-      <div className="text-[12px] text-[#4a4a60] leading-5">
+      <div className="text-[12px] text-[#4a4048] leading-5">
         Skills stay shared across agents. This page only keeps the current skills visible and one import flow for bringing more in.
       </div>
 
-      <div className="border border-white/[0.08] rounded bg-[#141018]">
-        <div className="border-b border-white/[0.08] px-4 py-2 flex items-center justify-between gap-3">
-          <div className="text-[11px] uppercase tracking-widest text-[#4ecdc4]">current skills</div>
-          <div className="text-[10px] text-[#4a4a60]">
+      <div className="border-[3px] border-black bg-[#141018]">
+        <div className="border-b-[3px] border-black px-4 py-2 flex items-center justify-between gap-3">
+          <div className="text-[11px] uppercase tracking-widest text-[#6bc5e8]">current skills</div>
+          <div className="text-[10px] text-[#4a4048]">
             {loading ? 'loading...' : `${registry?.skills.length ?? 0} installed`} · shared across agents
           </div>
         </div>
         <div className="p-3 space-y-3 min-h-[180px]">
-          {loading && <div className="text-[12px] text-[#4a4a60]">loading skills...</div>}
+          {loading && <div className="text-[12px] text-[#4a4048]">loading skills...</div>}
           {!loading && registry && registry.skills.length === 0 && (
-            <div className="text-[12px] text-[#4a4a60]">no shared skills yet. import one below.</div>
+            <div className="text-[12px] text-[#4a4048]">no shared skills yet. import one below.</div>
           )}
           {registry?.skills.map(skill => (
             <SkillCard key={`${skill.sourceName}:${skill.name}`} skill={skill} />
@@ -366,11 +366,11 @@ export function RecipeSection({
       </div>
 
       <div
-        className="border border-white/[0.08] rounded bg-[#141018] p-4"
+        className="border-[3px] border-black bg-[#141018] p-4"
         style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.85)' }}
       >
-        <div className="text-[11px] uppercase tracking-widest text-[#4ecdc4] mb-3">import skill</div>
-        <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-2 text-[11px] mb-3 text-[#4ecdc4]">
+        <div className="text-[11px] uppercase tracking-widest text-[#6bc5e8] mb-3">import skill</div>
+        <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-2 text-[11px] mb-3 text-[#6bc5e8]">
           from local vault (OBSIDIAN_ROOT)
         </div>
         <Field
@@ -387,13 +387,13 @@ export function RecipeSection({
         )}
 
         {message && (
-          <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-1.5 text-[11px] text-[#4ecdc4] mb-3">{message}</div>
+          <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-1.5 text-[11px] text-[#6bc5e8] mb-3">{message}</div>
         )}
 
         <button
           onClick={handleImport}
           disabled={importing || !form.valuePath.trim()}
-          className="border border-white/[0.08] rounded bg-[#c0392b] text-black px-5 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
+          className="border-[3px] border-black bg-[#c0392b] text-black px-5 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
         >
           {importing ? 'syncing...' : 'import skill'}
         </button>
@@ -413,15 +413,15 @@ export function RecipeSection({
 function SkillCard({ skill }: { skill: SharedSkillRegistryItem }) {
   return (
     <div className="border-[2px] border-[#2a2228] bg-[#100d12] px-3 py-2">
-      <div className="text-[12px] text-[#e8e6f0] mb-1">{skill.name}</div>
+      <div className="text-[12px] text-[#e7dfd3] mb-1">{skill.name}</div>
       {skill.description && (
-        <div className="text-[11px] text-[#8a8aa8] leading-5 mb-2">{skill.description}</div>
+        <div className="text-[11px] text-[#c8bdb8] leading-5 mb-2">{skill.description}</div>
       )}
       <div className="flex flex-wrap gap-2 mb-2">
         {skill.runtimes.map(runtime => (
           <span
             key={runtime}
-            className="border border-[#1e3d55] bg-[#0e1520] px-2 py-0.5 text-[10px] uppercase text-[#4ecdc4]"
+            className="border border-[#1e3d55] bg-[#0e1520] px-2 py-0.5 text-[10px] uppercase text-[#6bc5e8]"
           >
             {runtime}
           </span>
@@ -503,7 +503,7 @@ export function VaultSection() {
   return (
     <Section title="vault" subtitle="workspace paths">
       <div className="space-y-4">
-        {loading && <div className="text-[12px] text-[#4a4a60]">loading...</div>}
+        {loading && <div className="text-[12px] text-[#4a4048]">loading...</div>}
         {!loading && (
           <>
             <Field
@@ -527,22 +527,22 @@ export function VaultSection() {
               <button
                 onClick={handleLoadDirs}
                 disabled={!obsidianRoot.trim() || saving || loadingDirs}
-                className="border border-white/[0.08] rounded bg-[#1a2535] text-[#4ecdc4] px-4 py-1.5 text-[11px] uppercase hover:bg-[#243548] disabled:opacity-40"
+                className="border-[3px] border-black bg-[#1a2535] text-[#6bc5e8] px-4 py-1.5 text-[11px] uppercase hover:bg-[#243548] disabled:opacity-40"
               >
                 {loadingDirs ? '...' : '加载 vault 目录'}
               </button>
               {vaultDirs.length > 0 && (
-                <span className="text-[11px] text-[#4ecdc4]">✓ {vaultDirs.length} 个目录</span>
+                <span className="text-[11px] text-[#3abfa0]">✓ {vaultDirs.length} 个目录</span>
               )}
             </div>
 
             <div className="mb-4">
-              <div className="text-[11px] text-[#4ecdc4] uppercase tracking-[0.08em] mb-1">skill path</div>
+              <div className="text-[11px] text-[#6bc5e8] uppercase tracking-[0.08em] mb-1">skill path</div>
               {vaultDirs.length > 0 ? (
                 <select
                   value={skillPath}
                   onChange={e => setSkillPath(e.target.value)}
-                  className="w-full border border-white/[0.08] rounded bg-[#0f0f14] text-[#e8e6f0] text-[13px] px-3 py-2 outline-none"
+                  className="w-full border-[3px] border-black bg-[#120f13] text-[#e7dfd3] text-[13px] px-3 py-2 outline-none"
                 >
                   <option value="">— 不设置 —</option>
                   {vaultDirs.map(d => (
@@ -555,7 +555,7 @@ export function VaultSection() {
                   value={skillPath}
                   onChange={e => setSkillPath(e.target.value)}
                   placeholder="skills"
-                  className="w-full border border-white/[0.08] rounded bg-[#0f0f14] text-[#e8e6f0] text-[13px] px-3 py-2 outline-none placeholder-[#4a4a60] focus:border-[#c0392b] font-mono"
+                  className="w-full border-[3px] border-black bg-[#120f13] text-[#e7dfd3] text-[13px] px-3 py-2 outline-none placeholder-[#4a4048] focus:border-[#c0392b] font-mono"
                 />
               )}
               {skillPath === '__custom__' && (
@@ -564,19 +564,19 @@ export function VaultSection() {
                   value=""
                   placeholder="skills/my-skill"
                   autoFocus
-                  className="w-full border border-white/[0.08] rounded bg-[#0f0f14] text-[#e8e6f0] text-[13px] px-3 py-2 outline-none placeholder-[#4a4a60] focus:border-[#c0392b] font-mono mt-1"
+                  className="w-full border-[3px] border-black bg-[#120f13] text-[#e7dfd3] text-[13px] px-3 py-2 outline-none placeholder-[#4a4048] focus:border-[#c0392b] font-mono mt-1"
                 />
               )}
-              <div className="text-[11px] text-[#4a4a60] mt-1">vault 内 skill 存放路径</div>
+              <div className="text-[11px] text-[#4a4048] mt-1">vault 内 skill 存放路径</div>
             </div>
 
             <div className="mb-4">
-              <div className="text-[11px] text-[#4ecdc4] uppercase tracking-[0.08em] mb-1">memory path</div>
+              <div className="text-[11px] text-[#6bc5e8] uppercase tracking-[0.08em] mb-1">memory path</div>
               {vaultDirs.length > 0 ? (
                 <select
                   value={memoryPath}
                   onChange={e => setMemoryPath(e.target.value)}
-                  className="w-full border border-white/[0.08] rounded bg-[#0f0f14] text-[#e8e6f0] text-[13px] px-3 py-2 outline-none"
+                  className="w-full border-[3px] border-black bg-[#120f13] text-[#e7dfd3] text-[13px] px-3 py-2 outline-none"
                 >
                   <option value="">— 不设置 —</option>
                   {vaultDirs.map(d => (
@@ -589,7 +589,7 @@ export function VaultSection() {
                   value={memoryPath}
                   onChange={e => setMemoryPath(e.target.value)}
                   placeholder="memory"
-                  className="w-full border border-white/[0.08] rounded bg-[#0f0f14] text-[#e8e6f0] text-[13px] px-3 py-2 outline-none placeholder-[#4a4a60] focus:border-[#c0392b] font-mono"
+                  className="w-full border-[3px] border-black bg-[#120f13] text-[#e7dfd3] text-[13px] px-3 py-2 outline-none placeholder-[#4a4048] focus:border-[#c0392b] font-mono"
                 />
               )}
               {memoryPath === '__custom__' && (
@@ -598,23 +598,23 @@ export function VaultSection() {
                   value=""
                   placeholder="memory"
                   autoFocus
-                  className="w-full border border-white/[0.08] rounded bg-[#0f0f14] text-[#e8e6f0] text-[13px] px-3 py-2 outline-none placeholder-[#4a4a60] focus:border-[#c0392b] font-mono mt-1"
+                  className="w-full border-[3px] border-black bg-[#120f13] text-[#e7dfd3] text-[13px] px-3 py-2 outline-none placeholder-[#4a4048] focus:border-[#c0392b] font-mono mt-1"
                 />
               )}
-              <div className="text-[11px] text-[#4a4a60] mt-1">vault 内 memory 存放路径</div>
+              <div className="text-[11px] text-[#4a4048] mt-1">vault 内 memory 存放路径</div>
             </div>
 
             {error && (
               <div className="border-[2px] border-[#c0392b] px-3 py-1.5 text-[11px] text-[#e04050]">✕ {error}</div>
             )}
             {message && (
-              <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-1.5 text-[11px] text-[#4ecdc4]">{message}</div>
+              <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-1.5 text-[11px] text-[#6bc5e8]">{message}</div>
             )}
 
             <button
               onClick={handleSave}
               disabled={saving}
-              className="border border-white/[0.08] rounded bg-[#c0392b] text-black px-5 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
+              className="border-[3px] border-black bg-[#c0392b] text-black px-5 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
             >
               {saving ? 'saving...' : 'save vault config'}
             </button>
@@ -740,12 +740,12 @@ function FeishuSection() {
   return (
     <Section title="feishu relay" subtitle="akara bridge">
       <div className="space-y-5">
-        <div className="text-[12px] text-[#4a4a60] leading-5">
+        <div className="text-[12px] text-[#4a4048] leading-5">
           Bind a Feishu bot to Akara so Feishu text messages can be forwarded into your Akara DM, and Akara replies can be pushed back out to the same Feishu chat.
         </div>
 
-        <div className="border border-white/[0.08] rounded bg-[#141018] p-4">
-          <div className="text-[11px] uppercase tracking-widest text-[#4ecdc4] mb-3">bot config</div>
+        <div className="border-[3px] border-black bg-[#141018] p-4">
+          <div className="text-[11px] uppercase tracking-widest text-[#6bc5e8] mb-3">bot config</div>
 
           <Field
             label="feishu app id"
@@ -782,13 +782,13 @@ function FeishuSection() {
           />
 
           <div className="grid grid-cols-3 gap-3 mb-3 text-[11px]">
-            <div className={`border px-3 py-2 ${appId.trim() ? 'border-[#1e3d55] bg-[#0e1520] text-[#4ecdc4]' : 'border-[#2a2228] text-[#4a4a60]'}`}>
+            <div className={`border px-3 py-2 ${appId.trim() ? 'border-[#1e3d55] bg-[#0e1520] text-[#6bc5e8]' : 'border-[#2a2228] text-[#4a4048]'}`}>
               app id {appId.trim() ? 'ready' : 'missing'}
             </div>
-            <div className={`border px-3 py-2 ${secretSet ? 'border-[#1e3d55] bg-[#0e1520] text-[#4ecdc4]' : 'border-[#2a2228] text-[#4a4a60]'}`}>
+            <div className={`border px-3 py-2 ${secretSet ? 'border-[#1e3d55] bg-[#0e1520] text-[#6bc5e8]' : 'border-[#2a2228] text-[#4a4048]'}`}>
               secret {secretSet ? 'stored' : 'missing'}
             </div>
-            <div className={`border px-3 py-2 ${tokenSet ? 'border-[#1e3d55] bg-[#0e1520] text-[#4ecdc4]' : 'border-[#2a2228] text-[#4a4a60]'}`}>
+            <div className={`border px-3 py-2 ${tokenSet ? 'border-[#1e3d55] bg-[#0e1520] text-[#6bc5e8]' : 'border-[#2a2228] text-[#4a4048]'}`}>
               token {tokenSet ? 'stored' : 'optional'}
             </div>
           </div>
@@ -797,20 +797,20 @@ function FeishuSection() {
             type="button"
             onClick={saveConfig}
             disabled={savingConfig}
-            className="border border-white/[0.08] rounded bg-[#c0392b] text-black px-4 py-2 text-[11px] uppercase hover:bg-[#e04050] disabled:opacity-40"
+            className="border-[3px] border-black bg-[#c0392b] text-black px-4 py-2 text-[11px] uppercase hover:bg-[#e04050] disabled:opacity-40"
           >
             {savingConfig ? 'saving...' : 'save bot config'}
           </button>
         </div>
 
-        <div className="border border-white/[0.08] rounded bg-[#141018] p-4">
-          <div className="text-[11px] uppercase tracking-widest text-[#4ecdc4] mb-3">relay binding</div>
+        <div className="border-[3px] border-black bg-[#141018] p-4">
+          <div className="text-[11px] uppercase tracking-widest text-[#6bc5e8] mb-3">relay binding</div>
 
-          <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-2 text-[11px] text-[#4ecdc4] mb-3 break-all">
+          <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-2 text-[11px] text-[#6bc5e8] mb-3 break-all">
             webhook: {webhookUrl}
           </div>
 
-          <div className="text-[12px] text-[#8a8aa8] leading-5 mb-3">
+          <div className="text-[12px] text-[#c8bdb8] leading-5 mb-3">
             1. 在 Feishu 应用里订阅 `im.message.receive_v1`
             <br />
             2. 把上面的 webhook 填进去
@@ -823,9 +823,9 @@ function FeishuSection() {
           <div className={`border-[2px] px-3 py-2 text-[11px] mb-3 ${
             relay?.enabled
               ? relay.feishu_open_id || relay.feishu_chat_id
-                ? 'border-[#1e3d55] bg-[#0e1520] text-[#4ecdc4]'
+                ? 'border-[#1e3d55] bg-[#0e1520] text-[#6bc5e8]'
                 : 'border-[#8c6b1f] bg-[#201807] text-[#e8c56b]'
-              : 'border-[#2a2228] text-[#4a4a60]'
+              : 'border-[#2a2228] text-[#4a4048]'
           }`}>
             {!relay && 'relay not enabled yet'}
             {relay?.enabled && !(relay.feishu_open_id || relay.feishu_chat_id) && `relay enabled for ${relay.agent_name}, waiting for first Feishu text to bind this chat`}
@@ -838,7 +838,7 @@ function FeishuSection() {
           )}
 
           {message && (
-            <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-1.5 text-[11px] text-[#4ecdc4] mb-3">{message}</div>
+            <div className="border-[2px] border-[#1e3d55] bg-[#0e1520] px-3 py-1.5 text-[11px] text-[#6bc5e8] mb-3">{message}</div>
           )}
 
           <div className="flex flex-wrap gap-2">
@@ -846,7 +846,7 @@ function FeishuSection() {
               type="button"
               onClick={() => saveRelay(false, true)}
               disabled={!configured || loading || savingRelay}
-              className="border border-white/[0.08] rounded bg-[#1a2535] text-[#4ecdc4] px-4 py-2 text-[11px] uppercase hover:bg-[#243548] disabled:opacity-40"
+              className="border-[3px] border-black bg-[#1a2535] text-[#6bc5e8] px-4 py-2 text-[11px] uppercase hover:bg-[#243548] disabled:opacity-40"
             >
               {savingRelay ? 'saving...' : `bind to ${relay?.agent_name ?? 'Akara'}`}
             </button>
@@ -854,7 +854,7 @@ function FeishuSection() {
               type="button"
               onClick={() => saveRelay(true, true)}
               disabled={!configured || loading || savingRelay}
-              className="border border-white/[0.08] rounded bg-[#3a2a12] text-[#e8c56b] px-4 py-2 text-[11px] uppercase hover:bg-[#4a3515] disabled:opacity-40"
+              className="border-[3px] border-black bg-[#3a2a12] text-[#e8c56b] px-4 py-2 text-[11px] uppercase hover:bg-[#4a3515] disabled:opacity-40"
             >
               reset binding
             </button>
@@ -862,7 +862,7 @@ function FeishuSection() {
               type="button"
               onClick={sendTest}
               disabled={!relay?.enabled || !(relay.feishu_open_id || relay.feishu_chat_id) || testing}
-              className="border border-white/[0.08] rounded bg-[#153a20] text-[#7ce4a1] px-4 py-2 text-[11px] uppercase hover:bg-[#1b4a29] disabled:opacity-40"
+              className="border-[3px] border-black bg-[#153a20] text-[#7ce4a1] px-4 py-2 text-[11px] uppercase hover:bg-[#1b4a29] disabled:opacity-40"
             >
               {testing ? 'sending...' : 'send test'}
             </button>
@@ -913,7 +913,7 @@ function NotificationSection() {
   return (
     <section className="mb-8 border-[3px] border-[#1e1c22] bg-[#12101a]" style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.8)' }}>
       <div className="border-b-[3px] border-[#1e1c22] px-5 py-3">
-        <div className="text-[11px] text-[#4ecdc4] uppercase tracking-widest mb-0.5">push notifications</div>
+        <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">push notifications</div>
         <div className="text-[18px]">通知设置</div>
       </div>
       <div className="px-5 py-4 space-y-3">
@@ -922,7 +922,7 @@ function NotificationSection() {
         </div>
         <div className="flex items-center gap-3">
           <div className="text-[12px]">
-            状态：<span className={pushEnabled ? 'text-[#4ecdc4]' : 'text-[#6a6070]'}>
+            状态：<span className={pushEnabled ? 'text-[#3abfa0]' : 'text-[#6a6070]'}>
               {pushEnabled === null ? '检测中...' : pushEnabled ? '已开启' : '未开启'}
             </span>
           </div>
@@ -930,7 +930,7 @@ function NotificationSection() {
             <button
               onClick={handleDisable}
               disabled={loading}
-              className="border-[2px] border-[#3a3040] bg-[#09090b] text-[#8a7090] px-4 py-1.5 text-[11px] uppercase hover:border-[#c0392b] hover:text-[#e04050] disabled:opacity-40"
+              className="border-[2px] border-[#3a3040] bg-[#0e0c10] text-[#8a7090] px-4 py-1.5 text-[11px] uppercase hover:border-[#c0392b] hover:text-[#e04050] disabled:opacity-40"
             >
               {loading ? '...' : '关闭通知'}
             </button>
@@ -944,7 +944,7 @@ function NotificationSection() {
             </button>
           )}
         </div>
-        {msg && <div className={`text-[11px] ${msg.startsWith('✓') ? 'text-[#4ecdc4]' : 'text-[#c0392b]'}`}>{msg}</div>}
+        {msg && <div className={`text-[11px] ${msg.startsWith('✓') ? 'text-[#3abfa0]' : 'text-[#c0392b]'}`}>{msg}</div>}
       </div>
     </section>
   )
@@ -961,7 +961,7 @@ export default function SettingsPage() {
 
   return (
     <div
-      className="h-full overflow-auto bg-[#09090b] text-[#e8e6f0] px-6 py-5"
+      className="h-full overflow-auto bg-[#0e0c10] text-[#e7dfd3] px-6 py-5"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -972,7 +972,7 @@ export default function SettingsPage() {
       <div className="max-w-[900px] mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <div className="text-[11px] text-[#4ecdc4] uppercase tracking-widest mb-1">configuration</div>
+          <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-1">configuration</div>
           <div className="text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-2">settings</div>
         </div>
 
