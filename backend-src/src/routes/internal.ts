@@ -426,10 +426,52 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
+  // ── GET /internal/agent/:agentId/human-messages ──────────────────
+  // Returns all human-sent messages across server channels for a given date (UTC+8).
+  // Used by Akara for daily report summarization.
+  app.get('/:agentId/human-messages', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { date } = req.query as { date?: string }
+
+    // Resolve target date (UTC+8); fall back to today
+    let targetDate = date?.trim()
+    if (!targetDate || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      targetDate = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)
+    }
+
+    // Verify the agent exists and get its server_id
+    const agentRow = await queryOne<{ server_id: string }>(
+      `SELECT server_id FROM agents WHERE id = $1`,
+      [agentId]
+    )
+    if (!agentRow) return reply.code(404).send({ error: 'Agent not found' })
+
+    const messages = await query<{
+      channelName: string
+      channelType: string
+      senderName: string
+      content: string
+      createdAt: string
+    }>(
+      `SELECT c.name AS "channelName", c.channel_type AS "channelType",
+              m.sender_name AS "senderName", m.content,
+              m.created_at AS "createdAt"
+       FROM messages m
+       JOIN channels c ON c.id = m.channel_id
+       WHERE c.server_id = $1
+         AND m.sender_type = 'human'
+         AND (m.created_at AT TIME ZONE 'Asia/Shanghai')::date = $2::date
+       ORDER BY m.created_at`,
+      [agentRow.server_id, targetDate]
+    )
+
+    return { date: targetDate, messages }
+  })
+
   // ── GET /internal/agent/:agentId/tasks ──────────────────────────
   app.get('/:agentId/tasks', async (req, reply) => {
     const { agentId } = req.params as { agentId: string }
-    const { channel, status } = req.query as { channel?: string; status?: string }
+    const { channel, status, mine } = req.query as { channel?: string; status?: string; mine?: string }
 
     if (!channel) return reply.code(400).send({ error: 'channel required' })
 
@@ -448,17 +490,23 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
                WHERE t.channel_id = $1`
     const params: unknown[] = [ch.id]
 
+    // mine=true: only show tasks assigned to this agent (default behavior for work queue)
+    if (mine === 'true' || mine === '1') {
+      sql += ` AND t.claimed_by_id = $${params.length + 1}`
+      params.push(agentId)
+    }
+
     if (status && status !== 'all') {
       if (status === 'todo') {
         sql += ` AND t.status IN ('open', 'claimed')`
       } else if (status === 'in_review') {
-        sql += ` AND t.status = $2`
+        sql += ` AND t.status = $${params.length + 1}`
         params.push('reviewing')
       } else if (status === 'done') {
-        sql += ` AND t.status = $2`
+        sql += ` AND t.status = $${params.length + 1}`
         params.push('completed')
       } else {
-        sql += ` AND t.status = $2`
+        sql += ` AND t.status = $${params.length + 1}`
         params.push(status)
       }
     }

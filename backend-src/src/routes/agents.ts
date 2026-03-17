@@ -215,6 +215,12 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     await query(`UPDATE agents SET status = 'offline', activity = NULL WHERE id = $1`, [agentId])
   }
 
+  const resolveMachineName = async (machineId: string | null): Promise<string | undefined> => {
+    if (!machineId) return process.env.MACHINE_NAME?.trim() || undefined
+    const row = await queryOne<{ name: string }>('SELECT name FROM machines WHERE id = $1', [machineId])
+    return row?.name || process.env.MACHINE_NAME?.trim() || undefined
+  }
+
   const startAgentInstance = async (agent: AgentControlRow, serverUrl: string, forceRestart = false) => {
     const connectedMachines = machineConnectionManager.getAll()
     let targetMachineId: string | undefined
@@ -255,6 +261,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
           id:            agent.id,
           name:          agent.name,
           machineId:     agent.machine_id ?? 'local',
+          machineName:   await resolveMachineName(agent.machine_id),
           serverUrl,
           apiKey,
           workspacePath: agent.workspace_path ?? process.cwd(),
@@ -282,6 +289,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       id:            agent.id,
       name:          agent.name,
       machineId:     agent.machine_id ?? 'local',
+      machineName:   await resolveMachineName(agent.machine_id),
       serverUrl,
       apiKey,
       workspacePath: agent.workspace_path ?? process.cwd(),
@@ -417,6 +425,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
 
     // Initialize workspace with MEMORY / KNOWLEDGE / notes / CLAUDE / HEARTBEAT
     const serverUrl = resolveServerUrl(req)
+    const machineName = await resolveMachineName(machineId ?? null)
     initAgentWorkspace(resolvedWorkspace, {
       agentId:      agent.id,
       agentName:    agent.name,
@@ -427,6 +436,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       channelName:  '#all',
       teamContext:  DEFAULT_TEAM_CONTEXT,
       customPrompt: systemPrompt ?? undefined,
+      machineName,
     }).catch(err => console.error(`[workspace] Init failed for ${agent.name}:`, err.message))
 
     return { agent }
@@ -475,6 +485,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
           serverUrl,
           channelName: '#all',
           teamContext: DEFAULT_TEAM_CONTEXT,
+          machineName: await resolveMachineName(agent.machine_id ?? null),
         })
 
         await query('UPDATE agents SET workspace_path = $2 WHERE id = $1', [agent.id, workspacePath]).catch(() => {})
@@ -823,6 +834,21 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     await stopAgentInstance(id)
     return { ok: true }
+  })
+
+  // ── POST /api/agents/:id/restart ──────────────────────────────────
+  // Stop the agent (if running), then immediately start it fresh.
+  app.post('/:id/restart', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const agent = await readAgentControlRow(id)
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' })
+
+    await stopAgentInstance(id)
+    // Brief pause to let process fully terminate
+    await new Promise(resolve => setTimeout(resolve, 200))
+    const started = await startAgentInstance(agent, resolveServerUrl(req), true)
+    if (!started.ok) return reply.code(409).send(started)
+    return started
   })
 
   // ── POST /api/agents/:id/heartbeat ────────────────────────────────

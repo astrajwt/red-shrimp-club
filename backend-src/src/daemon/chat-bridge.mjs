@@ -246,6 +246,43 @@ ${formatted}${footer}`
   }
 );
 server.tool(
+  "get_human_messages",
+  "Get all messages sent by human users on a given date (UTC+8), across all channels in this server. Useful for Akara daily report to summarize what the human researched, thought about, or initiated today.",
+  {
+    date: z.string().optional().describe("Date in YYYY-MM-DD format (UTC+8). Defaults to today if omitted.")
+  },
+  async ({ date }) => {
+    try {
+      const params = new URLSearchParams();
+      if (date) params.set("date", date);
+      const res = await fetch(
+        `${serverUrl}/internal/agent/${agentId}/human-messages?${params}`,
+        { method: "GET", headers: commonHeaders }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        return { content: [{ type: "text", text: `Error: ${data.error}` }] };
+      }
+      if (!data.messages || data.messages.length === 0) {
+        return { content: [{ type: "text", text: `No human messages found for ${data.date}.` }] };
+      }
+      const formatted = data.messages.map((m) => {
+        const channel = m.channelType === "dm" ? `DM:@${m.channelName}` : `#${m.channelName}`;
+        const time = m.createdAt ? ` (${toLocalTime(m.createdAt)})` : "";
+        return `[${channel}]${time} @${m.senderName}: ${m.content}`;
+      }).join("\n");
+      return {
+        content: [{
+          type: "text",
+          text: `## Human messages on ${data.date} (${data.messages.length} total)\n\n${formatted}`
+        }]
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+    }
+  }
+);
+server.tool(
   "create_todo_bundle",
   "Create a todo root in memory/todos/<todo>/index.md, create the parent task plus subtasks, and link the root markdown to that todo.",
   {
@@ -322,16 +359,18 @@ server.tool(
 );
 server.tool(
   "list_tasks",
-  "List tasks on a channel's task board. Returns tasks with their number (#t1, #t2...), title, status, and assignee.",
+  "List tasks on a channel's task board. Returns tasks with their number (#t1, #t2...), title, status, and assignee. Use mine=true to see only tasks assigned to you (recommended when looking for work to do).",
   {
     channel: z.string().describe("The channel whose task board to view \u2014 e.g. '#engineering', '#proj-slock'"),
-    status: z.enum(["all", "todo", "in_progress", "in_review", "done"]).default("all").describe("Filter by status (default: all)")
+    status: z.enum(["all", "todo", "in_progress", "in_review", "done"]).default("all").describe("Filter by status (default: all)"),
+    mine: z.boolean().optional().describe("If true, only return tasks assigned to you. Use this when looking for your own work queue.")
   },
-  async ({ channel, status }) => {
+  async ({ channel, status, mine }) => {
     try {
       const params = new URLSearchParams();
       params.set("channel", channel);
       if (status !== "all") params.set("status", status);
+      if (mine) params.set("mine", "true");
       const res = await fetch(
         `${serverUrl}/internal/agent/${agentId}/tasks?${params}`,
         { method: "GET", headers: commonHeaders }
