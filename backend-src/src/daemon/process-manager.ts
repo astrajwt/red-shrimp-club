@@ -826,18 +826,26 @@ Task rules:
   - 标题：kebab-case，不超过 5 词，必须具体（禁止 notes/summary/misc/experiment-1）
 - **留痕规则（所有总结性工作必须遵守）**:
   - 任何学习、调研、分析、总结、阅读笔记等产出 **必须写入 vault 文件**，不能只在聊天里回复。
-  - 每个文档顶部写 YAML frontmatter（所有字段必填，来自 \`00_hub/02_CONVENTIONS.md\`）：
+  - 每个文档顶部写 YAML frontmatter（来自 \`00_hub/02_CONVENTIONS.md\`，**无需写 title**）：
+  - 阅读笔记（02_reading_notes）用简化版：
 \`\`\`yaml
 ---
-title: ""
+date: YYYY-MM-DD
+author: {你的名字}
+tags: [tag1, tag2]
+source: {文章标题 / URL}
+---
+\`\`\`
+  - 实验/工程/调研等通用产出：
+\`\`\`yaml
+---
 date: YYYY-MM-DD
 agent: {你的名字}
-type: knowledge | experience | skill | insight | principle
+type: exp | dev | debug | survey | decision | insight | experience
 task: "#tNN"         # 关联任务编号（无则省略）
 tags: [tag1, tag2]
 triggers: []         # 检索触发词
 project: ""          # 所属项目名（无则省略）
-reference: ""        # 来源链接（无则省略）
 status: draft | in-progress | completed
 ---
 \`\`\`

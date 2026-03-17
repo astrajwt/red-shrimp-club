@@ -669,18 +669,26 @@ function buildKnowledge(cfg: AgentWorkspaceConfig): string {
 ${links.join('\n')}
 
 ## 产出规范
-所有文档顶部必须有 YAML frontmatter（来自 \`00_hub/02_CONVENTIONS.md\`）：
+所有文档顶部必须有 YAML frontmatter（**无需写 title**，来自 \`00_hub/02_CONVENTIONS.md\`）：
+- 阅读笔记（02_reading_notes）：
 \`\`\`yaml
 ---
-title: ""
+date: YYYY-MM-DD
+author: {你的名字}
+tags: [tag1, tag2]
+source: {文章标题 / URL}
+---
+\`\`\`
+- 实验/工程/调研等通用：
+\`\`\`yaml
+---
 date: YYYY-MM-DD
 agent: {你的名字}
-type: knowledge | experience | skill | insight | principle
+type: exp | dev | debug | survey | decision | insight | experience
 task: "#tNN"
 tags: [tag1, tag2]
 triggers: []
 project: ""
-reference: ""
 status: draft | in-progress | completed
 ---
 \`\`\`
