@@ -44,9 +44,9 @@ function ResizeHandle({
   )
 }
 
-export default function MemoryBrowser({ initialPath }: { initialPath?: string | null }) {
+export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path: string; seq: number } | null }) {
   const isMobile = useIsMobile()
-  const [selectedPath, setSelectedPath] = useState<string | null>(initialPath ?? null)
+  const [selectedPath, setSelectedPath] = useState<string | null>(requestedDoc?.path ?? null)
   const [history, setHistory] = useState<string[]>([])
 
   const navigateTo = (path: string | null) => {
@@ -63,13 +63,17 @@ export default function MemoryBrowser({ initialPath }: { initialPath?: string | 
     setSelectedPath(prev)
   }
 
-  useEffect(() => {
-    if (initialPath) navigateTo(initialPath)
-  }, [initialPath])
   const [showImport, setShowImport] = useState(false)
   const [treeKey, setTreeKey] = useState(0) // bump to force tree reload
   const [leftCollapsed, setLeftCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (!requestedDoc?.path) return
+    navigateTo(requestedDoc.path)
+    // Collapse tree so the document is immediately visible (no expand)
+    setLeftCollapsed(true)
+  }, [requestedDoc?.seq])
   const [leftWidth, setLeftWidth] = useState(LEFT_PANE_DEFAULT_WIDTH)
   const [rightWidth, setRightWidth] = useState(RIGHT_PANE_DEFAULT_WIDTH)
   const [dragging, setDragging] = useState<'left' | 'right' | null>(null)

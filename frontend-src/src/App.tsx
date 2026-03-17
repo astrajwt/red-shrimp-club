@@ -53,7 +53,7 @@ export default function App() {
   const [onboarding, setOnboarding] = useState<boolean | null>(null) // null=checking
   const [reviewingCount, setReviewingCount] = useState(0)
   const [requestedChannelId, setRequestedChannelId] = useState<string | null>(null)
-  const [requestedDocPath, setRequestedDocPath] = useState<string | null>(null)
+  const [requestedDoc, setRequestedDoc] = useState<{ path: string; seq: number } | null>(null)
   const serviceReachableRef = useRef(true)
   const currentNav = NAV.find(item => item.id === page)
 
@@ -188,7 +188,7 @@ export default function App() {
   }
 
   const openDoc = (path: string) => {
-    setRequestedDocPath(path)
+    setRequestedDoc(prev => ({ path, seq: (prev?.seq ?? 0) + 1 }))
     setPage('memory')
   }
 
@@ -302,7 +302,7 @@ export default function App() {
           <AgentsPage />
         </div>
         <div className="h-full" style={{ display: page === 'memory' ? 'block' : 'none' }}>
-          <MemoryBrowser initialPath={requestedDocPath} />
+          <MemoryBrowser requestedDoc={requestedDoc} />
         </div>
         <div className="h-full" style={{ display: page === 'machines' ? 'block' : 'none' }}>
           <MachinesPage />
