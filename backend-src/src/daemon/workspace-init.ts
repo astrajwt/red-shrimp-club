@@ -47,7 +47,7 @@ const FALLBACK_MEMORY_TEMPLATE = `# {{agentName}}
 ## Role
 {{roleSeed}}
 
-## Key Knowledge
+## Key Facts
 {{keyKnowledge}}
 
 ## Active Context
@@ -69,6 +69,23 @@ const roleLabels: Record<AgentRole, string> = {
   general:   '通用协作者',
   tester:    '测试工程师',
   pm:        '产品经理',
+}
+
+// Short 1-2 line summaries for MEMORY.md (not the full seed)
+const roleShortDesc: Record<AgentRole, string> = {
+  coordinator:    'Coordinator — 需求理解、任务拆解与路由、知识维护、质量评审。直接对 Human 负责。',
+  'tech-lead':    'Tech Lead — 技术方案、工程实现、任务规划、子任务拆解与执行。',
+  ops:            'Ops — 系统巡检、催办、定时任务（paper-daily / 日报 / 周报）、异常跟踪。',
+  investigator:   'Investigator — 技术调研、论文阅读、源码分析、课程笔记。',
+  developer:      'Developer — 代码实现、系统原型、工程文档。',
+  profiler:       'Profiler — Benchmark 脚本、多轮对比实验、性能分析与瓶颈定位。',
+  observer:       'Observer — WandB / Prometheus / GPU 指标监控与异常告警。',
+  'exp-kernel':   'Exp-Kernel — GPU Kernel 性能实验（GEMM / Attention / Triton）。',
+  'exp-training': 'Exp-Training — 大模型训练实验（分布式 / RLHF / SFT / 数据配比）。',
+  'exp-inference':'Exp-Inference — 推理系统实验（SGLang / vLLM / KV cache / 投机采样）。',
+  general:        '通用协作者。',
+  tester:         'Tester — 测试与质量保障。',
+  pm:             'PM — 产品需求与优先级管理。',
 }
 
 const defaultRoleSeeds: Record<AgentRole, string> = {
@@ -524,14 +541,9 @@ function resolveRoleSeed(input: InitialMemoryTemplateInput): string {
 
 export function buildInitialMemoryIndex(input: InitialMemoryTemplateInput): string {
   const knowledgeLines = uniqueNonEmpty([
-    input.machineName ? `- 运行机器: **${input.machineName}** — 路由、资源、存储路径按机器能力决策。` : '',
-    input.channelName ? `- Default channel: \`${input.channelName}\`.` : '',
-    input.serverUrl ? `- Backend: \`${input.serverUrl}\`.` : '',
-    input.teamContext ? `- Team context: ${input.teamContext}` : '',
-    '- Read `KNOWLEDGE.md` for durable references.',
-    '- Heavy artifacts (checkpoints, profiler raw logs, benchmark dumps) → local experiment dirs, NOT vault.',
-    '- Daily/weekly reports and summary docs still belong in the shared vault.',
-    '- Update this file when the role, machine, preferences, or active context change.',
+    input.machineName ? `- Machine: **${input.machineName}**` : '',
+    `- Vault: \`~/JwtVault\` — 导航见 \`00_hub/00_INDEX.md\``,
+    `- 规范唯一来源: \`00_hub/02_CONVENTIONS.md\`（命名、frontmatter、路由）`,
   ])
   const template = loadMemoryTemplate()
   return renderMemoryTemplate(template, {
@@ -550,41 +562,23 @@ function roleSeedFor(role: AgentRole): string {
 }
 
 function buildGuide(cfg: AgentWorkspaceConfig): string {
-  return `# Workspace Guide
+  return `# ${cfg.agentName} Workspace
 
-This workspace belongs to **${cfg.agentName}**.
-
-## Source of truth
-- Read \`MEMORY.md\` first on startup. It is the editable short-term active context for this agent.
-- Keep shared-vault entry links in \`KNOWLEDGE.md\`.
-- Keep heavy local artifacts (checkpoints, profiler raw logs, benchmark dumps) in local experiment dirs outside vault.
-- Keep reports, notes, and reusable summaries in shared vault.
-- Treat this file as lightweight workspace guidance, not a hardcoded persona prompt.
-
-## Current defaults
+- 启动时先读 \`MEMORY.md\`（运行状态）再读 \`KNOWLEDGE.md\`（vault 路由与规范）。
+- \`KNOWLEDGE.md\` 由系统生成，不要手动编辑；运行状态写 \`MEMORY.md\`。
+- Role: ${roleShortDesc[cfg.role] ?? roleLabels[cfg.role]}
 - Agent ID: \`${cfg.agentId}\`
-- Model: \`${cfg.modelId}\`
-- Role hint: ${roleLabels[cfg.role]}
-- Backend: \`${cfg.serverUrl}\`
-- Default channel: \`${cfg.channelName}\`
-
-## Working rules
-- Prefer changing \`MEMORY.md\` or \`KNOWLEDGE.md\` when behavior should evolve.
-- Keep important conclusions in workspace files before exiting.
-- If the role changes, update \`MEMORY.md\` instead of adding more hardcoded instructions to code.
-- If \`MEMORY.md\` points to another workspace file, keep that target file updated; do not leave stale references.
 `
 }
 
 function buildMemory(cfg: AgentWorkspaceConfig): string {
+  // Use short 1-line role description in MEMORY.md (full role seed is in KNOWLEDGE.md)
+  const shortDesc = roleShortDesc[cfg.role] ?? roleLabels[cfg.role] ?? cfg.role
   return buildInitialMemoryIndex({
     agentName: cfg.agentName,
-    roleLabel: roleSeedFor(cfg.role),
-    description: cfg.description ?? null,
-    customPrompt: cfg.customPrompt,
-    serverUrl: cfg.serverUrl,
-    channelName: cfg.channelName,
-    teamContext: cfg.teamContext,
+    roleLabel: shortDesc,
+    description: null,   // Don't dump DB description into MEMORY
+    customPrompt: undefined,
     activeContext: 'First startup.',
     machineName: cfg.machineName,
   })
@@ -663,88 +657,34 @@ function buildKnowledge(cfg: AgentWorkspaceConfig): string {
 
   return `# ${cfg.agentName} Knowledge
 
-## 规则
-- 这里只放 vault 相对路径链接 + 一行命中提示，不复制共享正文
-- 需要细节时，再去读对应 vault 文件
-- 默认不读其他 agent 的私有 \`MEMORY.md\`
-
 ## 关注域
-- ${focus}
+${focus}
 
 ## Vault 入口
 ${links.join('\n')}
+- \`00_hub/02_CONVENTIONS.md\` — **命名、frontmatter、路由（规范唯一来源）**
 
-## 产出规范
-所有文档顶部必须有 YAML frontmatter（**无需写 title**，来自 \`00_hub/02_CONVENTIONS.md\`）：
-- 阅读笔记（02_reading_notes）：
-\`\`\`yaml
----
-date: YYYY-MM-DD
-author: {你的名字}
-tags: [tag1, tag2]
-source: {文章标题 / URL}
----
-\`\`\`
-- 实验/工程/调研等通用：
-\`\`\`yaml
----
-date: YYYY-MM-DD
-agent: {你的名字}
-type: exp | dev | debug | survey | decision | insight | experience
-task: "#tNN"
-tags: [tag1, tag2]
-triggers: []
-project: ""
-status: draft | in-progress | completed
----
-\`\`\`
-- 实验原始大日志放本地实验目录（vault 外），同时写 + 人类可复现的 runbook 到 05_notes/02_handbook/
-- 踩过的坑和技术决策写入项目的 05_insights/
-- 配置手顺/复现方法写入项目的 05_notes/02_handbook/
-- 详见 \`00_hub/02_CONVENTIONS.md\`
-
-## 文件命名规范
-格式：\`{前缀}-{YYYY-MM-DD}-{标题}.md\`
-- 前缀：exp / debug / dev / bugfix / paper / survey / procedure / decision / flash / retro
-- 标题：kebab-case，不超过 5 词，必须具体（禁止 notes/summary/misc/experiment-1）
-
-## 日报（Routine）规则
-- 每天开始工作时，检查 \`04_routine/{year}/{month}/{week}/{date}/\` 是否有当日日报
-- 如果没有，按模板 \`00_hub/templates/daily-routine.md\` 创建，文件名：\`routine-{date}-{agent_name}.md\`
-- 工作过程中持续更新日报：完成了什么、产出路径、阻塞/风险
-- 每个 agent 独立维护自己的日报
-
-## 内容路由表（重要！）
-⚠️ 总结/知识类产出写到 vault；重型原始产物（raw logs、checkpoints）保留在本地实验目录（vault 外）。
-
-**核心区分**：\`03_knowledge/\` = 有外部来源（能填 \`source:\`）；\`05_notes/\` = 自己写的大段文字（无外部来源）。
+## 内容路由
+> \`03_knowledge/\` = 有外部来源（能填 \`source:\`）；\`05_notes/\` = 自己写的大段文字。
+> 重型产物（checkpoints、raw logs）保留在本地实验目录（vault 外）。
 
 | 内容类型 | 目标路径 |
 |----------|----------|
-| 文章/网文/博客总结（有链接） | \`03_knowledge/02_reading_notes/\` |
+| 文章/博客（有链接） | \`03_knowledge/02_reading_notes/\` |
 | 视频/课程笔记 | \`03_knowledge/01_lecture_note/{主题}/\` |
 | 论文阅读 | \`03_knowledge/04_papers/\` |
-| 网上现搜调研 | \`03_knowledge/05_surveys/\` |
+| 调研综述 | \`03_knowledge/05_surveys/\` |
 | 操作手册 | \`03_knowledge/03_manual/\` |
 | 项目架构/源码走读 | \`02_project/{领域}/{项目名}/01_codewalk/\` |
 | 项目工程文档 | \`02_project/{领域}/{项目名}/03_engineering/\` |
 | 实验记录 | \`02_project/{领域}/{项目名}/02_experiments/\` |
 | 性能分析 | \`02_project/{领域}/{项目名}/04_performance/\` |
 | 经验沉淀/技术决策 | \`02_project/{领域}/{项目名}/05_insights/\` |
-| 配置手顺/复现方法/bugfix | \`05_notes/02_handbook/\` |
-| 日报/巡检/周报 | \`04_routine/agents/{名字}/logs/\` 或 \`04_routine/daily-reports/\` |
-| 经验沉淀/复盘 | \`05_notes/03_experience/\` |
-| 灵感/闪念/随笔 | \`05_notes/01_brainwave/\` |
+| 配置手顺/bugfix | \`05_notes/02_handbook/\` |
+| 日报/周报 | \`04_routine/agents/{名字}/logs/\` 或 \`04_routine/daily-reports/\` |
+| 经验复盘（"沉淀一下"） | \`05_notes/03_experience/\` |
+| 灵感/闪念（"调研总结一下" → surveys） | \`05_notes/01_brainwave/\` |
 
-## 触发词路由（Human 说以下词语时，主动路由到对应目录）
-- **"沉淀一下"** → \`05_notes/03_experience/\`（经验总结、复盘、教训）
-- **"调研总结一下"** → \`03_knowledge/05_surveys/\`（调研综述、技术对比）
-
-## 使用原则
-- 私有短期上下文放 \`MEMORY.md\`
-- 正式产出必须按上面路由表写到 vault 对应目录；只有重型原始产物留在本地实验目录（vault 外）
-- 可执行流程进 \`00_hub/skills/\`
-- 行为边界/能做不能做进 principle
 `
 }
 
