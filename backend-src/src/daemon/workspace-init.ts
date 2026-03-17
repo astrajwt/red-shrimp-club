@@ -284,7 +284,7 @@ Memory 维护职责：
 - 代码变更记录到项目 changelog.md
 - 失败的尝试也要记录，说明失败原因和学到什么
 - 需求记录：新发现的需求写入 vault 日报
-- Bug 记录：新发现的 bug 写入 vault 日报 + 05_notes/bugfix/（修复后补充修复方案）
+- Bug 记录：新发现的 bug 写入 vault 日报 + 05_notes/02_handbook/（修复后补充修复方案）
 
 日报要求：
 - 每天工作结束前写/更新 \`04_routine/agents/{你的名字}/logs/routine-{YYYY-MM-DD}.md\`（模板见 \`00_hub/templates/daily-routine.md\`）
@@ -342,7 +342,7 @@ Memory 维护职责：
 - 文档包含：实验目标、环境配置（GPU型号/driver/CUDA版本）、步骤、结果数据、结论、下一步
 - 失败实验同样要记录：失败原因 + 学到什么
 - 成功/失败的原始运行日志统一放本地实验目录（vault 外），不要放进 vault
-- 可复现操作、环境配置、bug 步骤写入 05_notes/procedure/
+- 可复现操作、环境配置、bug 步骤写入 05_notes/02_handbook/
 
 日报要求：
 - 每天工作结束前写/更新 \`04_routine/agents/{你的名字}/logs/routine-{YYYY-MM-DD}.md\`（模板见 \`00_hub/templates/daily-routine.md\`）
@@ -364,7 +364,7 @@ Memory 维护职责：
 - 文档包含：实验目标、超参数配置、训练曲线截图/数据、收敛分析、结论、下一步
 - 失败实验同样要记录：失败原因 + 学到什么
 - 成功/失败的原始日志统一放本地实验目录（vault 外）
-- 可复现操作、环境配置、bug 步骤写入 05_notes/procedure/
+- 可复现操作、环境配置、bug 步骤写入 05_notes/02_handbook/
 - 产出：训练曲线、收敛分析、系统性能报告
 
 日报要求：
@@ -386,7 +386,7 @@ Memory 维护职责：
 - 文档包含：实验目标、环境配置、benchmark 方法、结果数据表格、结论、下一步
 - 失败实验同样要记录：失败原因 + 学到什么
 - 成功/失败的原始日志统一放本地实验目录（vault 外）
-- 可复现操作、环境配置、bug 步骤写入 05_notes/procedure/
+- 可复现操作、环境配置、bug 步骤写入 05_notes/02_handbook/
 
 日报要求：
 - 每天工作结束前写/更新 \`04_routine/agents/{你的名字}/logs/routine-{YYYY-MM-DD}.md\`（模板见 \`00_hub/templates/daily-routine.md\`）
@@ -610,7 +610,7 @@ function buildKnowledge(cfg: AgentWorkspaceConfig): string {
     coordinator: [
       '- `00_hub/01_AGENTS.md` — 团队结构',
       '- `02_project/{领域}/{项目名}/05_insights/` — 看项目沉淀和可复用模式',
-      '- `05_notes/experiences/` — 经验复盘和组织改进',
+      '- `05_notes/03_experience/` — 经验复盘和组织改进',
     ],
     'tech-lead': [
       '- `02_project/{领域}/{项目名}/03_engineering/` — 工程开发和技术方案',
@@ -619,7 +619,7 @@ function buildKnowledge(cfg: AgentWorkspaceConfig): string {
     ],
     ops: [
       '- `04_routine/` — 日报、巡检、运营记录',
-      '- `05_notes/bugfix/` — 故障和恢复经验',
+      '- `05_notes/02_handbook/` — 故障和恢复经验',
     ],
     investigator: [
       '- `03_knowledge/02_reading_notes/` — 文章/网文总结',
@@ -630,11 +630,11 @@ function buildKnowledge(cfg: AgentWorkspaceConfig): string {
     ],
     developer: [
       '- `02_project/{领域}/{项目名}/03_engineering/` — 工程开发、debug、变更',
-      '- `05_notes/procedure/` — 环境配置、复现步骤、常见 bug 手顺',
+      '- `05_notes/02_handbook/` — 环境配置、复现步骤、常见 bug 手顺',
     ],
     profiler: [
       '- `02_project/{领域}/{项目名}/04_performance/` — benchmark / profiling / 对比',
-      '- `05_notes/procedure/` — 环境和复现步骤',
+      '- `05_notes/02_handbook/` — 环境和复现步骤',
     ],
     observer: [
       '- `04_routine/` — 巡检和日报',
@@ -642,15 +642,15 @@ function buildKnowledge(cfg: AgentWorkspaceConfig): string {
     ],
     'exp-kernel': [
       '- `02_project/{领域}/{项目名}/02_experiments/` — 实验记录',
-      '- `05_notes/procedure/` — 复现方法和环境配置',
+      '- `05_notes/02_handbook/` — 复现方法和环境配置',
     ],
     'exp-training': [
       '- `02_project/{领域}/{项目名}/02_experiments/` — 训练实验记录',
-      '- `05_notes/procedure/` — 环境配置和复现步骤',
+      '- `05_notes/02_handbook/` — 环境配置和复现步骤',
     ],
     'exp-inference': [
       '- `02_project/{领域}/{项目名}/02_experiments/` — 推理实验记录',
-      '- `05_notes/procedure/` — 配置、复现、排障手顺',
+      '- `05_notes/02_handbook/` — 配置、复现、排障手顺',
     ],
   }
   const links = [...commonLinks, ...(roleLinks[cfg.role] ?? [])]
@@ -684,9 +684,9 @@ reference: ""
 status: draft | in-progress | completed
 ---
 \`\`\`
-- 实验原始大日志放本地实验目录（vault 外），同时写 + 人类可复现的 runbook 到 05_notes/procedure/
+- 实验原始大日志放本地实验目录（vault 外），同时写 + 人类可复现的 runbook 到 05_notes/02_handbook/
 - 踩过的坑和技术决策写入项目的 05_insights/
-- 配置手顺/复现方法写入项目的 05_notes/procedure/
+- 配置手顺/复现方法写入项目的 05_notes/02_handbook/
 - 详见 \`00_hub/02_CONVENTIONS.md\`
 
 ## 文件命名规范
@@ -714,10 +714,14 @@ status: draft | in-progress | completed
 | 实验记录 | \`02_project/{领域}/{项目名}/02_experiments/\` |
 | 性能分析 | \`02_project/{领域}/{项目名}/04_performance/\` |
 | 经验沉淀/技术决策 | \`02_project/{领域}/{项目名}/05_insights/\` |
-| 配置手顺/复现方法 | \`05_notes/procedure/\` |
-| 日报/巡检/周报 | \`04_routine/{year}/{month}/{week}/{date}/\` |
-| 经验复盘/bugfix | \`05_notes/{experiences\|bugfix}/\` |
-| 闪念便签 | \`05_notes/flash/\` |
+| 配置手顺/复现方法/bugfix | \`05_notes/02_handbook/\` |
+| 日报/巡检/周报 | \`04_routine/agents/{名字}/logs/\` 或 \`04_routine/daily-reports/\` |
+| 经验沉淀/复盘 | \`05_notes/03_experience/\` |
+| 灵感/闪念/随笔 | \`05_notes/01_brainwave/\` |
+
+## 触发词路由（Human 说以下词语时，主动路由到对应目录）
+- **"沉淀一下"** → \`05_notes/03_experience/\`（经验总结、复盘、教训）
+- **"调研总结一下"** → \`03_knowledge/05_surveys/\`（调研综述、技术对比）
 
 ## 使用原则
 - 私有短期上下文放 \`MEMORY.md\`

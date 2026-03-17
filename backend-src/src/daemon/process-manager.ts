@@ -804,20 +804,20 @@ Task rules:
   | 文章/博客/网文阅读笔记 | \`03_knowledge/02_reading_notes/\` |
   | 视频/课程笔记 | \`03_knowledge/01_lecture_note/{主题}/\` |
   | 论文笔记 | \`03_knowledge/04_papers/\` |
-  | 调研/综述 | \`03_knowledge/05_surveys/\` |
+  | 调研/综述（"调研总结一下"） | \`03_knowledge/05_surveys/\` |
   | 手册/操作指南 | \`03_knowledge/03_manual/\` |
   | 项目架构分析/源码走读 | \`02_project/{领域}/{项目名}/01_codewalk/\` |
   | 实验记录 | \`02_project/{领域}/{项目名}/02_experiments/\` |
   | 工程/开发/debug | \`02_project/{领域}/{项目名}/03_engineering/\` |
   | 性能分析 | \`02_project/{领域}/{项目名}/04_performance/\` |
-  | 经验沉淀/技术决策 | \`02_project/{领域}/{项目名}/05_insights/\` |
-  | 配置手顺/复现方法 | \`05_notes/procedure/\` |
-  | 日报/巡检/周报 | \`04_routine/{year}/{month}/{week}/{date}/\` |
-  | bugfix 经验 | \`05_notes/bugfix/\` |
-  | 经验复盘 | \`05_notes/experiences/\` |
-  | 灵感/随笔/闪念 | \`05_notes/flash/\` |
+  | 经验沉淀/技术决策（项目级） | \`02_project/{领域}/{项目名}/05_insights/\` |
+  | 配置手顺/复现方法/bugfix | \`05_notes/02_handbook/\` |
+  | 日报/巡检/周报 | \`04_routine/agents/{名字}/logs/\` 或 \`04_routine/daily-reports/\` |
+  | 经验沉淀/复盘（"沉淀一下"） | \`05_notes/03_experience/\` |
+  | 灵感/随笔/闪念 | \`05_notes/01_brainwave/\` |
   | 简历/作品集 | \`01_portfolio/\` |
-  - 不确定归类时，优先放 \`05_notes/flash/\`
+  - **触发词路由**：听到"**沉淀一下**" → \`05_notes/03_experience/\`；听到"**调研总结一下**" → \`03_knowledge/05_surveys/\`
+  - 不确定归类时，优先放 \`05_notes/01_brainwave/\`
   - 日报、周报继续走 vault；checkpoint/raw profiler logs/benchmark dumps 保留在本地实验目录
   - **禁止写入 \`00_hub/agents/\` 目录**（agent 私有工作区，系统管理）
 - **文件命名（必须遵守，来自 \`00_hub/02_CONVENTIONS.md\`）**:
