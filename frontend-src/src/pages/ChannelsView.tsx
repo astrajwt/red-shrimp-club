@@ -63,6 +63,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
   const [agentPanelLoading, setAgentPanelLoading] = useState(false)
   const [hasMoreMessages, setHasMoreMessages] = useState(false)
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false)
+  const [messagesLoading, setMessagesLoading] = useState(false)
   const [hasMoreLogs, setHasMoreLogs] = useState(false)
   const [loadingMoreLogs, setLoadingMoreLogs] = useState(false)
   const [selectedAgentDocPath, setSelectedAgentDocPath] = useState<string | null>(null)
@@ -71,8 +72,6 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
   const [selectedTodoDocLoading, setSelectedTodoDocLoading] = useState(false)
   const [selectedTodoDocError, setSelectedTodoDocError] = useState<string | null>(null)
 
-  // Inline doc viewer — opened by clicking vault paths in messages
-  const [inlineDocPath, setInlineDocPath] = useState<string | null>(null)
 
   // Agent streaming state (for DM view)
   const [agentStreaming, setAgentStreaming] = useState(false)
@@ -127,14 +126,20 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
   // ── Switch channel ─────────────────────────────────────────────────
   useEffect(() => {
     if (!activeId) return
+    // Clear stale messages immediately to prevent jump/flash of old content
+    setMessages([])
+    setHasMoreMessages(false)
+    suppressScrollRef.current = false
+    setMessagesLoading(true)
     socketClient.joinChannel(activeId)
     messagesApi.history(activeId, undefined, 100).then(msgs => {
       setMessages(msgs)
       setHasMoreMessages(msgs.length >= 100)
+      setMessagesLoading(false)
       // Mark read up to the actual latest message seq
       const maxSeq = msgs.reduce((max, m) => Math.max(max, m.seq ?? 0), 0)
       if (maxSeq > 0) channelsApi.markRead(activeId, maxSeq).catch(() => {})
-    })
+    }).catch(() => setMessagesLoading(false))
     tasksApi.list(activeId).then(({ tasks: t }) => setTasks(t))
     setUnread(u => ({ ...u, [activeId]: 0 }))
     return () => { socketClient.leaveChannel(activeId) }
@@ -165,7 +170,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
 
   // ── Load more messages ─────────────────────────────────────────────
   const loadMoreMessages = useCallback(async () => {
-    if (!activeId || !messages.length || loadingMoreMessages) return
+    if (!activeId || !messages.length || loadingMoreMessages || messagesLoading) return
     setLoadingMoreMessages(true)
     suppressScrollRef.current = true
     const el = messagesContainerRef.current
@@ -784,6 +789,19 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
         {/* Messages */}
         <div ref={messagesContainerRef} className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 md:px-5 md:py-4 space-y-4">
           <div ref={topSentinelRef} className="h-px" />
+          {messagesLoading && (
+            <div className="flex flex-col gap-3 py-4 px-1">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className={`flex gap-3 ${i % 2 === 0 ? '' : 'flex-row-reverse'}`}>
+                  <div className="w-8 h-8 rounded-full bg-[#1e1a22] shrink-0 animate-pulse" />
+                  <div className="flex flex-col gap-1.5 max-w-[60%]">
+                    <div className="h-2.5 rounded bg-[#1e1a22] animate-pulse" style={{ width: `${50 + (i * 17) % 40}%` }} />
+                    <div className="h-2.5 rounded bg-[#1a181e] animate-pulse" style={{ width: `${30 + (i * 23) % 50}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {loadingMoreMessages && (
             <div className="text-center py-2 text-[11px] text-[#4a4048]">loading...</div>
           )}
@@ -844,7 +862,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                         boxShadow: '2px 3px 0 rgba(0,0,0,0.45)',
                       }}
                     >
-                      <MessageContent content={msg.content} mentions={msg.mentions} thinking={msg.thinking} onOpenDoc={setInlineDocPath} />
+                      <MessageContent content={msg.content} mentions={msg.mentions} thinking={msg.thinking} onOpenDoc={onOpenDoc} />
                       {/* Attachments */}
                       {msg.attachments?.map((att, i) =>
                         att.mime_type.startsWith('image/') ? (
@@ -1100,29 +1118,8 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
         </div>
       </main>
 
-      {/* ── Inline Doc Viewer (vault link click) ───────────────────────── */}
-      {inlineDocPath && (
-        <aside className={
-          isMobile
-            ? 'fixed inset-y-0 right-0 z-50 w-[92vw] max-w-[520px] bg-[#0e0c10] flex flex-col border-l-[3px] border-black'
-            : 'w-[480px] bg-[#0e0c10] flex flex-col border-l-[3px] border-black'
-        }>
-          <div className="shrink-0 flex items-center gap-2 px-3 py-2 bg-[#141118] border-b-[3px] border-black">
-            <span className="text-[10px] text-[#6bc5e8] uppercase tracking-wider flex-1 truncate">{inlineDocPath}</span>
-            <button
-              onClick={() => setInlineDocPath(null)}
-              className="text-[#4a4048] hover:text-[#e7dfd3] text-[18px] leading-none shrink-0"
-              title="close"
-            >×</button>
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto">
-            <DocumentViewer filePath={inlineDocPath} embedded onNavigate={setInlineDocPath} />
-          </div>
-        </aside>
-      )}
-
       {/* ── Right Sidebar ─────────────────────────────────────────────── */}
-      {!inlineDocPath && activeAgent ? (
+      {activeAgent ? (
         <aside className={
           isMobile
             ? `fixed inset-y-0 right-0 z-40 w-[85vw] max-w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black transition-transform duration-200 ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
