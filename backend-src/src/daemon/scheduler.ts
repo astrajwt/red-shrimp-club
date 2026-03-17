@@ -54,6 +54,11 @@ interface ReviewReminderRow {
 const REVIEW_REMINDER_CHECK_MS = 5 * 60_000
 const REVIEW_REMINDER_COOLDOWN_MS = 30 * 60_000
 
+// Task reminder: remind agents about stale in_progress / rejected tasks
+const TASK_REMINDER_CHECK_MS  = 10 * 60_000   // check every 10 min
+const TASK_REMINDER_COOLDOWN_MS = 30 * 60_000  // re-remind per task at most once per 30 min
+const TASK_STALE_MS = 30 * 60_000              // task counts as stale after 30 min idle
+
 // ─── Scheduler class ─────────────────────────────────────────────────────────
 
 class Scheduler {
@@ -65,6 +70,9 @@ class Scheduler {
   private tokenTimer: NodeJS.Timeout | null = null
   private reviewReminderTimer: NodeJS.Timeout | null = null
   private reviewReminderState = new Map<string, { count: number; sentAt: number }>()
+  private taskReminderTimer: NodeJS.Timeout | null = null
+  // cooldown: keyed by task id → last reminder sent timestamp
+  private taskReminderState = new Map<string, number>()
 
   // Guard: prevent concurrent handoffs for the same agent
   private handoffInProgress = new Set<string>()
@@ -111,6 +119,11 @@ class Scheduler {
     this.reviewReminderTimer = setInterval(() => {
       void this.checkReviewBacklogReminders()
     }, REVIEW_REMINDER_CHECK_MS)
+
+    // Task reminders: periodically remind agents about stale in_progress tasks
+    this.taskReminderTimer = setInterval(() => {
+      void this.checkTaskReminders()
+    }, TASK_REMINDER_CHECK_MS)
 
     console.log('[scheduler] Running.')
   }
@@ -214,6 +227,7 @@ class Scheduler {
     }
     if (this.tokenTimer)    clearInterval(this.tokenTimer)
     if (this.reviewReminderTimer) clearInterval(this.reviewReminderTimer)
+    if (this.taskReminderTimer)   clearInterval(this.taskReminderTimer)
     console.log('[scheduler] Stopped.')
   }
 
@@ -478,6 +492,86 @@ class Scheduler {
         count: reviewingCount,
         sentAt: now,
       })
+    }
+  }
+
+  // ─── Task reminder monitor ────────────────────────────────────────────────
+  // Periodically finds stale in_progress tasks whose assigned agent is idle,
+  // then DMs the agent a reminder (with rejection feedback if present).
+
+  private async checkTaskReminders() {
+    interface StaleTaskRow {
+      id: string
+      number: number
+      title: string
+      status: string
+      review_feedback: string | null
+      agent_id: string
+      agent_name: string
+      agent_status: string
+      server_id: string
+      owner_user_id: string | null
+    }
+
+    const staleThreshold = new Date(Date.now() - TASK_STALE_MS).toISOString()
+
+    const tasks = await query<StaleTaskRow>(
+      `SELECT t.id, t.number, t.title, t.status, t.review_feedback,
+              a.id AS agent_id, a.name AS agent_name, a.status AS agent_status,
+              a.server_id,
+              owner_member.user_id AS owner_user_id
+         FROM tasks t
+         JOIN agents a ON a.id = t.claimed_by_id
+         JOIN channels ch ON ch.id = t.channel_id
+         JOIN servers s ON s.id = ch.server_id
+         LEFT JOIN server_members owner_member
+           ON owner_member.server_id = s.id AND owner_member.role = 'owner'
+        WHERE t.status = 'in_progress'
+          AND t.claimed_by_type = 'agent'
+          AND COALESCE(t.review_feedback_at, t.started_at, t.claimed_at, t.created_at) < $1`,
+      [staleThreshold]
+    )
+
+    const now = Date.now()
+
+    for (const task of tasks) {
+      // Skip if we sent a reminder recently (cooldown)
+      const lastSent = this.taskReminderState.get(task.id) ?? 0
+      if (now - lastSent < TASK_REMINDER_COOLDOWN_MS) continue
+
+      // Only remind sleeping/offline agents — running agents are already working
+      if (!['sleeping', 'offline', 'stopped'].includes(task.agent_status)) continue
+
+      // Build reminder message
+      let content = `📌 任务提醒：#t${task.number} "${task.title}" 还在 in_progress 状态，请继续完成。`
+      if (task.review_feedback) {
+        content += `\n\n上次驳回理由：${task.review_feedback}`
+      }
+      content += `\n\n完成后请将状态改为 in_review，等待人类 review。`
+
+      try {
+        // DM the agent via owner DM channel if owner exists, else use server #all channel
+        let channelId: string | null = null
+
+        if (task.owner_user_id) {
+          channelId = await this.ensureHumanAgentDm(task.server_id, task.owner_user_id, task.agent_id)
+        } else {
+          const allChannel = await queryOne<{ id: string }>(
+            `SELECT id FROM channels WHERE server_id = $1 AND name = 'all' LIMIT 1`,
+            [task.server_id]
+          )
+          channelId = allChannel?.id ?? null
+        }
+
+        if (!channelId) continue
+
+        await this.postMessage(task.agent_id, channelId, content)
+        this.taskReminderState.set(task.id, now)
+
+        console.log(`[scheduler] Sent task reminder to ${task.agent_name} for #t${task.number}`)
+      } catch (err: any) {
+        console.error(`[scheduler] Task reminder failed for task ${task.id}: ${err.message}`)
+      }
     }
   }
 

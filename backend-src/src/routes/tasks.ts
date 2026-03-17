@@ -419,7 +419,45 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
           await query('INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ch.id, task.claimed_by_id])
           await query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ch.id, caller.sub])
         }
-        const rejectionContent = `#t${task.number} "${task.title}" 被驳回，请继续修改。驳回理由：${message.trim()}`
+        // Count total rejections for this agent across all tasks
+        // Also count how many previous rejection messages share the first 20 chars
+        // (simple prefix match as proxy for "same reason" without requiring pg_trgm)
+        const reasonPrefix = message.trim().slice(0, 20)
+        const rejectionStats = await queryOne<{
+          total_rejections: string
+          same_reason_count: string
+        }>(
+          `SELECT
+             COUNT(*)::text AS total_rejections,
+             COUNT(*) FILTER (
+               WHERE tf.reason_text ILIKE $2
+             )::text AS same_reason_count
+           FROM task_feedbacks tf
+           JOIN tasks t2 ON t2.id = tf.task_id
+           WHERE t2.claimed_by_id = $1
+             AND tf.verdict = 'reject'`,
+          [task.claimed_by_id, `${reasonPrefix}%`]
+        ).catch(() => null)
+
+        const totalRejections = parseInt(rejectionStats?.total_rejections ?? '0', 10)
+        const sameReasonCount = parseInt(rejectionStats?.same_reason_count ?? '0', 10)
+
+        let rejectionContent = `#t${task.number} "${task.title}" 被驳回，请继续修改。\n\n驳回理由：${message.trim()}`
+
+        // Pattern detected: suggest memory update
+        if (totalRejections >= 3) {
+          rejectionContent += `\n\n---\n⚠️ 这是你第 ${totalRejections + 1} 次被驳回。`
+
+          if (sameReasonCount >= 2) {
+            rejectionContent += ` 且已有 ${sameReasonCount + 1} 次驳回理由相似。`
+            rejectionContent += `\n\n建议：将此驳回模式记录到 MEMORY.md，避免重复犯同类错误。`
+          }
+
+          if (totalRejections >= 5 && sameReasonCount >= 3) {
+            rejectionContent += `\n\n🔁 相同原因被驳回次数已达 ${sameReasonCount + 1} 次，建议将此经验提炼为一个 Skill 文档，防止未来再次触发相同问题。可告知 Donovan 协助创建。`
+          }
+        }
+
         await createStoredMessage({
           channelId: dmChannel.id,
           senderId: caller.sub,

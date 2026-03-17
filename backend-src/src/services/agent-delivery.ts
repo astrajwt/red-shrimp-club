@@ -88,27 +88,31 @@ export async function notifyAgentMembers(params: {
     const pmStatus = processManager.getStatus(row.agent_id)
     const isRunning = pmStatus !== null && pmStatus !== 'sleeping'
 
-    // Sub-agents: ONLY deliver if explicitly @mentioned (regardless of channel or running state)
-    if (isSubAgent && !isDM && !isMentioned) {
-      emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 sub-agent ${row.agent_name}（未被@）`)
-      continue
-    }
-
     if (!isDM) {
-      // Explicit @mentions targeting specific agents → only notify those
-      if (mentionedAgents && mentionedAgents.size > 0 && !isMentioned) {
-        emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（未被@）`)
-        continue
-      }
-      // @mentions present but none are agents (e.g., @Jwt2077 only) → don't wake sleeping agents
-      if (mentionedAgents && mentionedAgents.size === 0 && !isRunning) {
-        emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（无 agent @mention，不唤醒 sleeping）`)
-        continue
-      }
-      // No @mentions → only notify already-running agents, don't wake sleeping ones
-      if (mentionedAgents === null && !isRunning) {
-        emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（无 @mention，sleeping 不唤醒）`)
-        continue
+      // Core agents (coordinator/tech-lead/ops) always receive messages — no @mention required
+      if (!isSubAgent) {
+        // still don't wake sleeping core agents if there are no @mentions at all
+        if (mentionedAgents === null && !isRunning) {
+          emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（无 @mention，sleeping 不唤醒）`)
+          continue
+        }
+        // otherwise fall through and deliver
+      } else {
+        // Sub-agents: only notify if explicitly @mentioned
+        if (mentionedAgents && mentionedAgents.size > 0 && !isMentioned) {
+          emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（未被@）`)
+          continue
+        }
+        // @mentions present but none are agents → don't wake sleeping sub-agents
+        if (mentionedAgents && mentionedAgents.size === 0 && !isRunning) {
+          emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（无 agent @mention，不唤醒 sleeping）`)
+          continue
+        }
+        // No @mentions → only notify already-running sub-agents
+        if (mentionedAgents === null && !isRunning) {
+          emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（无 @mention，sleeping 不唤醒）`)
+          continue
+        }
       }
     }
 
