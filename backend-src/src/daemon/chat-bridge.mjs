@@ -455,6 +455,94 @@ server.tool(
   }
 );
 server.tool(
+  "mark_task_discussed",
+  "Unlock a task that is waiting for discussion (pending_discussion → todo). Only coordinator (Donovan) can call this. Call after the team has discussed the task and you are ready to dispatch it for execution.",
+  {
+    channel: z.string().describe("The channel containing the task — e.g. '#all'"),
+    task_number: z.number().describe("The task number to unlock (e.g. 5)")
+  },
+  async ({ channel, task_number }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/tasks/mark-discussed`, {
+        method: "POST",
+        headers: commonHeaders,
+        body: JSON.stringify({ channel, task_number })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { content: [{ type: "text", text: `Error: ${data.error}` }] };
+      }
+      return {
+        content: [{
+          type: "text",
+          text: data.message ?? `#t${task_number} discussion complete — task is now unlocked and assignee can begin work.`
+        }]
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+    }
+  }
+);
+server.tool(
+  "read_agent_memory",
+  "Read another agent's MEMORY.md. Only available to the coordinator (Donovan). Use this to understand what a specific agent is currently working on before dispatching tasks.",
+  {
+    agent_name: z.string().describe("The name of the agent whose MEMORY.md to read (e.g. 'Brandeis', 'Akara')")
+  },
+  async ({ agent_name }) => {
+    try {
+      const res = await fetch(
+        `${serverUrl}/internal/agent/${agentId}/agent-memory/${encodeURIComponent(agent_name)}`,
+        { method: "GET", headers: commonHeaders }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        return { content: [{ type: "text", text: `Error: ${data.error}` }] };
+      }
+      return {
+        content: [{
+          type: "text",
+          text: `## @${data.agentName} MEMORY.md\n\n${data.content}`
+        }]
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+    }
+  }
+);
+server.tool(
+  "get_team_status",
+  "Get the current status of all agents in this server: role, running/sleeping/offline, open task count, and current project. Use this before dispatching tasks to understand who is available.",
+  {},
+  async () => {
+    try {
+      const res = await fetch(
+        `${serverUrl}/internal/agent/${agentId}/team-status`,
+        { method: "GET", headers: commonHeaders }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        return { content: [{ type: "text", text: `Error: ${data.error}` }] };
+      }
+      if (!data.team || data.team.length === 0) {
+        return { content: [{ type: "text", text: "No agents found." }] };
+      }
+      const lines = ["## Team Status", ""];
+      for (const a of data.team) {
+        const statusLabel = a.status === 'running' ? 'running' : a.status === 'idle' ? 'sleeping' : a.status;
+        const tasks = a.assignedTaskCount > 0 ? ` — ${a.assignedTaskCount} open task${a.assignedTaskCount !== 1 ? 's' : ''}` : ' — 0 open tasks';
+        const project = a.currentProject ? `, project: ${a.currentProject}` : '';
+        lines.push(`@${a.name.padEnd(12)} [${(a.role ?? 'general').padEnd(12)}] ${statusLabel}${tasks}${project}`);
+      }
+      return {
+        content: [{ type: "text", text: lines.join("\n") }]
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+    }
+  }
+);
+server.tool(
   "create_tasks",
   "Create one or more tasks on a channel's task board. Tasks are assigned immediately when created. If assignee_agent_id is omitted, the task is assigned to the calling agent. The assignee can be given as agent id, plain name, or @mention.",
   {
@@ -635,6 +723,32 @@ server.tool(
     }
   }
 );
+server.tool(
+  "link_doc_to_task",
+  "Link a vault document to a task on the task board. Call this after producing a document for a task so it appears as a linked artifact on the task card. Use channel name (e.g. '#all') and task number (e.g. 7 for #t7).",
+  {
+    channel: z.string().describe("Channel name where the task lives (e.g. '#all')"),
+    task_number: z.number().int().describe("Task number (e.g. 7 for #t7)"),
+    doc_path: z.string().describe("Vault-relative path to the document (e.g. 03_knowledge/foo/bar.md)"),
+    doc_name: z.string().optional().describe("Display name for the doc. Defaults to filename."),
+  },
+  async ({ channel, task_number, doc_path, doc_name }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/tasks/link-doc`, {
+        method: "POST",
+        headers: commonHeaders,
+        body: JSON.stringify({ channel, task_number, doc_path, doc_name })
+      });
+      const data = await res.json();
+      if (!res.ok) return { content: [{ type: "text", text: `Error: ${data.error}` }] };
+      if (data.already_linked) return { content: [{ type: "text", text: `Already linked to #t${task_number}` }] };
+      return { content: [{ type: "text", text: `Linked "${doc_name || doc_path}" to #t${task_number}` }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+    }
+  }
+);
+
 // Gracefully handle EPIPE when parent process is killed
 process.stdout.on('error', (err) => {
   if (err.code === 'EPIPE') process.exit(0);

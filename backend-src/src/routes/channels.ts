@@ -101,6 +101,22 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
     const targetType = agentId ? 'agent' : 'user'
     if (!targetId) throw new Error('agentId or userId required')
 
+    const dmWithName = async (id: string) => {
+      const row = await queryOne<{ id: string; name: string; type: string; display_name: string }>(
+        `SELECT c.id, c.name, c.type,
+                COALESCE(u.name, a.name) AS display_name
+         FROM channels c
+         JOIN channel_members cm1 ON cm1.channel_id = c.id AND cm1.user_id = $1
+         JOIN channel_members cm2 ON cm2.channel_id = c.id
+           AND (cm2.user_id != $1 OR cm2.agent_id IS NOT NULL)
+         LEFT JOIN users  u ON u.id  = cm2.user_id
+         LEFT JOIN agents a ON a.id  = cm2.agent_id
+         WHERE c.id = $2 LIMIT 1`,
+        [caller.sub, id]
+      )
+      return row
+    }
+
     // Check if DM already exists
     const existing = await queryOne<{ id: string }>(
       `SELECT c.id FROM channels c
@@ -111,7 +127,7 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
        LIMIT 1`,
       [caller.sub, targetId, targetType]
     )
-    if (existing) return existing
+    if (existing) return dmWithName(existing.id)
 
     // Create new DM channel
     const name = `dm-${Date.now()}`
@@ -139,7 +155,7 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
       )
     }
 
-    return channel
+    return dmWithName(channel.id)
   })
 
   // ── GET /api/channels/unread ─────────────────────────────────────

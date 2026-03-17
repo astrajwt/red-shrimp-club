@@ -9,9 +9,12 @@ function expandHome(p: string): string {
   return p.startsWith('~/') ? join(homedir(), p.slice(2)) : p
 }
 
+export function resolveVaultRoot(): string {
+  return resolve(expandHome(process.env.OBSIDIAN_ROOT?.trim() || '/JwtVault'))
+}
+
 export function resolveAgentsBaseDir(): string {
-  const vaultRoot = process.env.OBSIDIAN_ROOT?.trim() || join(homedir(), 'JwtVault')
-  return join(resolve(expandHome(vaultRoot)), '00_hub', 'agents')
+  return join(resolveVaultRoot(), '00_hub', 'agents')
 }
 
 export function resolveAgentWorkspacePath(name: string): string {

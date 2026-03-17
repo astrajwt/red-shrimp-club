@@ -106,5 +106,14 @@ export function resolveDelegatedAssignee(
   if (!assignee) {
     throw new Error(`Assignee agent not found in this server: ${assigneeRef}`)
   }
+
+  // Self-assignment is always allowed
+  if (assignee.id === ctx.agent.id) return assignee
+
+  // Can only delegate to direct/indirect subordinates
+  if (!ctx.descendantIds.has(assignee.id)) {
+    throw new Error(`Cannot assign to @${assignee.name}: only subordinates can be assigned tasks`)
+  }
+
   return assignee
 }

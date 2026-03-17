@@ -480,6 +480,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
 
     let sql = `SELECT t.id, t.number AS "taskNumber", t.title,
                       CASE
+                        WHEN t.status = 'pending_discussion' THEN 'pending_discussion'
                         WHEN t.status IN ('open', 'claimed') THEN 'todo'
                         WHEN t.status = 'reviewing' THEN 'in_review'
                         WHEN t.status = 'completed' THEN 'done'
@@ -498,7 +499,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
 
     if (status && status !== 'all') {
       if (status === 'todo') {
-        sql += ` AND t.status IN ('open', 'claimed')`
+        sql += ` AND t.status IN ('open', 'claimed', 'pending_discussion')`
       } else if (status === 'in_review') {
         sql += ` AND t.status = $${params.length + 1}`
         params.push('reviewing')
@@ -548,7 +549,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
       const [task] = await query(
         `INSERT INTO tasks (
            channel_id, title, status, number, claimed_by_id, claimed_by_type, claimed_by_name, claimed_at, estimated_minutes
-         ) VALUES ($1, $2, 'claimed', $3, $4, 'agent', $5, NOW(), $6) RETURNING *`,
+         ) VALUES ($1, $2, 'pending_discussion', $3, $4, 'agent', $5, NOW(), $6) RETURNING *`,
         [ch.id, t.title.trim(), reserved.first + index, assignee.id, assignee.name, t.estimated_minutes ?? null]
       )
       // Link documents if provided
@@ -732,6 +733,9 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
       [ch.id, task_number]
     )
     if (!task) return reply.code(404).send({ error: `Task #t${task_number} not found` })
+    if (task.status === 'pending_discussion') {
+      return reply.code(409).send({ error: 'Task is awaiting discussion. Coordinator must call mark_task_discussed first.' })
+    }
     if (!task.claimed_by_id) {
       return reply.code(409).send({ error: 'Task has no assignee. A human must assign it first.' })
     }
@@ -781,6 +785,40 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true }
   })
 
+  // ── POST /internal/agent/:agentId/tasks/mark-discussed ──────────
+  // Only coordinator can unblock a pending_discussion task
+  app.post('/:agentId/tasks/mark-discussed', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { channel, task_number } = req.body as { channel: string; task_number: number }
+
+    const caller = await queryOne<{ role: string | null }>(
+      `SELECT role FROM agents WHERE id = $1`, [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Agent not found' })
+    if (caller.role !== 'coordinator') {
+      return reply.code(403).send({ error: 'Only coordinator (Donovan) can mark tasks as discussed' })
+    }
+
+    const ch = await getScopedChannel(agentId, channel)
+    if (!ch) return reply.code(404).send({ error: `Channel "${channel}" not found` })
+
+    const task = await queryOne<{ id: string; status: string; claimed_by_id: string | null }>(
+      `SELECT id, status, claimed_by_id FROM tasks WHERE channel_id = $1 AND number = $2`,
+      [ch.id, task_number]
+    )
+    if (!task) return reply.code(404).send({ error: `Task #t${task_number} not found` })
+    if (task.status !== 'pending_discussion') {
+      return { ok: true, message: 'Task was not in pending_discussion state — no change needed' }
+    }
+
+    const nextStatus = task.claimed_by_id ? 'claimed' : 'open'
+    await query(
+      `UPDATE tasks SET status = $1 WHERE id = $2`,
+      [nextStatus, task.id]
+    )
+    return { ok: true, taskNumber: task_number, newStatus: nextStatus }
+  })
+
   // ── POST /internal/agent/:agentId/tasks/link-doc ────────────────
   app.post('/:agentId/tasks/link-doc', async (req, reply) => {
     const { agentId } = req.params as { agentId: string }
@@ -824,6 +862,93 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true, doc }
   })
 
+  // ── GET /internal/agent/:agentId/agent-memory/:targetName ───────────
+  // Only coordinator (Donovan) can read other agents' MEMORY.md
+  app.get('/:agentId/agent-memory/:targetName', async (req, reply) => {
+    const { agentId, targetName } = req.params as { agentId: string; targetName: string }
+
+    const caller = await queryOne<{ role: string | null; server_id: string }>(
+      `SELECT role, server_id FROM agents WHERE id = $1`, [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Agent not found' })
+    if (caller.role !== 'coordinator') {
+      return reply.code(403).send({ error: 'Only coordinator (Donovan) can read other agents\' memory' })
+    }
+
+    const target = await queryOne<{ workspace_path: string | null; name: string; server_id: string }>(
+      `SELECT workspace_path, name, server_id FROM agents WHERE LOWER(name) = LOWER($1) AND server_id = $2`,
+      [targetName, caller.server_id]
+    )
+    if (!target) return reply.code(404).send({ error: `Agent "${targetName}" not found` })
+    if (!target.workspace_path) return reply.code(404).send({ error: `Agent "${targetName}" has no workspace` })
+
+    try {
+      const { readFile } = await import('fs/promises')
+      const { join } = await import('path')
+      const { homedir } = await import('os')
+      const resolvedPath = target.workspace_path.replace(/^~/, homedir())
+      const memoryPath = join(resolvedPath, 'MEMORY.md')
+      const content = await readFile(memoryPath, 'utf-8')
+      return { agentName: target.name, path: memoryPath, content }
+    } catch {
+      return reply.code(404).send({ error: `MEMORY.md not found for agent "${targetName}"` })
+    }
+  })
+
+  // ── GET /internal/agent/:agentId/team-status ─────────────────────
+  // Returns all agents on the same server with their status, task counts, and sub-agent counts
+  app.get('/:agentId/team-status', async (req) => {
+    const { agentId } = req.params as { agentId: string }
+
+    const agentRow = await queryOne<{ server_id: string }>(
+      `SELECT server_id FROM agents WHERE id = $1`, [agentId]
+    )
+    if (!agentRow) return { team: [] }
+
+    const rows = await query<{
+      id: string
+      name: string
+      role: string | null
+      status: string
+      activity: string | null
+      project_name: string | null
+      assigned_task_count: string
+      sub_agent_count: string
+    }>(
+      `SELECT
+         a.id,
+         a.name,
+         a.role,
+         a.status,
+         a.activity,
+         p.name AS project_name,
+         (SELECT COUNT(*) FROM tasks t
+          JOIN channels c ON c.id = t.channel_id
+          WHERE c.server_id = a.server_id
+            AND t.claimed_by_id = a.id
+            AND t.status NOT IN ('completed')) AS assigned_task_count,
+         (SELECT COUNT(*) FROM agents sub WHERE sub.parent_agent_id = a.id) AS sub_agent_count
+       FROM agents a
+       LEFT JOIN projects p ON p.id = a.current_project_id
+       WHERE a.server_id = $1
+       ORDER BY a.created_at ASC`,
+      [agentRow.server_id]
+    )
+
+    return {
+      team: rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        role: r.role ?? 'general',
+        status: r.status,
+        activity: r.activity ?? null,
+        currentProject: r.project_name ?? null,
+        assignedTaskCount: parseInt(r.assigned_task_count, 10),
+        subAgentCount: parseInt(r.sub_agent_count, 10),
+      })),
+    }
+  })
+
   // ── GET /internal/agent/:agentId/tasks/server ───────────────────
   // Returns all tasks across all channels on this agent's server (for weekly reports / ops overview)
   app.get('/:agentId/tasks/server', async (req) => {
@@ -838,6 +963,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     let sql = `SELECT t.id, t.number AS "taskNumber", t.title,
                       c.name AS "channelName",
                       CASE
+                        WHEN t.status = 'pending_discussion' THEN 'pending_discussion'
                         WHEN t.status IN ('open', 'claimed') THEN 'todo'
                         WHEN t.status = 'reviewing' THEN 'in_review'
                         WHEN t.status = 'completed' THEN 'done'
@@ -854,7 +980,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
 
     if (status && status !== 'all') {
       if (status === 'todo') {
-        sql += ` AND t.status IN ('open', 'claimed')`
+        sql += ` AND t.status IN ('open', 'claimed', 'pending_discussion')`
       } else if (status === 'in_review') {
         sql += ` AND t.status = 'reviewing'`
       } else if (status === 'done') {

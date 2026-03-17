@@ -192,11 +192,12 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     workspace_path: string | null
     session_id: string | null
     reasoning_effort: string | null
+    role: string | null
   }
 
   const readAgentControlRow = async (id: string) =>
     queryOne<AgentControlRow>(
-      `SELECT id, name, description, runtime, model_id, machine_id, workspace_path, session_id, reasoning_effort
+      `SELECT id, name, description, runtime, model_id, machine_id, workspace_path, session_id, reasoning_effort, role
        FROM agents
        WHERE id = $1`,
       [id]
@@ -269,6 +270,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
           modelId:       agent.model_id,
           reasoningEffort: agent.reasoning_effort ?? undefined,
           sessionId:     agent.session_id ?? undefined,
+          role:          agent.role ?? undefined,
         }
         await processManager.spawn(config)
         await query(`UPDATE agents SET status = 'starting' WHERE id = $1`, [agent.id])
@@ -297,6 +299,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       modelId:       agent.model_id,
       reasoningEffort: agent.reasoning_effort ?? undefined,
       sessionId:     agent.session_id ?? undefined,
+      role:          agent.role ?? undefined,
     }
 
     await processManager.spawn(config)
@@ -453,8 +456,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
               a.workspace_path, a.session_id, a.reasoning_effort, a.status
        FROM agents a
        JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
-       WHERE a.role IN ('coordinator', 'tech-lead', 'ops')
-         AND ($2::uuid IS NULL OR a.server_id = $2::uuid)
+       WHERE ($2::uuid IS NULL OR a.server_id = $2::uuid)
        ORDER BY CASE a.role
          WHEN 'coordinator' THEN 0
          WHEN 'tech-lead' THEN 1

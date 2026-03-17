@@ -8,6 +8,7 @@ import { query, queryOne } from '../db/client.js'
 import { processManager } from '../daemon/process-manager.js'
 import { heartbeatChecker } from '../daemon/heartbeat-checker.js'
 import { scheduler } from '../daemon/scheduler.js'
+import { resolveVaultRoot } from '../services/agent-workspace.js'
 import { execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
@@ -168,8 +169,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── POST /api/daemon/obsidian/sync ──────────────────────────────
   // Trigger manual git sync for Obsidian vault
   app.post('/obsidian/sync', { preHandler: [app.authenticate] }, async (_req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     try {
       execSync('git add -A && git diff --cached --quiet || git commit -m "manual sync" && git push', {
@@ -186,8 +186,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/daemon/obsidian/file ───────────────────────────────
   // Read an Obsidian markdown file (read-only)
   app.get('/obsidian/file', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     const { path: filePath, relativeTo } = req.query as { path: string; relativeTo?: string }
     if (!filePath) return reply.code(400).send({ error: 'path query param required' })
@@ -211,8 +210,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/daemon/obsidian/image ──────────────────────────────
   // Serve a binary image from the Obsidian vault
   app.get('/obsidian/image', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     const { path: filePath, relativeTo } = req.query as { path: string; relativeTo?: string }
     if (!filePath) return reply.code(400).send({ error: 'path query param required' })
@@ -231,8 +229,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/daemon/obsidian/asset ──────────────────────────────
   // Serve image / PDF / binary attachments from the Obsidian vault
   app.get('/obsidian/asset', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     const { path: filePath, relativeTo } = req.query as { path: string; relativeTo?: string }
     if (!filePath) return reply.code(400).send({ error: 'path query param required' })
@@ -251,8 +248,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/daemon/obsidian/backlinks ──────────────────────────
   // Find all files that contain [[wikilinks]] pointing to a given file
   app.get('/obsidian/backlinks', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     const { path: targetPath } = req.query as { path: string }
     if (!targetPath) return reply.code(400).send({ error: 'path query param required' })
@@ -299,8 +295,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/daemon/obsidian/tree ───────────────────────────────
   // List directory tree from Obsidian vault
   app.get('/obsidian/tree', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     const { path: dirPath = '' } = req.query as { path?: string }
     const resolved = path.resolve(vaultRoot, dirPath)
@@ -341,8 +336,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── POST /api/daemon/memory/sources ───────────────────────────────
   // Import a git repo as a memory source into the vault
   app.post('/memory/sources', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     const { name, gitUrl, branch, authMethod } = req.body as {
       name: string
@@ -394,8 +388,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── POST /api/daemon/memory/sources/:id/sync ──────────────────────
   // Pull latest changes for an imported memory source
   app.post('/memory/sources/:id/sync', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     const { id } = req.params as { id: string }
     const source = await queryOne<{ id: string; local_path: string; branch: string; auth_method: string; git_url: string }>(
@@ -416,8 +409,7 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── DELETE /api/daemon/memory/sources/:id ─────────────────────────
   // Remove an imported memory source (deletes local directory)
   app.delete('/memory/sources/:id', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (!vaultRoot) return reply.code(500).send({ error: 'OBSIDIAN_ROOT not configured' })
+    const vaultRoot = resolveVaultRoot()
 
     const { id } = req.params as { id: string }
     const source = await queryOne<{ id: string; local_path: string }>(

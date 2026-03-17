@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import type { FastifyPluginAsync } from 'fastify'
 import { query } from '../db/client.js'
+import { resolveVaultRoot } from '../services/agent-workspace.js'
 
 const MAX_LIMIT = 50
 
@@ -162,9 +163,7 @@ export const searchRoutes: FastifyPluginAsync = async (app) => {
       [caller.sub, likePattern, cappedLimit]
     )
 
-    const docs = process.env.OBSIDIAN_ROOT?.trim()
-      ? searchVaultDocs(process.env.OBSIDIAN_ROOT.trim(), searchTerm.toLowerCase(), cappedLimit)
-      : []
+    const docs = searchVaultDocs(resolveVaultRoot(), searchTerm.toLowerCase(), cappedLimit)
 
     return {
       query: searchTerm,

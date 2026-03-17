@@ -14,6 +14,9 @@ interface DeliverableMessage {
   timestamp: string
 }
 
+// Core agent roles — always eligible to receive messages when running
+const CORE_ROLES = new Set(['coordinator', 'tech-lead', 'ops'])
+
 export async function notifyAgentMembers(params: {
   channelId: string
   senderId: string
@@ -25,6 +28,7 @@ export async function notifyAgentMembers(params: {
   const rows = await query<{
     agent_id: string
     agent_name: string
+    role: string
     machine_id: string | null
     status: string
     runtime: string
@@ -37,6 +41,7 @@ export async function notifyAgentMembers(params: {
   }>(
     `SELECT a.id AS agent_id,
             a.name AS agent_name,
+            a.role,
             a.machine_id,
             a.status,
             a.runtime,
@@ -67,31 +72,46 @@ export async function notifyAgentMembers(params: {
       : params.timestamp.toISOString(),
   }
 
-  // @mention filtering: if the message contains @AgentName, only notify those agents.
-  // If no @mention is found, notify all agents in the channel (default behavior).
+  // @mention detection: build set of agent names explicitly mentioned
   const mentionPattern = /@(\w+)/g
   const mentions = [...params.content.matchAll(mentionPattern)].map(m => m[1].toLowerCase())
-  const hasMentions = mentions.length > 0
   const agentNames = new Set(rows.map(r => r.agent_name.toLowerCase()))
-  const mentionedAgents = hasMentions
+  // null = message has no @mentions at all; Set = agent names mentioned (may be empty if only humans mentioned)
+  const mentionedAgents: Set<string> | null = mentions.length > 0
     ? new Set(mentions.filter(m => agentNames.has(m)))
-    : null  // null = no filtering, notify all
-
-  if (mentionedAgents && mentionedAgents.size > 0) {
-    const mentioned = [...mentionedAgents].join(', ')
-    const skipped = rows.filter(r => !mentionedAgents.has(r.agent_name.toLowerCase())).map(r => r.agent_name).join(', ')
-    for (const r of rows) {
-      if (!mentionedAgents.has(r.agent_name.toLowerCase())) {
-        emitAgentLog(r.agent_id, 'INFO', `[投递] 消息含 @${mentioned}，${r.agent_name} 未被@，跳过投递`)
-      }
-    }
-  }
+    : null
 
   for (const row of rows) {
-    // Skip agents not mentioned when message has explicit @mentions targeting other agents
-    if (mentionedAgents && mentionedAgents.size > 0 && !mentionedAgents.has(row.agent_name.toLowerCase())) {
+    const isDM = row.channel_type === 'dm'
+    const isMentioned = mentionedAgents?.has(row.agent_name.toLowerCase()) ?? false
+    const isSubAgent = !CORE_ROLES.has(row.role)
+    const pmStatus = processManager.getStatus(row.agent_id)
+    const isRunning = pmStatus !== null && pmStatus !== 'sleeping'
+
+    // Sub-agents: ONLY deliver if explicitly @mentioned (regardless of channel or running state)
+    if (isSubAgent && !isDM && !isMentioned) {
+      emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 sub-agent ${row.agent_name}（未被@）`)
       continue
     }
+
+    if (!isDM) {
+      // Explicit @mentions targeting specific agents → only notify those
+      if (mentionedAgents && mentionedAgents.size > 0 && !isMentioned) {
+        emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（未被@）`)
+        continue
+      }
+      // @mentions present but none are agents (e.g., @Jwt2077 only) → don't wake sleeping agents
+      if (mentionedAgents && mentionedAgents.size === 0 && !isRunning) {
+        emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（无 agent @mention，不唤醒 sleeping）`)
+        continue
+      }
+      // No @mentions → only notify already-running agents, don't wake sleeping ones
+      if (mentionedAgents === null && !isRunning) {
+        emitAgentLog(row.agent_id, 'INFO', `[投递] 跳过 ${row.agent_name}（无 @mention，sleeping 不唤醒）`)
+        continue
+      }
+    }
+
     const connectedMachineId = machineConnectionManager.getMachineForAgent(row.agent_id)
     if (connectedMachineId) {
       emitAgentLog(row.agent_id, 'INFO', `[投递] 通过远程机器 ${connectedMachineId} 投递消息给 ${row.agent_name}`)
@@ -100,7 +120,6 @@ export async function notifyAgentMembers(params: {
     }
 
     if (!row.machine_id) {
-      const pmStatus = processManager.getStatus(row.agent_id)
       if (pmStatus === null && ['running', 'starting', 'idle', 'sleeping'].includes(row.status)) {
         emitAgentLog(row.agent_id, 'INFO', `[投递] ${row.agent_name} 未在进程管理器中 (DB status=${row.status}) → 注册并启动`)
         const serverUrl = resolveServerUrl()
@@ -123,7 +142,6 @@ export async function notifyAgentMembers(params: {
       processManager.deliverMessage(row.agent_id, message)
     } else {
       // Machine assigned but not connected via WebSocket — fall back to local process manager
-      const pmStatus = processManager.getStatus(row.agent_id)
       if (pmStatus === null && ['running', 'starting', 'idle', 'sleeping'].includes(row.status)) {
         emitAgentLog(row.agent_id, 'INFO', `[投递] ${row.agent_name} 机器 ${row.machine_id} 未连接，本地启动`)
         const serverUrl = resolveServerUrl()

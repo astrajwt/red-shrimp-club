@@ -5,6 +5,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { query } from '../db/client.js'
 import { llmClient } from '../daemon/llm-client.js'
+import { resolveVaultRoot } from '../services/agent-workspace.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -13,8 +14,8 @@ async function buildContext(filePath?: string): Promise<string[]> {
   const contextParts: string[] = []
 
   if (filePath) {
-    const vaultRoot = process.env.OBSIDIAN_ROOT
-    if (vaultRoot) {
+    const vaultRoot = resolveVaultRoot()
+    {
       const resolved = path.resolve(vaultRoot, filePath)
       if (resolved.startsWith(path.resolve(vaultRoot))) {
         try {

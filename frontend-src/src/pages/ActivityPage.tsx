@@ -1,8 +1,10 @@
 // Red Shrimp Lab — Activity / Agent Logs Page (connected to backend)
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { agentsApi, type Agent, type AgentLog } from '../lib/api'
-import { socketClient, type AgentLogEvent, type AgentStatusEvent } from '../lib/socket'
+import { socketClient, type AgentLogEvent } from '../lib/socket'
+
+const INITIAL_PER_AGENT = 20
 
 const levelStyle = (level: string) => {
   if (level === 'ACTION') return { bg: '#3a1520', text: '#e04050', border: '#c0392b' }
@@ -31,6 +33,13 @@ export default function ActivityPage() {
   const [logs, setLogs] = useState<LogRow[]>([])
   const [filterAgentId, setFilterAgentId] = useState<string | null>(null)
   const [agentColors_, setAgentColors_] = useState<Record<string, string>>({})
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // oldest created_at per agent for load-more cursor
+  const cursorsRef = useRef<Record<string, string>>({})
+  const agentsRef = useRef<Agent[]>([])
+  const suppressScrollRef = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Assign consistent colors per agent
@@ -40,28 +49,80 @@ export default function ActivityPage() {
   useEffect(() => {
     agentsApi.list().then((a) => {
       setAgents(a)
+      agentsRef.current = a
       const colorMap: Record<string, string> = {}
       a.forEach((ag, i) => { colorMap[ag.id] = agentColors[i % agentColors.length] })
       setAgentColors_(colorMap)
 
-      // Load last 100 logs for each agent
       Promise.all(a.map(ag =>
-        agentsApi.logs(ag.id, 50).then(({ logs: ls }) =>
-          ls.map(l => toRow(l, ag.name))
-        )
-      )).then(all => {
-        const flat = all.flat().sort((a, b) =>
-          new Date(a.time).getTime() - new Date(b.time).getTime()
-        )
+        agentsApi.logs(ag.id, INITIAL_PER_AGENT).then(({ logs: ls }) => ({ agentId: ag.id, agentName: ag.name, ls }))
+      )).then(results => {
+        const newCursors: Record<string, string> = {}
+        let anyHasMore = false
+        const rows: LogRow[] = []
+        for (const { agentId, agentName, ls } of results) {
+          if (ls.length === INITIAL_PER_AGENT) anyHasMore = true
+          if (ls.length > 0) newCursors[agentId] = ls[0].created_at
+          rows.push(...ls.map(l => toRow(l, agentName)))
+        }
+        cursorsRef.current = newCursors
+        setHasMore(anyHasMore)
+        const flat = rows.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
         setLogs(flat.slice(-200))
       })
     })
   }, [])
 
+  // Load more (older) logs
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return
+    setLoadingMore(true)
+    const container = containerRef.current
+    const prevScrollHeight = container?.scrollHeight ?? 0
+
+    try {
+      const results = await Promise.all(
+        agentsRef.current.map(ag =>
+          agentsApi.logs(ag.id, INITIAL_PER_AGENT, cursorsRef.current[ag.id])
+            .then(({ logs: ls }) => ({ agentId: ag.id, agentName: ag.name, ls }))
+        )
+      )
+      const newCursors = { ...cursorsRef.current }
+      let anyHasMore = false
+      const older: LogRow[] = []
+      for (const { agentId, agentName, ls } of results) {
+        if (ls.length === INITIAL_PER_AGENT) anyHasMore = true
+        if (ls.length > 0) newCursors[agentId] = ls[0].created_at
+        older.push(...ls.map(l => toRow(l, agentName)))
+      }
+      cursorsRef.current = newCursors
+      setHasMore(anyHasMore)
+
+      if (older.length > 0) {
+        const sorted = older.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+        suppressScrollRef.current = true
+        setLogs(prev => {
+          const existingIds = new Set(prev.map(l => l.id))
+          const deduped = sorted.filter(l => !existingIds.has(l.id))
+          return [...deduped, ...prev]
+        })
+        // restore scroll position after prepend
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop += container.scrollHeight - prevScrollHeight
+          }
+          suppressScrollRef.current = false
+        })
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore])
+
   // Live log stream via WebSocket
   useEffect(() => {
     const unsub = socketClient.on('agent:log', (evt: AgentLogEvent) => {
-      const agentName = agents.find(a => a.id === evt.agentId)?.name ?? evt.agentId.slice(0, 8)
+      const agentName = agentsRef.current.find(a => a.id === evt.agentId)?.name ?? evt.agentId.slice(0, 8)
       const row: LogRow = {
         id: `live-${Date.now()}-${Math.random()}`,
         time: evt.timestamp,
@@ -75,10 +136,11 @@ export default function ActivityPage() {
       setLogs(prev => [...prev.slice(-499), row])
     })
     return unsub
-  }, [agents])
+  }, [])
 
-  // Auto-scroll to bottom on new live logs
+  // Auto-scroll to bottom on new live logs (skip when loading more)
   useEffect(() => {
+    if (suppressScrollRef.current) return
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
@@ -139,7 +201,20 @@ export default function ActivityPage() {
             <span className="ml-auto text-[11px] text-[#4a4048]">{displayed.length} entries</span>
           </div>
 
-          <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
+          <div ref={containerRef} className="overflow-auto" style={{ maxHeight: '70vh' }}>
+            {/* Load more button */}
+            {hasMore && (
+              <div className="flex justify-center py-2 border-b-[2px] border-[#1a1620]">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="text-[11px] text-[#6bc5e8] hover:text-[#3abfa0] uppercase tracking-wider disabled:opacity-50"
+                >
+                  {loadingMore ? '↺ loading...' : '↑ load earlier logs'}
+                </button>
+              </div>
+            )}
+
             {displayed.map((log, i) => {
               const s = levelStyle(log.level)
               const time = new Date(log.time).toLocaleTimeString('zh-CN', { hour12: false })

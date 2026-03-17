@@ -61,11 +61,18 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
   const [agentDetailTodos, setAgentDetailTodos] = useState<AgentTodo[]>([])
   const [agentDetailLogs, setAgentDetailLogs] = useState<AgentLog[]>([])
   const [agentPanelLoading, setAgentPanelLoading] = useState(false)
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false)
+  const [hasMoreLogs, setHasMoreLogs] = useState(false)
+  const [loadingMoreLogs, setLoadingMoreLogs] = useState(false)
   const [selectedAgentDocPath, setSelectedAgentDocPath] = useState<string | null>(null)
   const [selectedTodoDocPath, setSelectedTodoDocPath] = useState<string | null>(null)
   const [selectedTodoDocContent, setSelectedTodoDocContent] = useState('')
   const [selectedTodoDocLoading, setSelectedTodoDocLoading] = useState(false)
   const [selectedTodoDocError, setSelectedTodoDocError] = useState<string | null>(null)
+
+  // Inline doc viewer — opened by clicking vault paths in messages
+  const [inlineDocPath, setInlineDocPath] = useState<string | null>(null)
 
   // Agent streaming state (for DM view)
   const [agentStreaming, setAgentStreaming] = useState(false)
@@ -74,6 +81,10 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
 
   const bottomRef  = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const suppressScrollRef = useRef(false)
+  const topSentinelRef = useRef<HTMLDivElement>(null)
+  const logsContainerRef = useRef<HTMLDivElement>(null)
+  const logTopSentinelRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef   = useRef<HTMLInputElement>(null)
   const dragDepthRef = useRef(0)
@@ -83,7 +94,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false)
   const [channelsExpanded, setChannelsExpanded] = useState(true)
-  const [agentsExpanded, setAgentsExpanded] = useState(false)
+  const [agentsExpanded, setAgentsExpanded] = useState(true)
 
   useEffect(() => {
     setSidebarOpen(!isMobile)
@@ -117,8 +128,9 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
   useEffect(() => {
     if (!activeId) return
     socketClient.joinChannel(activeId)
-    messagesApi.history(activeId).then(msgs => {
+    messagesApi.history(activeId, undefined, 100).then(msgs => {
       setMessages(msgs)
+      setHasMoreMessages(msgs.length >= 100)
       // Mark read up to the actual latest message seq
       const maxSeq = msgs.reduce((max, m) => Math.max(max, m.seq ?? 0), 0)
       if (maxSeq > 0) channelsApi.markRead(activeId, maxSeq).catch(() => {})
@@ -143,11 +155,69 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
     })
   }, [activeId])
 
-  // ── Scroll to bottom ───────────────────────────────────────────────
+  // ── Scroll to bottom (skip when loading older messages) ───────────
   useEffect(() => {
+    if (suppressScrollRef.current) return
     const el = messagesContainerRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [messages, agentStreamLines])
+    if (!el) return
+    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight })
+  }, [messages, agentStreamLines, activeId])
+
+  // ── Load more messages ─────────────────────────────────────────────
+  const loadMoreMessages = useCallback(async () => {
+    if (!activeId || !messages.length || loadingMoreMessages) return
+    setLoadingMoreMessages(true)
+    suppressScrollRef.current = true
+    const el = messagesContainerRef.current
+    const prevScrollHeight = el?.scrollHeight ?? 0
+    try {
+      const older = await messagesApi.history(activeId, messages[0].seq, 100)
+      if (older.length > 0) {
+        setMessages(prev => [...older, ...prev])
+        setHasMoreMessages(older.length >= 100)
+        requestAnimationFrame(() => {
+          if (el) el.scrollTop = el.scrollHeight - prevScrollHeight
+          suppressScrollRef.current = false
+        })
+      } else {
+        setHasMoreMessages(false)
+        suppressScrollRef.current = false
+      }
+    } catch {
+      suppressScrollRef.current = false
+    } finally {
+      setLoadingMoreMessages(false)
+    }
+  }, [activeId, messages, loadingMoreMessages])
+
+  // ── Auto-load on scroll to top (IntersectionObserver) ──────────────
+  useEffect(() => {
+    const sentinel = topSentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) loadMoreMessages() },
+      { root: messagesContainerRef.current, threshold: 0 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMoreMessages])
+
+  // ── Load more logs ─────────────────────────────────────────────────
+  const loadMoreLogs = useCallback(async (agentId: string) => {
+    if (!agentId || !agentDetailLogs.length || loadingMoreLogs) return
+    setLoadingMoreLogs(true)
+    try {
+      const { logs: older } = await agentsApi.logs(agentId, 100, agentDetailLogs[0].created_at)
+      if (older.length > 0) {
+        setAgentDetailLogs(prev => [...older, ...prev])
+        setHasMoreLogs(older.length >= 100)
+      } else {
+        setHasMoreLogs(false)
+      }
+    } finally {
+      setLoadingMoreLogs(false)
+    }
+  }, [agentDetailLogs, loadingMoreLogs])
 
   // ── Attachment upload ──────────────────────────────────────────────
   const uploadFiles = useCallback(async (files: File[]) => {
@@ -369,6 +439,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
       setAgentDetailDocs(docs)
       setAgentDetailTodos(todos)
       setAgentDetailLogs(logs)
+      setHasMoreLogs(logs.length >= 100)
       setSelectedAgentDocPath(current => current && docs.some(doc => doc.path === current) ? current : (docs[0]?.path ?? null))
 
       const defaultTodoDoc = todos.find(todo => todo.docs.length > 0)?.docs[0]?.doc_path ?? null
@@ -409,6 +480,18 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
     if (!activeAgent) return
     loadActiveAgentPanel(activeAgent).catch(() => {})
   }, [activeAgent, loadActiveAgentPanel])
+
+  // ── Auto-load logs on scroll to top ────────────────────────────────
+  useEffect(() => {
+    const sentinel = logTopSentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting && activeAgent) loadMoreLogs(activeAgent.id) },
+      { root: logsContainerRef.current, threshold: 0 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadMoreLogs, activeAgent])
 
   // ── Agent streaming events (for DM thinking/output cards) ────────
   useEffect(() => {
@@ -700,6 +783,10 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
 
         {/* Messages */}
         <div ref={messagesContainerRef} className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 md:px-5 md:py-4 space-y-4">
+          <div ref={topSentinelRef} className="h-px" />
+          {loadingMoreMessages && (
+            <div className="text-center py-2 text-[11px] text-[#4a4048]">loading...</div>
+          )}
           {messages.map((msg, index) => {
             const isAgent = msg.sender_type === 'agent'
             const name = msg.sender_name || (isAgent ? 'agent' : 'user')
@@ -757,7 +844,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                         boxShadow: '2px 3px 0 rgba(0,0,0,0.45)',
                       }}
                     >
-                      <MessageContent content={msg.content} mentions={msg.mentions} thinking={msg.thinking} onOpenDoc={onOpenDoc} />
+                      <MessageContent content={msg.content} mentions={msg.mentions} thinking={msg.thinking} onOpenDoc={setInlineDocPath} />
                       {/* Attachments */}
                       {msg.attachments?.map((att, i) =>
                         att.mime_type.startsWith('image/') ? (
@@ -1013,8 +1100,29 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
         </div>
       </main>
 
+      {/* ── Inline Doc Viewer (vault link click) ───────────────────────── */}
+      {inlineDocPath && (
+        <aside className={
+          isMobile
+            ? 'fixed inset-y-0 right-0 z-50 w-[92vw] max-w-[520px] bg-[#0e0c10] flex flex-col border-l-[3px] border-black'
+            : 'w-[480px] bg-[#0e0c10] flex flex-col border-l-[3px] border-black'
+        }>
+          <div className="shrink-0 flex items-center gap-2 px-3 py-2 bg-[#141118] border-b-[3px] border-black">
+            <span className="text-[10px] text-[#6bc5e8] uppercase tracking-wider flex-1 truncate">{inlineDocPath}</span>
+            <button
+              onClick={() => setInlineDocPath(null)}
+              className="text-[#4a4048] hover:text-[#e7dfd3] text-[18px] leading-none shrink-0"
+              title="close"
+            >×</button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto">
+            <DocumentViewer filePath={inlineDocPath} embedded onNavigate={setInlineDocPath} />
+          </div>
+        </aside>
+      )}
+
       {/* ── Right Sidebar ─────────────────────────────────────────────── */}
-      {activeAgent ? (
+      {!inlineDocPath && activeAgent ? (
         <aside className={
           isMobile
             ? `fixed inset-y-0 right-0 z-40 w-[85vw] max-w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black transition-transform duration-200 ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
@@ -1204,19 +1312,27 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
             )}
 
             {agentPanelTab === 'activity' && (
-              <div className="h-full overflow-auto">
+              <div ref={logsContainerRef} className="h-full overflow-auto flex flex-col">
                 {agentPanelLoading ? (
                   <div className="text-[12px] text-[#4a4048] text-center py-8">loading logs...</div>
                 ) : agentDetailLogs.length === 0 ? (
                   <div className="text-[12px] text-[#4a4048] text-center py-8">no logs yet</div>
-                ) : agentDetailLogs.map((log, index) => (
-                  <div key={log.id ?? index} className="border-b border-[#1a1620] flex text-[12px]" style={{ background: index % 2 === 0 ? '#0e0c10' : '#100e13' }}>
-                    <div className="px-2 py-1 text-[#4a4048] w-[64px] shrink-0 border-r border-[#1a1620]">
-                      {new Date(log.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    <div className="px-2 py-1 flex-1 text-[#c8bdb8] break-words whitespace-pre-wrap">{log.content}</div>
-                  </div>
-                ))}
+                ) : (
+                  <>
+                    <div ref={logTopSentinelRef} className="h-px shrink-0" />
+                    {loadingMoreLogs && (
+                      <div className="text-[11px] text-[#4a4048] text-center py-2 shrink-0">loading...</div>
+                    )}
+                    {agentDetailLogs.map((log, index) => (
+                      <div key={log.id ?? index} className="border-b border-[#1a1620] flex text-[12px] shrink-0" style={{ background: index % 2 === 0 ? '#0e0c10' : '#100e13' }}>
+                        <div className="px-2 py-1 text-[#4a4048] w-[64px] shrink-0 border-r border-[#1a1620]">
+                          {new Date(log.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                        <div className="px-2 py-1 flex-1 text-[#c8bdb8] break-words whitespace-pre-wrap">{log.content}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1233,7 +1349,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
           </div>
 
           <div className="flex-1 overflow-auto px-3 py-3 space-y-2">
-            {tasks.map((task, i) => {
+            {tasks.filter(t => t.status !== 'pending_discussion').map((task, i) => {
               const s = taskStatus(task.status)
               return (
                 <div
@@ -1431,7 +1547,10 @@ function normalizeVaultPath(raw: string): string | null {
   if (compact.startsWith('uploads/')) return null
 
   if (compact.startsWith('vault://')) {
-    return compact.slice('vault://'.length).replace(/^\/+/, '')
+    const vaultPath = compact.slice('vault://'.length).replace(/^\/+/, '')
+    // Absolute filesystem paths (e.g. home/jwt/workspace/...) are not vault paths — ignore
+    if (/^(?:home|usr|etc|var|tmp|root|opt)\//.test(vaultPath)) return null
+    return vaultPath
   }
 
   const obsidianMatch = compact.match(/^obsidian:\/\/open\?(.*)$/i)
@@ -1508,22 +1627,30 @@ function MessageContent({
     return seg
   })
   if (onOpenDoc) {
-    // 1) Strip absolute vault root prefix so all paths become vault-relative
-    //    Matches patterns like /home/.../JwtVault/ or any OBSIDIAN_ROOT-style absolute path
+    // 1) JwtVault/path — convert directly (with or without absolute prefix)
+    //    handles: /home/ubuntu/JwtVault/foo  AND  bare JwtVault/foo
     processed = processed.replace(
-      /(?:\/[\w.-]+)*\/JwtVault\//g,
-      ''
+      /(?:(?:\/[\w.-]+)*\/)?JwtVault\/((?:[\w.\-\u4e00-\u9fff]+\/)*[\w.\-\u4e00-\u9fff]*)/g,
+      (_match, rel) => {
+        const clean = rel.replace(/\/+$/, '')
+        if (!clean) return _match
+        return `[JwtVault/${rel}](vault://${clean})`
+      }
     )
-    // 2) Auto-detect vault-relative paths and wrap as vault links.
-    //    This accepts general vault paths like notes/foo.md, 00_hub/bar.md,
-    //    Chinese directory names, and paths with -, _, spaces.
+    // 2) Backtick-wrapped paths with known extensions
     processed = processed.replace(
       /`((?:[^`\n]+\/)+[^`\n]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|webp|gif|svg|pdf))`/gm,
-      (_match, path) => `[${path}](vault://${path})`
+      (_match, path) => path.startsWith('/') ? `\`${path}\`` : `[${path}](vault://${path})`
     )
+    // 3) Known vault top-level dir paths — must be preceded by whitespace/colon/newline/start
+    //    Matches: 03_knowledge/foo/bar.md  OR  00_hub/agents/ etc.
     processed = processed.replace(
-      /(?<![\[(/`])((?:[^ \n`()[\]<>]+\/)+[^ \n`()[\]<>]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|webp|gif|svg|pdf))(?=[\s,;)\]】}`]|$)/gm,
-      (_match, path) => `[${path}](vault://${path})`
+      /(?:^|(?<=[\s：:]))((?:00_hub|01_interview|02_project|03_knowledge|04_routine|05_notes)(?:\/[\w.\-\u4e00-\u9fff]+)*\/?)/gmu,
+      (_match, path) => {
+        const clean = path.replace(/\/+$/, '')
+        if (!clean) return _match
+        return `[${path}](vault://${clean})`
+      }
     )
   }
 

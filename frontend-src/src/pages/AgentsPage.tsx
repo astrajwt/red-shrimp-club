@@ -23,7 +23,7 @@ const statusColor = (s: AgentStatus) => {
   if (s === 'starting')                  return { dot: '#f0b35e', text: '#f0b35e', label: 'starting', pulse: true }
   if (s === 'idle' || s === 'sleeping')  return { dot: '#6bc5e8', text: '#6bc5e8', label: s === 'sleeping' ? 'sleeping' : 'idle', pulse: false }
   if (s === 'offline')                   return { dot: '#c0392b', text: '#c0392b', label: 'offline', pulse: false }
-  return                                        { dot: '#e04050', text: '#e04050', label: 'error',   pulse: true  }
+  return                                        { dot: '#e04050', text: '#e04050', label: 'error',   pulse: false }
 }
 
 function SidebarNavButton({
@@ -374,6 +374,18 @@ export default function AgentsPage() {
     setBusy(agent.id)
     try {
       await agentsApi.resetContext(agent.id)
+      await reload()
+    } catch (err: any) {
+      console.error(err.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleRestart = async (agent: Agent) => {
+    setBusy(agent.id)
+    try {
+      await agentsApi.restart(agent.id)
       await reload()
     } catch (err: any) {
       console.error(err.message)
@@ -837,6 +849,14 @@ export default function AgentsPage() {
                 style={{ color: detail.status === 'running' ? '#c0392b' : '#3abfa0' }}
               >
                 {busy === detail.id ? '...' : detail.status === 'running' ? 'stop' : 'start'}
+              </button>
+              <button
+                onClick={() => handleRestart(detail)}
+                disabled={busy === detail.id}
+                className="border-[2px] border-black px-4 py-1.5 text-[12px] text-[#e8c86b] uppercase hover:bg-[#2a2010] disabled:opacity-40"
+                title="stop then start fresh"
+              >
+                restart
               </button>
               <button
                 onClick={() => { setDetail(null); setDeleteConfirm(detail) }}
@@ -1317,6 +1337,7 @@ function MetaRow({ label, value, small }: { label: string; value: string; small?
 
 function TodoStatusPill({ status }: { status: AgentTodo['status'] }) {
   const states: Record<AgentTodo['status'], { bg: string; text: string; label: string }> = {
+    pending_discussion: { bg: '#1e1a10', text: '#c8a840', label: 'discussing' },
     open:        { bg: '#2a2622', text: '#9a8888', label: 'unassigned' },
     claimed:     { bg: '#2a1a35', text: '#b08cd9', label: 'assigned' },
     in_progress: { bg: '#1a2535', text: '#6bc5e8', label: 'in progress' },
@@ -1356,6 +1377,81 @@ function getAgentMemorySection(memory: AgentMemory | null, section: MemorySectio
   return memory.memory ?? { path: memory.path, content: memory.content, updatedAt: memory.updatedAt }
 }
 
+// ── Swarm Panel modal ─────────────────────────────────────────────────────────
+
+function SwarmPanel({
+  agent,
+  agents,
+  onClose,
+  onToggle,
+  onLogs,
+  busy,
+}: {
+  agent: Agent
+  agents: Agent[]
+  onClose: () => void
+  onToggle: (a: Agent) => void
+  onLogs: (a: Agent) => void
+  busy: string | null
+}) {
+  function collectSubIds(parentId: string): string[] {
+    const direct = agents.filter(a => a.parent_agent_id === parentId)
+    return direct.flatMap(a => [a.id, ...collectSubIds(a.id)])
+  }
+  const subIds = collectSubIds(agent.id)
+  const subAgents = agents.filter(a => subIds.includes(a.id))
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={onClose}
+    >
+      <div
+        className="border-[3px] border-black bg-[#141018] w-full max-w-lg max-h-[80vh] flex flex-col"
+        style={{ boxShadow: '6px 7px 0 rgba(0,0,0,0.9)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="border-b-[3px] border-black px-4 py-2 bg-[#1e1a20] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[10px] px-2 py-0.5 font-bold"
+              style={{ background: '#f0b35e', color: '#000' }}
+            >
+              swarm
+            </span>
+            <span className="text-[13px] text-[#e7dfd3]">{agent.name}</span>
+            <span className="text-[11px] text-[#4a4048]">{subAgents.length} sub-agent{subAgents.length !== 1 ? 's' : ''}</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-[11px] text-[#4a4048] hover:text-[#e7dfd3] px-2"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Sub-agent tree */}
+        <div className="flex-1 overflow-y-auto px-3 py-2">
+          {subAgents.length === 0 ? (
+            <div className="text-[11px] text-[#4a4048] py-4 text-center">No sub-agents</div>
+          ) : (
+            <AgentTree
+              agents={agents}
+              depth={0}
+              parentId={agent.id}
+              onToggle={onToggle}
+              onLogs={onLogs}
+              busy={busy}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Agent hierarchy tree ──────────────────────────────────────────────────────
 
 interface AgentTreeProps {
@@ -1368,78 +1464,110 @@ interface AgentTreeProps {
 }
 
 function AgentTree({ agents, depth, parentId, onToggle, onLogs, busy }: AgentTreeProps) {
+  const [swarmAgent, setSwarmAgent] = useState<Agent | null>(null)
   const children = agents.filter(a => (a.parent_agent_id ?? null) === parentId)
   if (children.length === 0) return null
 
+  const isSwarmEnabled = (a: Agent) => a.role === 'coordinator' || a.role === 'tech-lead'
+
   return (
-    <div>
-      {children.map(agent => {
-        const sc = statusColor(agent.status)
-        const hasChildren = agents.some(a => a.parent_agent_id === agent.id)
-        return (
-          <div key={agent.id}>
-            <div
-              className="flex items-center gap-2 py-1 border-b border-[#1a1620] hover:bg-[#1e1a20] group"
-              style={{ paddingLeft: depth * 20 + 8 }}
-            >
-              {/* Tree connector */}
-              {depth > 0 && (
-                <span className="text-[10px] text-[#2a2228] shrink-0">└</span>
-              )}
-              {/* Status dot */}
-              <span
-                className="w-2 h-2 shrink-0 border border-black"
-                style={{
-                  background: sc.dot,
-                  animation: sc.pulse ? 'pulse 1.2s ease-in-out infinite' : 'none',
-                }}
-              />
-              {/* Name + role */}
-              <span className="text-[13px] flex-1 min-w-0">
-                {agent.name}
-                {agent.role && (
-                  <span className="ml-2 text-[10px] text-[#4a4048] uppercase">{agent.role}</span>
+    <>
+      {swarmAgent && (
+        <SwarmPanel
+          agent={swarmAgent}
+          agents={agents}
+          onClose={() => setSwarmAgent(null)}
+          onToggle={onToggle}
+          onLogs={onLogs}
+          busy={busy}
+        />
+      )}
+      <div>
+        {children.map(agent => {
+          const sc = statusColor(agent.status)
+          const subAgentList = agents.filter(a => a.parent_agent_id === agent.id)
+          const hasChildren = subAgentList.length > 0
+          const runningSubCount = subAgentList.filter(a => a.status === 'running' || a.status === 'online').length
+          const showSwarm = isSwarmEnabled(agent) && hasChildren
+          return (
+            <div key={agent.id}>
+              <div
+                className="flex items-center gap-2 py-1 border-b border-[#1a1620] hover:bg-[#1e1a20] group"
+                style={{ paddingLeft: depth * 20 + 8 }}
+              >
+                {/* Tree connector */}
+                {depth > 0 && (
+                  <span className="text-[10px] text-[#2a2228] shrink-0">└</span>
                 )}
-                {hasChildren && (
-                  <span className="ml-2 text-[10px] text-[#3a3535]">
-                    [{agents.filter(a => a.parent_agent_id === agent.id).length} sub]
-                  </span>
-                )}
-              </span>
-              {/* Status label */}
-              <span className="text-[10px] uppercase shrink-0" style={{ color: sc.text }}>
-                {sc.label}
-              </span>
-              {/* Quick actions (visible on hover) */}
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button
-                  onClick={() => onToggle(agent)}
-                  disabled={busy === agent.id}
-                  className="text-[10px] px-2 py-0.5 border border-[#2a2228] hover:border-[#c0392b] hover:text-[#c0392b] uppercase transition-colors disabled:opacity-40"
-                  style={{ color: agent.status === 'running' ? '#c0392b' : '#3abfa0' }}
-                >
-                  {busy === agent.id ? '...' : agent.status === 'running' ? 'stop' : 'start'}
-                </button>
-                <button
-                  onClick={() => onLogs(agent)}
-                  className="text-[10px] px-2 py-0.5 border border-[#2a2228] hover:border-[#6bc5e8] hover:text-[#6bc5e8] text-[#4a4048] uppercase transition-colors"
-                >
-                  logs
-                </button>
+                {/* Status dot */}
+                <span
+                  className="w-2 h-2 shrink-0 border border-black"
+                  style={{
+                    background: sc.dot,
+                    animation: sc.pulse ? 'pulse 1.2s ease-in-out infinite' : 'none',
+                  }}
+                />
+                {/* Name + role */}
+                <span className="text-[13px] flex-1 min-w-0 flex items-center gap-1 flex-wrap">
+                  {agent.name}
+                  {agent.role && (
+                    <span className="ml-1 text-[10px] text-[#4a4048] uppercase">{agent.role}</span>
+                  )}
+                  {hasChildren && !showSwarm && (
+                    <span className="ml-1 text-[10px] text-[#3a3535]">
+                      [{subAgentList.length} sub]
+                    </span>
+                  )}
+                  {showSwarm && (
+                    <button
+                      onClick={e => { e.stopPropagation(); setSwarmAgent(agent) }}
+                      className="ml-1 text-[10px] px-1.5 py-0 font-bold border border-[#c08030] hover:border-[#f0b35e] transition-colors"
+                      style={{
+                        background: '#1a1008',
+                        color: '#f0b35e',
+                        animation: runningSubCount > 0 ? 'pulse 1.2s ease-in-out infinite' : 'none',
+                      }}
+                      title={`${runningSubCount} running sub-agent${runningSubCount !== 1 ? 's' : ''}`}
+                    >
+                      swarm:{subAgentList.length}
+                    </button>
+                  )}
+                </span>
+                {/* Status label */}
+                <span className="text-[10px] uppercase shrink-0" style={{ color: sc.text }}>
+                  {sc.label}
+                </span>
+                {/* Quick actions (visible on hover) */}
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <button
+                    onClick={() => onToggle(agent)}
+                    disabled={busy === agent.id}
+                    className="text-[10px] px-2 py-0.5 border border-[#2a2228] hover:border-[#c0392b] hover:text-[#c0392b] uppercase transition-colors disabled:opacity-40"
+                    style={{ color: agent.status === 'running' ? '#c0392b' : '#3abfa0' }}
+                  >
+                    {busy === agent.id ? '...' : agent.status === 'running' ? 'stop' : 'start'}
+                  </button>
+                  <button
+                    onClick={() => onLogs(agent)}
+                    className="text-[10px] px-2 py-0.5 border border-[#2a2228] hover:border-[#6bc5e8] hover:text-[#6bc5e8] text-[#4a4048] uppercase transition-colors"
+                  >
+                    logs
+                  </button>
+                </div>
               </div>
+              {/* Recurse into children */}
+              <AgentTree
+                agents={agents}
+                depth={depth + 1}
+                parentId={agent.id}
+                onToggle={onToggle}
+                onLogs={onLogs}
+                busy={busy}
+              />
             </div>
-            {/* Recurse into children */}
-            <AgentTree
-              agents={agents}
-              depth={depth + 1}
-              parentId={agent.id}
-              onToggle={onToggle}
-              onLogs={onLogs}
-              busy={busy}
-            />
-          </div>
-        )
-      })}
-    </div>
+          )
+        })}
+      </div>
+    </>
   )
 }

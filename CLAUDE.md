@@ -80,6 +80,58 @@ The daemon manages AI agent lifecycles (like systemd for agents):
 - `编译部署与故障排查手册.md` — build, deploy, and troubleshooting manual
 - `dev-log/` — daily development logs
 
+## Production Deployment (Tencent Cloud)
+
+**Server**: `ubuntu@82.157.4.63` — Project at `/home/ubuntu/redshrimp/`
+**Backend**: runs as `npx tsx src/index.ts` via systemd (`redshrimp.service`), NOT compiled dist
+**Frontend**: built to `frontend-src/dist/`, served by Nginx
+
+### Standard Deploy Flow
+
+```bash
+# 1. Sync backend source (exclude node_modules, .env, dist)
+rsync -az --exclude='node_modules' --exclude='.git' --exclude='.env' --exclude='dist/' \
+  backend-src/ ubuntu@82.157.4.63:/home/ubuntu/redshrimp/backend-src/
+
+# 2. Sync frontend source
+rsync -az --exclude='node_modules' --exclude='.git' --exclude='dist/' \
+  frontend-src/ ubuntu@82.157.4.63:/home/ubuntu/redshrimp/frontend-src/
+
+# 3. Install deps on server
+ssh ubuntu@82.157.4.63 "cd /home/ubuntu/redshrimp/backend-src && npm install"
+ssh ubuntu@82.157.4.63 "cd /home/ubuntu/redshrimp/frontend-src && npm install && npm run build"
+
+# 4. Restart backend
+ssh ubuntu@82.157.4.63 "sudo systemctl restart redshrimp"
+
+# 5. Verify
+ssh ubuntu@82.157.4.63 "sudo systemctl status redshrimp --no-pager | head -5"
+```
+
+### Refresh Agent Workspaces on Server
+
+After deploying seed changes (`workspace-init.ts`), refresh via API:
+
+```bash
+# Get token (no-password login)
+TOKEN=$(curl -s -X POST https://<tunnel-url>/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"identity":"jwt"}' | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))")
+
+# Refresh all core agent workspaces
+curl -s -X POST https://<tunnel-url>/api/agents/refresh-core-workspaces \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### Notes
+- Server DB is independent from local DB (different agent UUIDs)
+- `daemon-src/dist/chat-bridge.js` is NOT deployed — server uses `src/daemon/chat-bridge.mjs` directly
+- DB schema changes require manual migration: `ssh ubuntu@... psql -U redshrimp -d redshrimp -f migration.sql`
+- DB credentials: host=127.0.0.1, db=redshrimp, user=redshrimp, pass=redshrimp123
+- Logs: `ssh ubuntu@82.157.4.63 "sudo journalctl -u redshrimp -f"`
+
 ## Conventions
 - Backend uses ESM (`"type": "module"`) — imports use `.js` extensions even for `.ts` files
 - All IDs are UUIDs (PostgreSQL `gen_random_uuid()`)

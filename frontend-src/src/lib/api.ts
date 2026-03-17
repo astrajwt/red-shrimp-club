@@ -162,6 +162,8 @@ export const agentsApi = {
     post<{ ok: boolean }>(`/agents/${id}/start`, { channelId }),
   stop:   (id: string) =>
     post<{ ok: boolean }>(`/agents/${id}/stop`),
+  restart: (id: string) =>
+    post<{ ok: boolean }>(`/agents/${id}/restart`),
   logs:   (id: string, limit = 100, before?: string) =>
     get<{ logs: AgentLog[] }>(`/agents/${id}/logs?limit=${limit}${before ? `&before=${before}` : ''}`),
   delete:  (id: string) => del<{ ok: boolean }>(`/agents/${id}`),
@@ -696,7 +698,7 @@ export interface AgentTodo {
   channel_name: string
   title: string
   number: number
-  status: 'open' | 'claimed' | 'in_progress' | 'reviewing' | 'completed'
+  status: 'pending_discussion' | 'open' | 'claimed' | 'in_progress' | 'reviewing' | 'completed'
   claimed_by_id: string | null
   claimed_by_name: string | null
   claimed_at: string | null
@@ -720,7 +722,7 @@ export interface AgentAuthoredDoc {
 export interface Task {
   id: string
   title: string
-  status: 'open' | 'claimed' | 'in_progress' | 'reviewing' | 'completed'
+  status: 'pending_discussion' | 'open' | 'claimed' | 'in_progress' | 'reviewing' | 'completed'
   channel_id: string
   number: number
   claimed_by_id: string | null

@@ -34,6 +34,7 @@ export interface AgentConfig {
   modelId:      string
   reasoningEffort?: string
   sessionId?:   string
+  role?:        string    // agent role (coordinator, tech-lead, ops, etc.) — used in bootstrap prompt
 }
 
 // Matches slock daemon's AgentProc states
@@ -732,8 +733,8 @@ export class ProcessManager {
     ]
   }
 
-  private buildBootstrapPrompt(config: Pick<AgentConfig, 'name' | 'machineId' | 'machineName'>): string {
-    const { name, machineId, machineName } = config
+  private buildBootstrapPrompt(config: Pick<AgentConfig, 'name' | 'machineId' | 'machineName' | 'role'>): string {
+    const { name, machineId, machineName, role } = config
     const vaultRoot = resolveVaultRoot()
     const machineLabel = machineName ? `${machineName} (id: ${machineId})` : machineId
     return `You are "${name}", an AI agent in Red Shrimp.
@@ -769,6 +770,9 @@ Available MCP chat tools:
 - \`mcp__chat__get_human_messages\`  — get all messages sent by humans on a given date (for daily report summarization)
 - \`mcp__chat__list_tasks\`          — list tasks in a specific channel
 - \`mcp__chat__list_all_tasks\`      — list ALL tasks across the entire server (for weekly reports/ops overview)
+- \`mcp__chat__get_team_status\`     — get all agents' status, open task counts, and current project (for task dispatch)
+- \`mcp__chat__read_agent_memory\`   — [coordinator only] read another agent's MEMORY.md to understand their current context
+- \`mcp__chat__mark_task_discussed\` — [coordinator only] unlock a task after discussion so assignee can start working
 - \`mcp__chat__create_tasks\`
 - \`mcp__chat__claim_tasks\`
 - \`mcp__chat__unclaim_task\`
@@ -776,7 +780,9 @@ Available MCP chat tools:
 - \`mcp__chat__link_task_doc\`
 - \`mcp__chat__create_sticky_note\`
 - \`mcp__chat__vault_commit\`
-
+${(role === 'coordinator' || role === 'tech-lead') ? `
+Swarm（sub-agent）模式：你可以通过 Bash 调用 \`claude -p "任务描述" --print\` 生成子 agent 进程处理并行子任务。子 agent 在 DB 中通过 parent_agent_id 关联到你，在 UI 中会显示在你的 swarm 面板中。生成子 agent 前须向 Donovan 汇报。
+` : ''}
 Task rules:
 - Tasks are explicitly assigned. Do not rely on claim/unclaim as a normal workflow.
 - **绝对禁止抢活**: 只能执行 \`claimedByName\` 等于你名字（${name}）的任务。看到任务列表里 \`claimedByName\` 是别人名字的，一律忽略，**不得主动介入或重复执行**。
