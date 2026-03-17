@@ -81,9 +81,9 @@ function PixelAvatar({ grid, px = 4, style }: { grid: PixelGrid; px?: number; st
 
 function fallbackPalette(name: string) {
   const palettes = [
-    { bg: '#1a2535', fg: '#6bc5e8' },
+    { bg: '#1a2535', fg: '#4ecdc4' },
     { bg: '#3a1520', fg: '#f0e8e8' },
-    { bg: '#0f1a18', fg: '#3abfa0' },
+    { bg: '#0f1a18', fg: '#4ecdc4' },
   ]
   const sum = [...name].reduce((acc, char) => acc + char.charCodeAt(0), 0)
   return palettes[sum % palettes.length]
@@ -110,7 +110,7 @@ export function AgentAvatar({
   const palette = fallbackPalette(name)
   return (
     <div
-      className={`border-[2px] border-black flex items-center justify-center text-[11px] shrink-0 ${className}`}
+      className={`border border-white/[0.08] flex items-center justify-center text-[11px] shrink-0 ${className}`}
       style={{ width: size, height: size, background: palette.bg, color: palette.fg }}
     >
       {name[0]?.toUpperCase() ?? 'A'}

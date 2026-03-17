@@ -172,8 +172,8 @@ export default function App() {
   if (loading || (user && onboarding === null)) {
     return (
       <div
-        className="min-h-screen bg-[#0e0c10] flex items-center justify-center text-[#4a4048]"
-        style={{ fontFamily: '"Share Tech Mono", monospace' }}
+        className="min-h-screen bg-[#09090b] flex items-center justify-center text-[#4a4a60]"
+        style={{  }}
       >
         {service.reachable ? 'connecting...' : 'backend unavailable'}
       </div>
@@ -201,7 +201,7 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col overflow-hidden bg-[#0e0c10] text-[#e7dfd3]"
+      className="flex flex-col overflow-hidden bg-[#09090b] text-[#e8e6f0]"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         height: isMobile ? '100dvh' : '100vh',
@@ -209,30 +209,30 @@ export default function App() {
       }}
     >
       {!service.reachable && (
-        <div className="shrink-0 border-b-[3px] border-black bg-[#2b1414] px-4 py-2 text-[12px] text-[#f3c6bf]">
+        <div className="shrink-0 border-b border-white/[0.08] bg-[#2b1414] px-4 py-2 text-[12px] text-[#f3c6bf]">
           {service.message ?? 'Backend unavailable.'}
         </div>
       )}
 
       {isMobile ? (
         <>
-          <header className="shrink-0 border-b-[3px] border-black bg-[#110e12] px-4 py-3" style={{ display: page === 'channels' ? 'none' : undefined }}>
+          <header className="shrink-0 border-b border-white/[0.08] bg-[#0f0f14] px-4 py-3" style={{ display: page === 'channels' ? 'none' : undefined }}>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[10px] text-[#c0392b] uppercase tracking-[0.28em]">red-shrimp</div>
-                <div className="mt-1 text-[15px] uppercase tracking-[0.12em] text-[#e7dfd3]">
+                <div className="mt-1 text-[15px] uppercase tracking-[0.12em] text-[#e8e6f0]">
                   {currentNav?.label ?? page}
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <div className={`text-[10px] uppercase ${service.reachable ? 'text-[#6bc5e8]' : 'text-[#f3c6bf]'}`}>
+                <div className={`text-[10px] uppercase ${service.reachable ? 'text-[#4ecdc4]' : 'text-[#f3c6bf]'}`}>
                   {service.reachable ? 'online' : 'offline'}
                 </div>
-                <div className="mt-1 max-w-[140px] truncate text-[11px] text-[#6a6068]">{user.name}</div>
+                <div className="mt-1 max-w-[140px] truncate text-[11px] text-[#4a4a60]">{user.name}</div>
               </div>
             </div>
           </header>
-          <nav className="shrink-0 border-b-[3px] border-black bg-[#141118] px-2 py-1.5 overflow-x-auto scrollbar-none" style={{ display: page === 'channels' ? 'none' : undefined }}>
+          <nav className="shrink-0 border-b border-white/[0.08] bg-[#0f0f14] px-2 py-1.5 overflow-x-auto scrollbar-none" style={{ display: page === 'channels' ? 'none' : undefined }}>
             <div className="flex gap-1.5">
               {NAV.map(n => {
                 const active = page === n.id
@@ -240,8 +240,8 @@ export default function App() {
                   <button
                     key={n.id}
                     onClick={() => setPage(n.id)}
-                    className={`shrink-0 border-[2px] border-black px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] ${
-                      active ? 'bg-[#1a2535] text-[#e7dfd3]' : 'bg-[#0e0c10] text-[#6a6068]'
+                    className={`shrink-0 border border-white/[0.08] px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] ${
+                      active ? 'bg-[#1a2535] text-[#e8e6f0]' : 'bg-[#09090b] text-[#4a4a60]'
                     }`}
                   >
                     {n.label}
@@ -252,7 +252,7 @@ export default function App() {
           </nav>
         </>
       ) : (
-        <nav className="shrink-0 flex items-center border-b-[3px] border-black bg-[#110e12] px-4 gap-1 overflow-x-auto scrollbar-none">
+        <nav className="shrink-0 flex items-center border-b border-white/[0.08] bg-[#0f0f14] px-4 gap-1 overflow-x-auto scrollbar-none">
           {/* Brand */}
           <div className="hidden md:block text-[13px] text-[#c0392b] uppercase tracking-widest mr-4 py-2 select-none shrink-0">
             red-shrimp
@@ -267,8 +267,8 @@ export default function App() {
                 onClick={() => setPage(n.id)}
                 className={`shrink-0 px-3 py-2 text-[12px] uppercase tracking-wider border-b-[3px] transition-colors whitespace-nowrap ${
                   active
-                    ? 'border-[#c0392b] text-[#e7dfd3]'
-                    : 'border-transparent text-[#6a6068] hover:text-[#c8bdb8]'
+                    ? 'border-[#c0392b] text-[#e8e6f0]'
+                    : 'border-transparent text-[#4a4a60] hover:text-[#8a8aa8]'
                 }`}
               >
                 <span className="inline-flex items-center gap-2">
@@ -285,7 +285,7 @@ export default function App() {
 
           {/* Spacer + user */}
           <div className="flex-1 shrink-0" />
-          <div className="hidden md:block text-[11px] text-[#4a4048] py-2 pl-3 select-none border-l border-[#2a2228] ml-1 shrink-0">
+          <div className="hidden md:block text-[11px] text-[#4a4a60] py-2 pl-3 select-none border-l border-[#2a2228] ml-1 shrink-0">
             {user.name}
           </div>
         </nav>
@@ -325,7 +325,7 @@ export default function App() {
       {/* ── Bottom tab bar (mobile only, hidden on channels page) ── */}
       {isMobile && page !== 'channels' && (
         <nav
-          className="fixed bottom-0 left-0 right-0 z-50 flex items-stretch border-t-[3px] border-black bg-[#110e12]"
+          className="fixed bottom-0 left-0 right-0 z-50 flex items-stretch border-t border-white/[0.08] bg-[#0f0f14]"
           style={{ paddingBottom: 'var(--safe-area-bottom, 0px)' }}
         >
           {MOBILE_TABS.map(t => {
@@ -335,7 +335,7 @@ export default function App() {
                 key={t.id}
                 onClick={() => setPage(t.id)}
                 className={`flex-1 flex flex-col items-center justify-center py-2 text-[10px] uppercase tracking-wider transition-colors relative ${
-                  active ? 'text-[#e7dfd3]' : 'text-[#6a6068]'
+                  active ? 'text-[#e8e6f0]' : 'text-[#4a4a60]'
                 }`}
               >
                 {active && <div className="absolute top-0 left-1/4 right-1/4 h-[3px] bg-[#c0392b]" />}

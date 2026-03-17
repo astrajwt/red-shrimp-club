@@ -298,25 +298,25 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
 
   return (
     <div
-      className={`${embedded ? 'h-full' : 'min-h-screen'} bg-[#0e0c10] text-[#e7dfd3] flex flex-col`}
+      className={`${embedded ? 'h-full' : 'min-h-screen'} bg-[#09090b] text-[#e8e6f0] flex flex-col`}
       style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}
     >
       {/* Breadcrumb */}
-      <div className="border-b-[3px] border-black bg-[#141018] px-5 py-2 flex items-center gap-2 text-[12px] text-[#4a4048] shrink-0">
+      <div className="border-b border-white/[0.08] bg-[#141018] px-5 py-2 flex items-center gap-2 text-[12px] text-[#4a4a60] shrink-0">
         {pathParts.map((part, i) => (
           <span key={i} className="flex items-center gap-2">
-            <span className="text-[#6bc5e8]">{part}</span>
+            <span className="text-[#4ecdc4]">{part}</span>
             <span>/</span>
           </span>
         ))}
-        <span className="text-[#e7dfd3]">{fileName}</span>
+        <span className="text-[#e8e6f0]">{fileName}</span>
         <div className="ml-auto flex gap-2">
-          <span className="border-[2px] border-black bg-[#0f1a18] text-[#3abfa0] px-2 py-0.5 uppercase text-[10px]">read-only</span>
-          <span className="border-[2px] border-black bg-[#1a2535] text-[#6bc5e8] px-2 py-0.5 uppercase text-[10px]">vault</span>
+          <span className="border border-white/[0.08] bg-[#0f1a18] text-[#4ecdc4] px-2 py-0.5 uppercase text-[10px]">read-only</span>
+          <span className="border border-white/[0.08] bg-[#1a2535] text-[#4ecdc4] px-2 py-0.5 uppercase text-[10px]">vault</span>
           {onClose && !embedded && (
             <button
               onClick={onClose}
-              className="border-[2px] border-black bg-[#3a1520] text-[#c0392b] px-2 py-0.5 text-[10px] hover:bg-[#c0392b] hover:text-black"
+              className="border border-white/[0.08] bg-[#3a1520] text-[#c0392b] px-2 py-0.5 text-[10px] hover:bg-[#c0392b] hover:text-black"
             >
               close
             </button>
@@ -327,14 +327,14 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Outline + links sidebar — hidden in embedded mode (tree is in MemoryBrowser) */}
         {!embedded && (
-          <aside className="w-[200px] shrink-0 border-r-[3px] border-black bg-[#141018] flex flex-col overflow-auto">
-            <div className="border-b-[3px] border-black px-3 py-2 text-[11px] text-[#4a4048] uppercase">outline</div>
+          <aside className="w-[200px] shrink-0 border-r border-white/[0.08] bg-[#141018] flex flex-col overflow-auto">
+            <div className="border-b border-white/[0.08] px-3 py-2 text-[11px] text-[#4a4a60] uppercase">outline</div>
             {outline.map((h, i) => (
               <div
                 key={i}
-                className={`px-3 py-1 text-[12px] cursor-pointer hover:text-[#6bc5e8] border-l-[2px]
+                className={`px-3 py-1 text-[12px] cursor-pointer hover:text-[#4ecdc4] border-l-[2px]
                   ${h.level === 1
-                    ? 'text-[#c8bdb8] border-[#c0392b] pl-3'
+                    ? 'text-[#8a8aa8] border-[#c0392b] pl-3'
                     : h.level === 2
                     ? 'text-[#9a8888] border-transparent pl-5'
                     : 'text-[#6a5858] border-transparent pl-7'}`}
@@ -343,11 +343,11 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
               </div>
             ))}
             {linkedTasks.length > 0 && (
-              <div className="border-t-[3px] border-black mt-3 px-3 py-2">
-                <div className="text-[11px] text-[#4a4048] uppercase mb-2">linked tasks</div>
+              <div className="border-t border-white/[0.08] mt-3 px-3 py-2">
+                <div className="text-[11px] text-[#4a4a60] uppercase mb-2">linked tasks</div>
                 {linkedTasks.map(t => (
                   <div key={t.id} className="text-[11px] leading-5 mb-1">
-                    <div className="text-[#6bc5e8]">#t{t.number}</div>
+                    <div className="text-[#4ecdc4]">#t{t.number}</div>
                     <div className="text-[#6a5858] truncate">{t.title}</div>
                   </div>
                 ))}
@@ -359,7 +359,7 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
         {/* Main document */}
         <main className="flex-1 overflow-auto min-w-0 bg-[#161318]">
           {loading && (
-            <div className="text-[#4a4048] text-[14px] text-center pt-16">loading...</div>
+            <div className="text-[#4a4a60] text-[14px] text-center pt-16">loading...</div>
           )}
           {error && (
             <div className="text-[#c0392b] text-[14px] text-center pt-16">✕ {error}</div>
@@ -367,18 +367,18 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
           {!loading && !error && isMarkdown && content !== null && (
             <div className="p-4 md:p-6 h-full">
               <div
-                className="w-full border-[3px] border-black bg-[#d8d0bf] text-black"
+                className="w-full border border-white/[0.08] rounded bg-[#d8d0bf] text-black"
                 style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.6)' }}
               >
                 {/* Doc toolbar */}
-                <div className="border-b-[3px] border-black px-4 md:px-6 py-3 bg-[#ccc4b2] flex items-center justify-between">
+                <div className="border-b border-white/[0.08] px-4 md:px-6 py-3 bg-[#ccc4b2] flex items-center justify-between">
                   <div className="min-w-0 mr-2">
                     <div className="text-[11px] uppercase tracking-[0.06em] opacity-60 truncate">{fileName}</div>
                     <div className="text-[18px] leading-tight mt-1 truncate">{noteTitle}</div>
                   </div>
                   <button
                     onClick={() => { copyToClipboard(effectivePath); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-                    className="border-[2px] border-black px-2 py-0.5 text-[11px] uppercase transition-colors shrink-0"
+                    className="border border-white/[0.08] px-2 py-0.5 text-[11px] uppercase transition-colors shrink-0"
                     style={{ background: copied ? '#c0392b' : '#ece4d4', color: copied ? '#fff' : 'inherit' }}
                   >
                     {copied ? 'copied!' : 'copy path'}
@@ -439,10 +439,10 @@ function AssetDocumentCard({
 
   return (
     <div
-      className="w-full border-[3px] border-black bg-[#d8d0bf] text-black"
+      className="w-full border border-white/[0.08] rounded bg-[#d8d0bf] text-black"
       style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.6)' }}
     >
-      <div className="border-b-[3px] border-black px-4 md:px-6 py-3 bg-[#ccc4b2] flex items-center justify-between gap-3">
+      <div className="border-b border-white/[0.08] px-4 md:px-6 py-3 bg-[#ccc4b2] flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-[0.06em] opacity-60 truncate">{fileName}</div>
           <div className="text-[18px] leading-tight mt-1 truncate">{kind === 'pdf' ? 'PDF preview' : kind === 'image' ? 'image preview' : 'file preview'}</div>
@@ -452,13 +452,13 @@ function AssetDocumentCard({
             href={assetUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="border-[2px] border-black px-2 py-0.5 bg-[#ece4d4] text-[11px] uppercase hover:bg-[#1a5a8a] hover:text-white hover:border-[#1a5a8a] transition-colors"
+            className="border border-white/[0.08] px-2 py-0.5 bg-[#ece4d4] text-[11px] uppercase hover:bg-[#1a5a8a] hover:text-white hover:border-[#1a5a8a] transition-colors"
           >
             open raw
           </a>
           <button
             onClick={() => { copyToClipboard(filePath); setAssetCopied(true); setTimeout(() => setAssetCopied(false), 1500) }}
-            className="border-[2px] border-black px-2 py-0.5 text-[11px] uppercase transition-colors"
+            className="border border-white/[0.08] px-2 py-0.5 text-[11px] uppercase transition-colors"
             style={{ background: assetCopied ? '#c0392b' : '#ece4d4', color: assetCopied ? '#fff' : 'inherit' }}
           >
             {assetCopied ? 'copied!' : 'copy path'}
@@ -485,10 +485,10 @@ function BacklinksPanel({
   if (!loading && backlinks.length === 0 && forwardLinks.length === 0) return null
 
   return (
-    <div className="mt-4 border-[3px] border-black bg-[#d8d0bf] text-black" style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.6)' }}>
+    <div className="mt-4 border border-white/[0.08] rounded bg-[#d8d0bf] text-black" style={{ boxShadow: '4px 5px 0 rgba(0,0,0,0.6)' }}>
       {/* Forward links */}
       {forwardLinks.length > 0 && (
-        <div className="border-b-[3px] border-black px-4 md:px-6 py-3">
+        <div className="border-b border-white/[0.08] px-4 md:px-6 py-3">
           <div className="text-[11px] uppercase tracking-[0.06em] opacity-60 mb-2">outgoing links ({forwardLinks.length})</div>
           <div className="flex flex-wrap gap-1.5">
             {forwardLinks.map((link, i) => (
@@ -573,7 +573,7 @@ function AssetPreview({
         <iframe
           src={resolvedUrl}
           title={fileLabel}
-          className="w-full min-h-[70vh] border-[3px] border-black bg-white"
+          className="w-full min-h-[70vh] border border-white/[0.08] rounded bg-white"
         />
         <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] opacity-70">
           <span>{caption || fileLabel}</span>
@@ -586,7 +586,7 @@ function AssetPreview({
   }
 
   return (
-    <div className={`border-[3px] border-black bg-[#ece4d4] p-4 text-[13px] ${className}`}>
+    <div className={`border border-white/[0.08] rounded bg-[#ece4d4] p-4 text-[13px] ${className}`}>
       <div className="font-bold uppercase text-[11px] tracking-[0.06em] opacity-60 mb-2">preview unavailable</div>
       <div className="mb-3">this file type does not have an inline renderer yet.</div>
       <a href={resolvedUrl} target="_blank" rel="noopener noreferrer" className="underline text-[#1a5a8a]">
@@ -629,7 +629,7 @@ function buildMdComponents(
     ),
     pre: ({ children }) => (
       <div style={{ margin: '12px 0', overflowX: 'auto' }}>
-        <div style={{ border: '3px solid black', background: '#0e0c10', color: '#3abfa0', padding: '12px 16px', fontSize: 12, fontFamily: 'inherit' }}>
+        <div style={{ border: '3px solid black', background: '#09090b', color: '#4ecdc4', padding: '12px 16px', fontSize: 12, fontFamily: 'inherit' }}>
           <pre style={{ margin: 0, whiteSpace: 'pre', overflowX: 'auto' }}>{children}</pre>
         </div>
       </div>
@@ -754,8 +754,8 @@ function PropertiesPanel({ properties }: { properties: Record<string, Frontmatte
   if (entries.length === 0) return null
 
   return (
-    <div className="mb-6 border-[3px] border-black bg-[#ece4d4]">
-      <div className="border-b-[3px] border-black px-4 py-2 text-[11px] uppercase tracking-[0.06em] opacity-60">
+    <div className="mb-6 border border-white/[0.08] rounded bg-[#ece4d4]">
+      <div className="border-b border-white/[0.08] px-4 py-2 text-[11px] uppercase tracking-[0.06em] opacity-60">
         properties
       </div>
       <div className="px-4 py-3 space-y-2">
@@ -782,7 +782,7 @@ function PropertyValue({ propertyKey, value }: { propertyKey: string; value: Fro
         {values.map(tag => (
           <span
             key={tag}
-            className="border-[2px] border-black bg-[#d8d0bf] px-2 py-0.5 text-[11px]"
+            className="border border-white/[0.08] bg-[#d8d0bf] px-2 py-0.5 text-[11px]"
           >
             #{tag}
           </span>
@@ -800,7 +800,7 @@ function PropertyValue({ propertyKey, value }: { propertyKey: string; value: Fro
             href={item}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center border-[2px] border-black bg-[#d8d0bf] px-2 py-1 text-[11px] text-[#1a5a8a] hover:bg-[#1a5a8a] hover:text-white transition-colors"
+            className="inline-flex items-center border border-white/[0.08] bg-[#d8d0bf] px-2 py-1 text-[11px] text-[#1a5a8a] hover:bg-[#1a5a8a] hover:text-white transition-colors"
           >
             {item}
           </a>
@@ -815,7 +815,7 @@ function PropertyValue({ propertyKey, value }: { propertyKey: string; value: Fro
     <div className={`flex flex-wrap gap-1.5 ${pillLike ? '' : 'items-center'}`}>
       {values.map(item => (
         pillLike ? (
-          <span key={item} className="border-[2px] border-black bg-[#d8d0bf] px-2 py-0.5 text-[11px]">
+          <span key={item} className="border border-white/[0.08] bg-[#d8d0bf] px-2 py-0.5 text-[11px]">
             {item}
           </span>
         ) : (

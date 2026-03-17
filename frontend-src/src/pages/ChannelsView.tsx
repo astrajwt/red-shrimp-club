@@ -544,7 +544,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
 
   return (
     <div
-      className="flex h-full overflow-x-hidden bg-[#0e0c10] text-[#e7dfd3]"
+      className="flex h-full overflow-x-hidden bg-[#09090b] text-[#e8e6f0]"
       style={{ fontFamily: '"Share Tech Mono", "Courier New", monospace' }}
     >
       {/* ── Backdrop for mobile drawers ── */}
@@ -558,15 +558,15 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
       {/* ── Channel List ─────────────────────────────────────────────── */}
       <aside className={
         isMobile
-          ? `fixed inset-y-0 left-0 z-40 w-[260px] bg-[#141118] flex flex-col overflow-y-auto border-r-[3px] border-black transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
-          : `${sidebarOpen ? 'w-[200px]' : 'w-0 overflow-hidden'} border-r-[3px] border-black bg-[#141118] flex flex-col overflow-y-auto transition-all duration-200`
+          ? `fixed inset-y-0 left-0 z-40 w-[260px] bg-[#0f0f14] flex flex-col overflow-y-auto border-r border-white/[0.08] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+          : `${sidebarOpen ? 'w-[200px]' : 'w-0 overflow-hidden'} border-r border-white/[0.08] bg-[#0f0f14] flex flex-col overflow-y-auto transition-all duration-200`
       }>
         {isMobile && (
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b-[3px] border-black bg-[#141118] px-3 py-3">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-[#6bc5e8]">channels</div>
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[0.08] bg-[#0f0f14] px-3 py-3">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[#4ecdc4]">channels</div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="text-[18px] leading-none text-[#6a6068]"
+              className="text-[18px] leading-none text-[#4a4a60]"
               title="close channels"
             >
               ×
@@ -581,12 +581,12 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
               onClick={() => setChannelsExpanded(v => !v)}
               className="flex min-w-0 items-center gap-2 text-left"
             >
-              <span className="text-[10px] uppercase tracking-[0.1em] text-[#4a4048]">channels</span>
-              <span className="text-[10px] text-[#6a6068]">{channelsExpanded ? '▾' : '▸'}</span>
+              <span className="text-[10px] uppercase tracking-[0.1em] text-[#4a4a60]">channels</span>
+              <span className="text-[10px] text-[#4a4a60]">{channelsExpanded ? '▾' : '▸'}</span>
             </button>
             <button
               onClick={() => { setShowCreateCh(v => !v); setNewChName('') }}
-              className="text-[12px] text-[#4a4048] hover:text-[#6bc5e8] px-1 leading-none"
+              className="text-[12px] text-[#4a4a60] hover:text-[#4ecdc4] px-1 leading-none"
               title="new channel"
             >+</button>
           </div>
@@ -596,7 +596,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
             <div className="mb-3">
               <input
                 autoFocus
-                className="w-full bg-[#1e1a20] border-[2px] border-black text-[12px] text-[#e7dfd3] px-2 py-1 outline-none placeholder-[#4a4048]"
+                className="w-full bg-[#1e1a20] border border-white/[0.08] text-[12px] text-[#e8e6f0] px-2 py-1 outline-none placeholder-[#4a4a60]"
                 placeholder="channel-name"
                 value={newChName}
                 onChange={e => setNewChName(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
@@ -623,7 +623,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
               className={`w-full flex items-center justify-between px-2 py-1 mb-1 text-left border-l-[3px]
                 ${ch.id === activeId
                   ? 'border-[#c0392b] bg-[#3a1520] text-[#f0e8e8]'
-                  : 'border-transparent text-[#9a8888] hover:text-[#c8bdb8] hover:border-[#3a1520]'
+                  : 'border-transparent text-[#9a8888] hover:text-[#8a8aa8] hover:border-[#3a1520]'
                 }`}
             >
               <span className="text-[13px]"># {ch.name}</span>
@@ -641,8 +641,8 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
               onClick={() => setAgentsExpanded(v => !v)}
               className="mb-2 flex min-w-0 items-center gap-2 text-left"
             >
-              <span className="text-[10px] uppercase tracking-[0.1em] text-[#4a4048]">agents</span>
-              <span className="text-[10px] text-[#6a6068]">{agentsExpanded ? '▾' : '▸'}</span>
+              <span className="text-[10px] uppercase tracking-[0.1em] text-[#4a4a60]">agents</span>
+              <span className="text-[10px] text-[#4a4a60]">{agentsExpanded ? '▾' : '▸'}</span>
             </button>
             {agentsExpanded && agents.map(ag => {
               // Check if there's already a DM channel open with this agent
@@ -654,8 +654,8 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                 onClick={() => { openDM(ag.id); if (isMobile) setSidebarOpen(false) }}
                 className={`w-full flex items-center gap-2 px-2 py-1 mb-1 text-left group border-l-[3px]
                   ${isActive
-                    ? 'border-[#6bc5e8] bg-[#1a2535] text-[#f0e8e8]'
-                    : 'border-transparent text-[#9a8888] hover:text-[#c8bdb8] hover:border-[#1a2535]'
+                    ? 'border-[#4ecdc4] bg-[#1a2535] text-[#f0e8e8]'
+                    : 'border-transparent text-[#9a8888] hover:text-[#8a8aa8] hover:border-[#1a2535]'
                   }`}
                 title={`私聊 ${ag.name}`}
               >
@@ -666,12 +666,12 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                   <span
                     className="absolute -right-0.5 -bottom-0.5 w-2.5 h-2.5 border border-black"
                     style={{
-                      background: ag.status === 'running' ? '#3abfa0' : ag.status === 'idle' ? '#f0b35e' : '#3a3535',
+                      background: ag.status === 'running' ? '#4ecdc4' : ag.status === 'idle' ? '#f0b35e' : '#3a3535',
                       animation: ag.status === 'running' ? 'pulse 1.2s ease-in-out infinite' : 'none',
                     }}
                   />
                 </div>
-                <span className={`text-[12px] group-hover:text-[#6bc5e8] truncate ${isActive ? 'text-[#6bc5e8]' : 'text-[#9a8888]'}`}>
+                <span className={`text-[12px] group-hover:text-[#4ecdc4] truncate ${isActive ? 'text-[#4ecdc4]' : 'text-[#9a8888]'}`}>
                   {ag.name}
                 </span>
                 {existingDM && (unread[existingDM.id] ?? 0) > 0 && (
@@ -684,33 +684,33 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
         )}
 
         {/* Current user */}
-        <div className="mt-auto border-t-[3px] border-black px-3 py-3 shrink-0">
+        <div className="mt-auto border-t border-white/[0.08] px-3 py-3 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 border-[2px] border-black bg-[#3a1520] flex items-center justify-center text-[10px] text-[#f0e8e8] shrink-0">
+            <div className="w-6 h-6 border border-white/[0.08] bg-[#3a1520] flex items-center justify-center text-[10px] text-[#f0e8e8] shrink-0">
               {user?.name?.[0]?.toUpperCase() ?? 'U'}
             </div>
             <div className="min-w-0">
               <div className="text-[12px] truncate">{user?.name ?? '...'}</div>
-              <div className="text-[10px] text-[#4a4048]">human</div>
+              <div className="text-[10px] text-[#4a4a60]">human</div>
             </div>
           </div>
         </div>
       </aside>
 
       {/* ── Message Area ─────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col border-r-[3px] border-black min-w-0">
+      <main className="flex-1 flex flex-col border-r border-white/[0.08] min-w-0">
         {/* Header */}
-        <div className="border-b-[3px] border-black bg-[#141118] px-3 md:px-5 py-3 flex items-center gap-2 md:gap-3 shrink-0">
+        <div className="border-b border-white/[0.08] bg-[#0f0f14] px-3 md:px-5 py-3 flex items-center gap-2 md:gap-3 shrink-0">
           {isMobile && onBack && (
             <button
               onClick={onBack}
-              className="text-[16px] text-[#9a8888] hover:text-[#e7dfd3] px-1"
+              className="text-[16px] text-[#9a8888] hover:text-[#e8e6f0] px-1"
               title="back"
             >←</button>
           )}
           <button
             onClick={() => setSidebarOpen(v => !v)}
-            className="text-[18px] text-[#9a8888] hover:text-[#e7dfd3] px-1"
+            className="text-[18px] text-[#9a8888] hover:text-[#e8e6f0] px-1"
             title="channels"
           >{sidebarOpen && !isMobile ? '◂' : '☰'}</button>
           {activeChannel?.type === 'dm'
@@ -722,10 +722,10 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
             <div className="flex items-center gap-2 text-[14px] md:text-[16px]">
               {activeChName}
               {activeAgent?.status === 'running' && (
-                <span className="w-2 h-2 bg-[#3abfa0]" style={{ animation: 'pulse 1.2s ease-in-out infinite' }} />
+                <span className="w-2 h-2 bg-[#4ecdc4]" style={{ animation: 'pulse 1.2s ease-in-out infinite' }} />
               )}
             </div>
-            <div className="truncate text-[10px] md:text-[11px] text-[#6bc5e8]">
+            <div className="truncate text-[10px] md:text-[11px] text-[#4ecdc4]">
               {activeChannel?.type === 'dm' ? 'direct message' : 'channel'}
             </div>
           </div>
@@ -748,7 +748,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
               <div className="relative">
                 <button
                   onClick={() => setShowInvite(v => !v)}
-                  className="border-[2px] border-black bg-[#1a2535] text-[#6bc5e8] text-[11px] px-2 py-0.5 uppercase hover:bg-[#243548]"
+                  className="border border-white/[0.08] bg-[#1a2535] text-[#4ecdc4] text-[11px] px-2 py-0.5 uppercase hover:bg-[#243548]"
                   title="邀请 Agent 加入频道"
                 >
                   + agent
@@ -764,13 +764,13 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                       >
                         <span
                           className="w-1.5 h-1.5 shrink-0"
-                          style={{ background: ag.status === 'running' ? '#c0392b' : '#4a4048' }}
+                          style={{ background: ag.status === 'running' ? '#c0392b' : '#4a4a60' }}
                         />
-                        <span className="text-[#6bc5e8]">{ag.name}</span>
+                        <span className="text-[#4ecdc4]">{ag.name}</span>
                       </MenuButton>
                     ))}
                     {agents.length === 0 && (
-                      <div className="px-3 py-2 text-[11px] text-[#4a4048]">no agents yet</div>
+                      <div className="px-3 py-2 text-[11px] text-[#4a4a60]">no agents yet</div>
                     )}
                   </MenuShell>
                 )}
@@ -779,7 +779,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
             {isMobile && (
               <button
                 onClick={() => setRightDrawerOpen(true)}
-                className="text-[16px] text-[#6bc5e8] hover:text-[#e7dfd3] px-1"
+                className="text-[16px] text-[#4ecdc4] hover:text-[#e8e6f0] px-1"
                 title="info panel"
               >ⓘ</button>
             )}
@@ -803,7 +803,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
             </div>
           )}
           {loadingMoreMessages && (
-            <div className="text-center py-2 text-[11px] text-[#4a4048]">loading...</div>
+            <div className="text-center py-2 text-[11px] text-[#4a4a60]">loading...</div>
           )}
           {messages.map((msg, index) => {
             const isAgent = msg.sender_type === 'agent'
@@ -832,7 +832,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                     </div>
                   ) : (
                     <div
-                      className="w-8 h-8 border-[2px] border-black flex items-center justify-center text-[11px] shrink-0 mt-1"
+                      className="w-8 h-8 border border-white/[0.08] flex items-center justify-center text-[11px] shrink-0 mt-1"
                       style={{
                         background: '#3a1520',
                         color: '#f0e8e8',
@@ -845,17 +845,17 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                   <div className={`min-w-0 ${isAgent ? '' : 'items-end'} flex flex-col`}>
                     {!sameAsPrev && (
                       <div className={`flex items-baseline gap-2 mb-1 ${isAgent ? '' : 'flex-row-reverse'}`}>
-                        <span className={`text-[13px] ${isAgent ? 'text-[#6bc5e8]' : 'text-[#c0392b]'}`}>
+                        <span className={`text-[13px] ${isAgent ? 'text-[#4ecdc4]' : 'text-[#c0392b]'}`}>
                           {isAgent ? '(agent) ' : ''}{name}
                         </span>
-                        <span className="text-[11px] text-[#4a4048]">{time}</span>
+                        <span className="text-[11px] text-[#4a4a60]">{time}</span>
                       </div>
                     )}
                     {sameAsPrev && (
-                      <div className={`text-[10px] text-[#4a4048] mb-1 ${isAgent ? '' : 'text-right'}`}>{time}</div>
+                      <div className={`text-[10px] text-[#4a4a60] mb-1 ${isAgent ? '' : 'text-right'}`}>{time}</div>
                     )}
                     <div
-                      className="text-[13px] leading-6 md:text-[14px] px-3 py-2 border-[2px] border-black"
+                      className="text-[13px] leading-6 md:text-[14px] px-3 py-2 border border-white/[0.08]"
                       style={{
                         background: isAgent ? '#161d24' : '#2a1519',
                         color: '#e0d8d0',
@@ -870,11 +870,11 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                             <img
                               src={att.url}
                               alt={att.filename}
-                              className="max-w-full md:max-w-[420px] max-h-[320px] border-[2px] border-black object-contain cursor-pointer bg-[#0e0c10]"
+                              className="max-w-full md:max-w-[420px] max-h-[320px] border border-white/[0.08] object-contain cursor-pointer bg-[#09090b]"
                               onClick={() => window.open(att.url, '_blank')}
                               onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
-                            <div className="mt-1 text-[10px] text-[#6a6068]">{att.filename}</div>
+                            <div className="mt-1 text-[10px] text-[#4a4a60]">{att.filename}</div>
                           </div>
                         ) : (
                           <a
@@ -882,11 +882,11 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                             href={att.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 flex items-center gap-2 border border-black bg-[#100e13] px-2 py-2 text-[12px] text-[#6bc5e8] hover:bg-[#1a2535]"
+                            className="mt-2 flex items-center gap-2 border border-black bg-[#100e13] px-2 py-2 text-[12px] text-[#4ecdc4] hover:bg-[#1a2535]"
                           >
                             <span className="text-[14px]">📎</span>
                             <span className="flex-1 truncate">{att.filename}</span>
-                            <span className="text-[10px] text-[#4a4048] shrink-0">
+                            <span className="text-[10px] text-[#4a4a60] shrink-0">
                               {Math.max(1, Math.round((att.size ?? 0) / 1024))}KB
                             </span>
                           </a>
@@ -915,11 +915,11 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                 </div>
                 <div className="min-w-0 flex flex-col">
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-[13px] text-[#6bc5e8]">(agent) {activeAgent.name}</span>
-                    <span className="text-[11px] text-[#4a4048]">thinking...</span>
+                    <span className="text-[13px] text-[#4ecdc4]">(agent) {activeAgent.name}</span>
+                    <span className="text-[11px] text-[#4a4a60]">thinking...</span>
                   </div>
                   <div
-                    className="text-[13px] leading-5 px-3 py-2 border-[2px] border-black min-w-[200px]"
+                    className="text-[13px] leading-5 px-3 py-2 border border-white/[0.08] min-w-[200px]"
                     style={{
                       background: '#161d24',
                       color: '#8d8a85',
@@ -927,14 +927,14 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                     }}
                   >
                     {agentStreamLines.length === 0 ? (
-                      <span className="text-[#4a4048] animate-pulse">processing...</span>
+                      <span className="text-[#4a4a60] animate-pulse">processing...</span>
                     ) : (
                       <pre className="whitespace-pre-wrap break-words font-[inherit] text-[12px] max-h-[300px] overflow-y-auto">
                         {agentStreamLines.slice(-20).join('\n')}
                       </pre>
                     )}
                     <div className="mt-2 pt-2 border-t border-black/30 flex items-center justify-between">
-                      <span className="text-[10px] text-[#4a4048]">
+                      <span className="text-[10px] text-[#4a4a60]">
                         {agentStreamLines.length > 0 ? `${agentStreamLines.length} lines` : 'waiting'}
                       </span>
                       <button
@@ -965,7 +965,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
 
         {/* Input */}
         <div
-          className="border-t-[3px] border-black px-3 py-3 md:px-4 bg-[#120f13] relative shrink-0"
+          className="border-t border-white/[0.08] px-3 py-3 md:px-4 bg-[#0f0f14] relative shrink-0"
           style={{ paddingBottom: isMobile ? 'calc(0.75rem + var(--safe-area-bottom, 0px))' : undefined }}
         >
           {/* Pending attachments */}
@@ -974,7 +974,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
               {pendingFiles.map((file) => (
                 <div
                   key={file.fileId}
-                  className="flex items-center gap-2 border-[2px] border-black bg-[#1a161c] px-2 py-2 max-w-[280px]"
+                  className="flex items-center gap-2 border border-white/[0.08] bg-[#1a161c] px-2 py-2 max-w-[280px]"
                 >
                   {file.previewUrl ? (
                     <img
@@ -983,13 +983,13 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                       className="h-14 w-14 border border-black object-cover shrink-0"
                     />
                   ) : (
-                    <div className="h-14 w-14 border border-black shrink-0 flex items-center justify-center text-[18px] text-[#6bc5e8]">
+                    <div className="h-14 w-14 border border-black shrink-0 flex items-center justify-center text-[18px] text-[#4ecdc4]">
                       📎
                     </div>
                   )}
                   <div className="min-w-0">
-                    <div className="text-[11px] text-[#e7dfd3] truncate">{file.filename}</div>
-                    <div className="text-[10px] text-[#4a4048]">
+                    <div className="text-[11px] text-[#e8e6f0] truncate">{file.filename}</div>
+                    <div className="text-[10px] text-[#4a4a60]">
                       {file.mimeType} · {Math.max(1, Math.round(file.sizeBytes / 1024))}KB
                     </div>
                   </div>
@@ -1016,13 +1016,13 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                   key={ag.id}
                   onMouseDown={e => { e.preventDefault(); insertMention(ag.name) }}
                   onMouseEnter={() => setMentionIndex(idx)}
-                  className={idx === mentionIndex ? 'bg-[#2b1820] text-[#e7dfd3]' : ''}
+                  className={idx === mentionIndex ? 'bg-[#2b1820] text-[#e8e6f0]' : ''}
                 >
                   <span
                     className="w-1.5 h-1.5 shrink-0"
-                    style={{ background: ag.status === 'running' ? '#c0392b' : '#4a4048' }}
+                    style={{ background: ag.status === 'running' ? '#c0392b' : '#4a4a60' }}
                   />
-                  <span className={idx === mentionIndex ? 'text-[#e7dfd3]' : 'text-[#6bc5e8]'}>
+                  <span className={idx === mentionIndex ? 'text-[#e8e6f0]' : 'text-[#4ecdc4]'}>
                     {ag.name}
                   </span>
                 </MenuButton>
@@ -1031,7 +1031,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
           )}
 
           <div
-            className="flex items-center gap-2 md:gap-3 border-[3px] border-black bg-[#191619] px-2.5 py-2 md:px-3 transition-colors"
+            className="flex items-center gap-2 md:gap-3 border border-white/[0.08] rounded bg-[#191619] px-2.5 py-2 md:px-3 transition-colors"
             style={{
               boxShadow: dragActive ? '0 0 0 2px rgba(107,197,232,0.25), 0 0 18px rgba(107,197,232,0.18)' : '0 0 12px rgba(50,120,220,0.10)',
               background: dragActive ? '#161d24' : '#191619',
@@ -1053,17 +1053,17 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingFiles}
-              className="text-[#4a4048] hover:text-[#6bc5e8] transition-colors disabled:opacity-40 shrink-0 text-[16px]"
+              className="text-[#4a4a60] hover:text-[#4ecdc4] transition-colors disabled:opacity-40 shrink-0 text-[16px]"
               title="发送附件"
             >
               {uploadingFiles ? '↑' : '⌅'}
             </button>
-            <span className="hidden sm:inline text-[#4a4048] text-[13px] shrink-0">
+            <span className="hidden sm:inline text-[#4a4a60] text-[13px] shrink-0">
               {activeChannel?.type === 'dm' ? '✉' : '#'}{activeChName}
             </span>
             <input
               ref={inputRef}
-              className="min-w-0 flex-1 bg-transparent text-[14px] text-[#e7dfd3] outline-none placeholder-[#4a4048]"
+              className="min-w-0 flex-1 bg-transparent text-[14px] text-[#e8e6f0] outline-none placeholder-[#4a4a60]"
               value={input}
               onChange={handleInputChange}
               onPaste={handlePaste}
@@ -1110,7 +1110,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
             <button
               onClick={send}
               disabled={sending || (!input.trim() && pendingFiles.length === 0)}
-              className="border-[2px] border-black bg-[#c0392b] text-black px-3 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
+              className="border border-white/[0.08] bg-[#c0392b] text-black px-3 py-2 text-[12px] uppercase hover:bg-[#e04050] disabled:opacity-40"
             >
               send ↑
             </button>
@@ -1122,28 +1122,28 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
       {activeAgent ? (
         <aside className={
           isMobile
-            ? `fixed inset-y-0 right-0 z-40 w-[85vw] max-w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black transition-transform duration-200 ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
-            : 'w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black'
+            ? `fixed inset-y-0 right-0 z-40 w-[85vw] max-w-[420px] bg-[#0f0f14] flex flex-col border-l border-white/[0.08] transition-transform duration-200 ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
+            : 'w-[420px] bg-[#0f0f14] flex flex-col border-l border-white/[0.08]'
         }>
-          <div className="border-b-[3px] border-black px-4 py-3 bg-[#1a2535] shrink-0">
+          <div className="border-b border-white/[0.08] px-4 py-3 bg-[#1a2535] shrink-0">
             <div className="flex items-center gap-3">
               <AgentAvatar name={activeAgent.name} size={34} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <div className="text-[15px] text-[#e7dfd3] truncate">{activeAgent.name}</div>
+                  <div className="text-[15px] text-[#e8e6f0] truncate">{activeAgent.name}</div>
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-full border border-black shrink-0"
                     style={{ background: agentStatus(activeAgent.status).text }}
                   />
                 </div>
-                <div className="text-[10px] text-[#6bc5e8] uppercase tracking-wider truncate">
+                <div className="text-[10px] text-[#4ecdc4] uppercase tracking-wider truncate">
                   {roleLabel(activeAgent.role)}
                 </div>
               </div>
               {isMobile && (
                 <button
                   onClick={() => setRightDrawerOpen(false)}
-                  className="text-[18px] leading-none text-[#6a6068]"
+                  className="text-[18px] leading-none text-[#4a4a60]"
                   title="close info"
                 >
                   ×
@@ -1155,7 +1155,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
               <AgentMetaItem label="Role" value={roleLabel(activeAgent.role)} />
               <AgentMetaItem label="Runtime" value={runtimeLabel(activeAgent.runtime)} />
               <div className="col-span-2 flex items-center gap-2">
-                <span className="text-[10px] text-[#6bc5e8] uppercase w-[60px] shrink-0">Model</span>
+                <span className="text-[10px] text-[#4ecdc4] uppercase w-[60px] shrink-0">Model</span>
                 <select
                   value={activeAgent.model_id}
                   onChange={async (e) => {
@@ -1165,7 +1165,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                       setAgents(prev => prev.map(a => a.id === activeAgent.id ? { ...a, model_id: newModel } : a))
                     } catch { /* ignore */ }
                   }}
-                  className="flex-1 border-[2px] border-black bg-[#0e0c10] text-[#e7dfd3] px-2 py-0.5 text-[11px] outline-none min-w-0"
+                  className="flex-1 border border-white/[0.08] bg-[#09090b] text-[#e8e6f0] px-2 py-0.5 text-[11px] outline-none min-w-0"
                 >
                   {agentModelsForRuntime(models, activeAgent.runtime as AgentRuntime).map(m => (
                     <option key={m.id} value={m.id}>{m.label ?? m.id}</option>
@@ -1185,9 +1185,9 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                 <AgentMetaItem label="Workspace" value={activeAgent.workspace_path ?? '—'} small />
               </div>
             </div>
-            <div className="mt-3 border-[2px] border-black bg-[#100e13] px-3 py-2">
-              <div className="text-[10px] text-[#4a4048] uppercase mb-1">note</div>
-              <div className="text-[12px] text-[#c8bdb8] leading-5 whitespace-pre-wrap break-words">
+            <div className="mt-3 border border-white/[0.08] bg-[#100e13] px-3 py-2">
+              <div className="text-[10px] text-[#4a4a60] uppercase mb-1">note</div>
+              <div className="text-[12px] text-[#8a8aa8] leading-5 whitespace-pre-wrap break-words">
                 {activeAgent.note?.trim() || 'no note yet'}
               </div>
             </div>
@@ -1203,7 +1203,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
           <div className="flex-1 overflow-hidden">
             {agentPanelTab === 'workspace' && (
               <div className="h-full flex flex-col">
-                <div className="grid grid-cols-4 gap-2 border-b-[3px] border-black bg-[#100e13] px-3 py-2 shrink-0">
+                <div className="grid grid-cols-4 gap-2 border-b border-white/[0.08] bg-[#100e13] px-3 py-2 shrink-0">
                   <SidebarMiniButton active={agentWorkspaceSection === 'memory'} onClick={() => setAgentWorkspaceSection('memory')}>memory</SidebarMiniButton>
                   <SidebarMiniButton active={agentWorkspaceSection === 'knowledge'} onClick={() => setAgentWorkspaceSection('knowledge')}>knowledge</SidebarMiniButton>
                   <SidebarMiniButton active={agentWorkspaceSection === 'notes'} onClick={() => setAgentWorkspaceSection('notes')}>notes</SidebarMiniButton>
@@ -1211,42 +1211,42 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                 </div>
                 {agentWorkspaceSection === 'docs' ? (
                   <div className="h-full flex flex-col">
-                    <div className="max-h-[42%] overflow-auto border-b-[3px] border-black bg-[#100e13] p-3 space-y-2 shrink-0">
+                    <div className="max-h-[42%] overflow-auto border-b border-white/[0.08] bg-[#100e13] p-3 space-y-2 shrink-0">
                       {agentPanelLoading ? (
-                        <div className="text-[12px] text-[#4a4048] text-center py-6">loading docs...</div>
+                        <div className="text-[12px] text-[#4a4a60] text-center py-6">loading docs...</div>
                       ) : agentDetailDocs.length === 0 ? (
-                        <div className="text-[12px] text-[#4a4048] text-center py-6">no authored docs</div>
+                        <div className="text-[12px] text-[#4a4a60] text-center py-6">no authored docs</div>
                       ) : agentDetailDocs.map((doc) => (
                         <button
                           key={doc.path}
                           onClick={() => setSelectedAgentDocPath(doc.path)}
-                          className="w-full text-left border-[2px] border-black px-3 py-2"
+                          className="w-full text-left border border-white/[0.08] px-3 py-2"
                           style={{ background: selectedAgentDocPath === doc.path ? '#1a2535' : '#191619' }}
                         >
-                          <div className="text-[10px] text-[#4a4048] uppercase">{doc.type ?? 'doc'}{doc.date ? ` · ${doc.date}` : ''}</div>
+                          <div className="text-[10px] text-[#4a4a60] uppercase">{doc.type ?? 'doc'}{doc.date ? ` · ${doc.date}` : ''}</div>
                           <div className="text-[12px] mt-1 leading-5">{doc.title}</div>
-                          <div className="text-[10px] text-[#6bc5e8] mt-1 truncate">{doc.path}</div>
+                          <div className="text-[10px] text-[#4ecdc4] mt-1 truncate">{doc.path}</div>
                         </button>
                       ))}
                     </div>
-                    <div className="flex-1 overflow-auto bg-[#0e0c10]">
+                    <div className="flex-1 overflow-auto bg-[#09090b]">
                       {selectedAgentDocPath ? (
                         <DocumentViewer filePath={selectedAgentDocPath} embedded onNavigate={setSelectedAgentDocPath} />
                       ) : (
-                        <div className="h-full flex items-center justify-center text-[12px] text-[#4a4048]">select a doc above</div>
+                        <div className="h-full flex items-center justify-center text-[12px] text-[#4a4a60]">select a doc above</div>
                       )}
                     </div>
                   </div>
                 ) : (
                   <div className="flex-1 overflow-auto">
                     {agentPanelLoading ? (
-                      <div className="text-[12px] text-[#4a4048] text-center py-8">loading workspace...</div>
+                      <div className="text-[12px] text-[#4a4a60] text-center py-8">loading workspace...</div>
                     ) : (
                       <div className="p-4">
-                        <div className="text-[10px] text-[#4a4048] uppercase mb-2">
+                        <div className="text-[10px] text-[#4a4a60] uppercase mb-2">
                           {getAgentMemorySection(agentDetailMemory, agentWorkspaceSection)?.path ?? activeAgent.workspace_path ?? 'workspace unknown'}
                         </div>
-                        <pre className="text-[12px] leading-6 text-[#c8bdb8] whitespace-pre-wrap break-words">
+                        <pre className="text-[12px] leading-6 text-[#8a8aa8] whitespace-pre-wrap break-words">
                           {getAgentMemorySection(agentDetailMemory, agentWorkspaceSection)?.content || 'no content yet'}
                         </pre>
                       </div>
@@ -1258,51 +1258,51 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
 
             {agentPanelTab === 'tasks' && (
               <div className="h-full flex flex-col">
-                <div className="max-h-[45%] overflow-auto border-b-[3px] border-black bg-[#100e13] p-3 space-y-3 shrink-0">
+                <div className="max-h-[45%] overflow-auto border-b border-white/[0.08] bg-[#100e13] p-3 space-y-3 shrink-0">
                   {agentPanelLoading ? (
-                    <div className="text-[12px] text-[#4a4048] text-center py-6">loading todos...</div>
+                    <div className="text-[12px] text-[#4a4a60] text-center py-6">loading todos...</div>
                   ) : agentDetailTodos.length === 0 ? (
-                    <div className="text-[12px] text-[#4a4048] text-center py-6">no assigned todos</div>
+                    <div className="text-[12px] text-[#4a4a60] text-center py-6">no assigned todos</div>
                   ) : agentDetailTodos.map((todo) => (
-                    <div key={todo.id} className="border-[2px] border-black bg-[#191619]">
+                    <div key={todo.id} className="border border-white/[0.08] bg-[#191619]">
                       <div className="border-b-[2px] border-black px-3 py-2 bg-[#1e1a20]">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="text-[10px] text-[#4a4048] uppercase">#t{todo.number} · #{todo.channel_name}</div>
+                          <div className="text-[10px] text-[#4a4a60] uppercase">#t{todo.number} · #{todo.channel_name}</div>
                           <TodoStatusBadge status={todo.status} />
                         </div>
                         <div className="text-[12px] mt-1 leading-5">{todo.title}</div>
                       </div>
                       <div className="px-3 py-2 space-y-2">
                         {todo.docs.length === 0 ? (
-                          <div className="text-[11px] text-[#4a4048]">no linked docs</div>
+                          <div className="text-[11px] text-[#4a4a60]">no linked docs</div>
                         ) : todo.docs.map((doc) => (
                           <button
                             key={doc.id}
                             onClick={() => loadTodoDocPreview(doc.doc_path)}
                             className="w-full text-left border border-black px-2 py-2"
-                            style={{ background: selectedTodoDocPath === doc.doc_path ? '#1a2535' : '#120f13' }}
+                            style={{ background: selectedTodoDocPath === doc.doc_path ? '#1a2535' : '#0f0f14' }}
                           >
                             <div className="flex items-center gap-2">
                               <TodoDocStatusDot status={doc.status} />
-                              <span className="text-[11px] text-[#e7dfd3] truncate">{doc.doc_name}</span>
+                              <span className="text-[11px] text-[#e8e6f0] truncate">{doc.doc_name}</span>
                             </div>
-                            <div className="text-[10px] text-[#4a4048] mt-1 truncate">{doc.doc_path}</div>
+                            <div className="text-[10px] text-[#4a4a60] mt-1 truncate">{doc.doc_path}</div>
                           </button>
                         ))}
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="flex-1 overflow-auto bg-[#0e0c10] p-4">
-                  <div className="text-[10px] text-[#4a4048] uppercase mb-2">{selectedTodoDocPath ?? 'select a linked todo doc'}</div>
+                <div className="flex-1 overflow-auto bg-[#09090b] p-4">
+                  <div className="text-[10px] text-[#4a4a60] uppercase mb-2">{selectedTodoDocPath ?? 'select a linked todo doc'}</div>
                   {selectedTodoDocLoading ? (
-                    <div className="text-[12px] text-[#4a4048] text-center py-8">loading doc...</div>
+                    <div className="text-[12px] text-[#4a4a60] text-center py-8">loading doc...</div>
                   ) : selectedTodoDocError ? (
                     <div className="text-[12px] text-[#c0392b] text-center py-8">{selectedTodoDocError}</div>
                   ) : selectedTodoDocContent ? (
-                    <pre className="text-[12px] leading-6 text-[#c8bdb8] whitespace-pre-wrap break-words">{selectedTodoDocContent}</pre>
+                    <pre className="text-[12px] leading-6 text-[#8a8aa8] whitespace-pre-wrap break-words">{selectedTodoDocContent}</pre>
                   ) : (
-                    <div className="text-[12px] text-[#4a4048] text-center py-8">pick a todo note above</div>
+                    <div className="text-[12px] text-[#4a4a60] text-center py-8">pick a todo note above</div>
                   )}
                 </div>
               </div>
@@ -1311,21 +1311,21 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
             {agentPanelTab === 'activity' && (
               <div ref={logsContainerRef} className="h-full overflow-auto flex flex-col">
                 {agentPanelLoading ? (
-                  <div className="text-[12px] text-[#4a4048] text-center py-8">loading logs...</div>
+                  <div className="text-[12px] text-[#4a4a60] text-center py-8">loading logs...</div>
                 ) : agentDetailLogs.length === 0 ? (
-                  <div className="text-[12px] text-[#4a4048] text-center py-8">no logs yet</div>
+                  <div className="text-[12px] text-[#4a4a60] text-center py-8">no logs yet</div>
                 ) : (
                   <>
                     <div ref={logTopSentinelRef} className="h-px shrink-0" />
                     {loadingMoreLogs && (
-                      <div className="text-[11px] text-[#4a4048] text-center py-2 shrink-0">loading...</div>
+                      <div className="text-[11px] text-[#4a4a60] text-center py-2 shrink-0">loading...</div>
                     )}
                     {agentDetailLogs.map((log, index) => (
-                      <div key={log.id ?? index} className="border-b border-[#1a1620] flex text-[12px] shrink-0" style={{ background: index % 2 === 0 ? '#0e0c10' : '#100e13' }}>
-                        <div className="px-2 py-1 text-[#4a4048] w-[64px] shrink-0 border-r border-[#1a1620]">
+                      <div key={log.id ?? index} className="border-b border-[#1a1620] flex text-[12px] shrink-0" style={{ background: index % 2 === 0 ? '#09090b' : '#100e13' }}>
+                        <div className="px-2 py-1 text-[#4a4a60] w-[64px] shrink-0 border-r border-[#1a1620]">
                           {new Date(log.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                         </div>
-                        <div className="px-2 py-1 flex-1 text-[#c8bdb8] break-words whitespace-pre-wrap">{log.content}</div>
+                        <div className="px-2 py-1 flex-1 text-[#8a8aa8] break-words whitespace-pre-wrap">{log.content}</div>
                       </div>
                     ))}
                   </>
@@ -1337,10 +1337,10 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
       ) : (
         <aside className={
           isMobile
-            ? `fixed inset-y-0 right-0 z-40 w-[85vw] max-w-[420px] bg-[#141118] flex flex-col border-l-[3px] border-black transition-transform duration-200 ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
-            : 'w-[260px] bg-[#141118] flex flex-col'
+            ? `fixed inset-y-0 right-0 z-40 w-[85vw] max-w-[420px] bg-[#0f0f14] flex flex-col border-l border-white/[0.08] transition-transform duration-200 ${rightDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`
+            : 'w-[260px] bg-[#0f0f14] flex flex-col'
         }>
-          <div className="border-b-[3px] border-black px-3 py-3 bg-[#c0392b] shrink-0">
+          <div className="border-b border-white/[0.08] px-3 py-3 bg-[#c0392b] shrink-0">
             <div className="text-[11px] text-black/60 uppercase">task board</div>
             <div className="text-[20px] text-black"># {activeChannel?.name ?? '...'}</div>
           </div>
@@ -1351,18 +1351,18 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
               return (
                 <div
                   key={task.id}
-                  className="border-[3px] border-black bg-[#1e1a20]"
+                  className="border border-white/[0.08] rounded bg-[#1e1a20]"
                   style={{
                     transform: `rotate(${i % 2 === 0 ? '-0.2deg' : '0.2deg'})`,
                     boxShadow: '2px 3px 0 rgba(0,0,0,0.8), 0 0 8px rgba(50,120,220,0.08)',
                   }}
                 >
                   <div className="flex items-start gap-2 px-3 py-2">
-                    <span className="text-[11px] text-[#4a4048] shrink-0 mt-0.5">#t{task.number}</span>
+                    <span className="text-[11px] text-[#4a4a60] shrink-0 mt-0.5">#t{task.number}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] leading-5">{task.title}</div>
                       {task.claimed_by_name && (
-                        <div className="text-[11px] text-[#6bc5e8] mt-1">
+                        <div className="text-[11px] text-[#4ecdc4] mt-1">
                           {task.claimed_by_type === 'agent' ? '@' : ''}
                           {task.claimed_by_name}
                         </div>
@@ -1370,7 +1370,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
                     </div>
                   </div>
                   <div
-                    className="border-t-[3px] border-black px-3 py-1 text-[11px] uppercase"
+                    className="border-t border-white/[0.08] px-3 py-1 text-[11px] uppercase"
                     style={{ background: s.bg, color: s.text }}
                   >
                     {s.label}
@@ -1379,12 +1379,12 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
               )
             })}
             {tasks.length === 0 && (
-              <div className="text-[12px] text-[#4a4048] text-center pt-4">no tasks</div>
+              <div className="text-[12px] text-[#4a4a60] text-center pt-4">no tasks</div>
             )}
           </div>
 
-          <div className="border-t-[3px] border-black px-3 py-2 shrink-0">
-            <button className="w-full border-[3px] border-black bg-[#1a2535] text-[#6bc5e8] text-[12px] uppercase py-2 hover:bg-[#243548]">
+          <div className="border-t border-white/[0.08] px-3 py-2 shrink-0">
+            <button className="w-full border border-white/[0.08] rounded bg-[#1a2535] text-[#4ecdc4] text-[12px] uppercase py-2 hover:bg-[#243548]">
               + new task
             </button>
           </div>
@@ -1409,8 +1409,8 @@ function SidebarMiniButton({
   return (
     <button
       onClick={onClick}
-      className="border-[2px] border-black px-2 py-1 text-[10px] uppercase"
-      style={{ background: active ? '#1a2535' : '#141018', color: active ? '#6bc5e8' : '#4a4048' }}
+      className="border border-white/[0.08] px-2 py-1 text-[10px] uppercase"
+      style={{ background: active ? '#1a2535' : '#141018', color: active ? '#4ecdc4' : '#4a4a60' }}
     >
       {children}
     </button>
@@ -1428,8 +1428,8 @@ function AgentMetaItem({
 }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] text-[#4a4048] uppercase">{label}</div>
-      <div className={`${small ? 'text-[10px]' : 'text-[11px]'} text-[#c8bdb8] truncate`} title={value}>
+      <div className="text-[10px] text-[#4a4a60] uppercase">{label}</div>
+      <div className={`${small ? 'text-[10px]' : 'text-[11px]'} text-[#8a8aa8] truncate`} title={value}>
         {value}
       </div>
     </div>
@@ -1437,8 +1437,8 @@ function AgentMetaItem({
 }
 
 function agentStatus(status: Agent['status']) {
-  if (status === 'running' || status === 'online') return { text: '#3abfa0', label: 'running' }
-  if (status === 'idle') return { text: '#6bc5e8', label: 'idle' }
+  if (status === 'running' || status === 'online') return { text: '#4ecdc4', label: 'running' }
+  if (status === 'idle') return { text: '#4ecdc4', label: 'idle' }
   if (status === 'offline') return { text: '#c0392b', label: 'offline' }
   if (status === 'starting') return { text: '#f0b35e', label: 'starting' }
   return { text: '#e04050', label: 'error' }
@@ -1497,7 +1497,7 @@ function TodoStatusBadge({ status }: { status: AgentTodo['status'] }) {
   const styles =
     status === 'completed' ? { bg: '#1e2e26', text: '#7ecfa8', label: 'done' } :
     status === 'reviewing' ? { bg: '#352515', text: '#f0b35e', label: 'review' } :
-    status === 'in_progress' ? { bg: '#1a2535', text: '#6bc5e8', label: 'doing' } :
+    status === 'in_progress' ? { bg: '#1a2535', text: '#4ecdc4', label: 'doing' } :
     status === 'claimed' ? { bg: '#2a1a35', text: '#b08cd9', label: 'assigned' } :
     { bg: '#2a2622', text: '#9a8888', label: 'todo' }
 
@@ -1510,9 +1510,9 @@ function TodoStatusBadge({ status }: { status: AgentTodo['status'] }) {
 
 function TodoDocStatusDot({ status }: { status: string }) {
   const color =
-    status === 'read' ? '#3abfa0' :
+    status === 'read' ? '#4ecdc4' :
     status === 'writing' ? '#f0b35e' :
-    '#6bc5e8'
+    '#4ecdc4'
 
   return <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
 }
@@ -1586,7 +1586,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
     <div className="mb-1.5">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-[11px] text-[#8a7e88] hover:text-[#c8bdb8] transition-colors"
+        className="flex items-center gap-1 text-[11px] text-[#8a7e88] hover:text-[#8a8aa8] transition-colors"
       >
         <span className="inline-block transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
         <span className="italic">思考过程</span>
@@ -1663,11 +1663,11 @@ function MessageContent({
           strong: ({ children }) => {
             const text = String(children)
             if (text.startsWith('@') && mentionNames.has(text.slice(1).toLowerCase())) {
-              return <span className="text-[#6bc5e8] font-bold">{text}</span>
+              return <span className="text-[#4ecdc4] font-bold">{text}</span>
             }
-            return <strong className="font-bold text-[#e7dfd3]">{children}</strong>
+            return <strong className="font-bold text-[#e8e6f0]">{children}</strong>
           },
-          em: ({ children }) => <em className="italic text-[#c8bdb8]">{children}</em>,
+          em: ({ children }) => <em className="italic text-[#8a8aa8]">{children}</em>,
           code: ({ className, children }) => {
             const lang = className?.replace('language-', '')
             if (lang) {
@@ -1690,7 +1690,7 @@ function MessageContent({
             if (vaultPath && onOpenDoc) {
               return (
                 <span
-                  className="inline-flex items-center gap-0.5 text-[#6bc5e8] hover:text-[#f0b35e] cursor-pointer group"
+                  className="inline-flex items-center gap-0.5 text-[#4ecdc4] hover:text-[#f0b35e] cursor-pointer group"
                   onClick={() => onOpenDoc(vaultPath)}
                   title={vaultPath}
                 >
@@ -1703,7 +1703,7 @@ function MessageContent({
             }
             return (
               <a href={href} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-0.5 text-[#6bc5e8] underline underline-offset-2 hover:text-[#f0b35e]">
+                className="inline-flex items-center gap-0.5 text-[#4ecdc4] underline underline-offset-2 hover:text-[#f0b35e]">
                 {children}<span className="text-[10px] opacity-40">↗</span>
               </a>
             )
@@ -1712,25 +1712,25 @@ function MessageContent({
           ol: ({ children }) => <ol className="list-decimal list-inside ml-2 mb-1">{children}</ol>,
           li: ({ children }) => <li className="mb-0.5">{children}</li>,
           blockquote: ({ children }) => (
-            <blockquote className="border-l-[3px] border-[#4a4048] pl-2 ml-1 my-1 text-[#8a7e88] italic">{children}</blockquote>
+            <blockquote className="border-l-[3px] border-[#4a4a60] pl-2 ml-1 my-1 text-[#8a7e88] italic">{children}</blockquote>
           ),
-          h1: ({ children }) => <h1 className="text-[15px] font-bold text-[#e7dfd3] mb-1 mt-2">{children}</h1>,
-          h2: ({ children }) => <h2 className="text-[14px] font-bold text-[#e7dfd3] mb-1 mt-1.5">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-[13px] font-bold text-[#c8bdb8] mb-0.5 mt-1">{children}</h3>,
+          h1: ({ children }) => <h1 className="text-[15px] font-bold text-[#e8e6f0] mb-1 mt-2">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-[14px] font-bold text-[#e8e6f0] mb-1 mt-1.5">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-[13px] font-bold text-[#8a8aa8] mb-0.5 mt-1">{children}</h3>,
           hr: () => <hr className="border-[#2a2622] my-2" />,
           table: ({ children }) => (
             <div className="overflow-x-auto my-1">
               <table className="border-collapse border border-[#2a2622] text-[12px]">{children}</table>
             </div>
           ),
-          th: ({ children }) => <th className="border border-[#2a2622] px-2 py-1 bg-[#1a1614] text-left text-[#c8bdb8]">{children}</th>,
+          th: ({ children }) => <th className="border border-[#2a2622] px-2 py-1 bg-[#1a1614] text-left text-[#8a8aa8]">{children}</th>,
           td: ({ children }) => <td className="border border-[#2a2622] px-2 py-1">{children}</td>,
           img: ({ src, alt }) => (
             <div className="my-2">
               <img
                 src={src}
                 alt={alt || 'image'}
-                className="max-w-[360px] max-h-[260px] border-[2px] border-black object-contain cursor-pointer"
+                className="max-w-[360px] max-h-[260px] border border-white/[0.08] object-contain cursor-pointer"
                 onClick={() => src && window.open(src, '_blank')}
                 onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
@@ -1816,7 +1816,7 @@ function TextWithMentions({
       {segments.map((seg, i) => {
         if (seg.startsWith('@') && mentionNames.has(seg.slice(1).toLowerCase())) {
           return (
-            <span key={i} className="text-[#6bc5e8] font-bold">{seg}</span>
+            <span key={i} className="text-[#4ecdc4] font-bold">{seg}</span>
           )
         }
         return seg
@@ -1876,14 +1876,14 @@ function MessageFeedbackPanel({
                 disabled={pendingKey !== null}
                 className={`w-full text-left border px-3 py-2 text-[12px] flex items-start gap-3 transition-colors ${
                   isSelected
-                    ? 'border-[#6bc5e8] bg-[#142535] text-[#e0d8d0]'
+                    ? 'border-[#4ecdc4] bg-[#142535] text-[#e0d8d0]'
                     : otherSelected
-                    ? 'border-black/50 bg-[#0c0a0e] text-[#4a4048]'
-                    : 'border-black bg-[#10161c] text-[#d7d0c8] hover:bg-[#162030] hover:border-[#6bc5e8]/40'
+                    ? 'border-black/50 bg-[#0c0a0e] text-[#4a4a60]'
+                    : 'border-black bg-[#10161c] text-[#d7d0c8] hover:bg-[#162030] hover:border-[#4ecdc4]/40'
                 } disabled:opacity-50`}
               >
                 <span className={`w-5 h-5 border-[2px] flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                  isSelected ? 'border-[#6bc5e8] bg-[#1a3545] text-[#6bc5e8]' : 'border-black bg-[#0e0c10] text-[#4a4048]'
+                  isSelected ? 'border-[#4ecdc4] bg-[#1a3545] text-[#4ecdc4]' : 'border-black bg-[#09090b] text-[#4a4a60]'
                 }`}>
                   {item.label}
                 </span>
@@ -1901,7 +1901,7 @@ function MessageFeedbackPanel({
                     </span>
                   )}
                 </span>
-                {isSelected && <span className="text-[#6bc5e8] text-[10px]">✓</span>}
+                {isSelected && <span className="text-[#4ecdc4] text-[10px]">✓</span>}
               </button>
             )
           })}
@@ -1930,7 +1930,7 @@ function MessageFeedbackPanel({
                   disabled={pendingKey !== null}
                   className={`border px-2 py-1 text-[11px] uppercase tracking-[0.08em] ${
                     selected === 'correct'
-                      ? 'border-[#3abfa0] bg-[#183126] text-[#8ee0b1]'
+                      ? 'border-[#4ecdc4] bg-[#183126] text-[#8ee0b1]'
                       : 'border-black bg-[#152018] text-[#7ecfa8] hover:bg-[#1c2b20]'
                   } disabled:opacity-50`}
                 >
@@ -1968,7 +1968,7 @@ function MessageFeedbackPanel({
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="border-[2px] border-black bg-[#1a2535] text-[#6bc5e8] text-[11px] px-2 py-0.5 uppercase">
+    <span className="border border-white/[0.08] bg-[#1a2535] text-[#4ecdc4] text-[11px] px-2 py-0.5 uppercase">
       {children}
     </span>
   )
@@ -1977,7 +1977,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 function taskStatus(status: string) {
   if (status === 'completed')   return { bg: '#1e2e26', text: '#7ecfa8', label: '✓ done' }
   if (status === 'reviewing')   return { bg: '#352515', text: '#f0b35e', label: '◌ in review' }
-  if (status === 'in_progress') return { bg: '#1a2535', text: '#6bc5e8', label: '▶ in progress' }
+  if (status === 'in_progress') return { bg: '#1a2535', text: '#4ecdc4', label: '▶ in progress' }
   if (status === 'claimed')     return { bg: '#2a1a35', text: '#b08cd9', label: '● assigned' }
   return                               { bg: '#2a2622', text: '#9a8888', label: '○ unassigned'  }
 }

@@ -8,14 +8,14 @@ import { socketClient } from '../lib/socket'
 
 const CATEGORIES = [
   { key: '',             label: '全部' },
-  { key: 'chrono',       label: 'Chrono',  color: '#6bc5e8' },
+  { key: 'chrono',       label: 'Chrono',  color: '#4ecdc4' },
   { key: 'ops',          label: 'Ops',     color: '#f0b35e' },
   { key: 'report',       label: '报告',    color: '#7ecfa8' },
   { key: 'announcement', label: '公告',    color: '#c0392b' },
 ] as const
 
 const CAT_COLORS: Record<string, string> = {
-  chrono:       '#6bc5e8',
+  chrono:       '#4ecdc4',
   ops:          '#f0b35e',
   report:       '#7ecfa8',
   announcement: '#c0392b',
@@ -115,15 +115,15 @@ export default function BulletinBoard({ onOpenDoc }: Props) {
   const unpinned = filtered.filter(b => !b.pinned)
 
   return (
-    <div className="flex flex-col h-full bg-[#0e0c10] text-[#e7dfd3] overflow-hidden"
-         style={{ fontFamily: '"Share Tech Mono", monospace' }}>
+    <div className="flex flex-col h-full bg-[#09090b] text-[#e8e6f0] overflow-hidden"
+         style={{  }}>
 
       {/* ── Header ───────────────────────────────── */}
-      <div className="shrink-0 border-b-[3px] border-black bg-[#110e12] px-6 py-3 flex items-center justify-between">
+      <div className="shrink-0 border-b border-white/[0.08] bg-[#0f0f14] px-6 py-3 flex items-center justify-between">
         <div className="text-[14px] uppercase tracking-[0.15em]">公告栏</div>
         <button
           onClick={() => setShowCreate(true)}
-          className="text-[11px] px-3 py-1 border-[2px] border-black bg-[#191619]
+          className="text-[11px] px-3 py-1 border border-white/[0.08] bg-[#191619]
                      shadow-[2px_3px_0_rgba(0,0,0,0.8)] hover:shadow-[3px_4px_0_rgba(0,0,0,0.9)]
                      hover:bg-[#1e1a20] transition-all active:translate-x-[2px] active:translate-y-[2px]
                      active:shadow-none uppercase tracking-wider"
@@ -140,12 +140,12 @@ export default function BulletinBoard({ onOpenDoc }: Props) {
             onClick={() => setCategory(c.key)}
             className={`px-3 py-1 text-[11px] uppercase tracking-wider border-b-[2px] transition-colors ${
               category === c.key
-                ? 'text-[#e7dfd3]'
-                : 'border-transparent text-[#6a6068] hover:text-[#c8bdb8]'
+                ? 'text-[#e8e6f0]'
+                : 'border-transparent text-[#4a4a60] hover:text-[#8a8aa8]'
             }`}
             style={{
               borderBottomColor: category === c.key
-                ? ('color' in c ? c.color : '#e7dfd3')
+                ? ('color' in c ? c.color : '#e8e6f0')
                 : 'transparent',
             }}
           >
@@ -159,8 +159,8 @@ export default function BulletinBoard({ onOpenDoc }: Props) {
             onClick={() => setTimeFilter(t.key)}
             className={`px-2 py-1 text-[10px] tracking-wider transition-colors ${
               timeFilter === t.key
-                ? 'text-[#e7dfd3]'
-                : 'text-[#6a6068] hover:text-[#c8bdb8]'
+                ? 'text-[#e8e6f0]'
+                : 'text-[#4a4a60] hover:text-[#8a8aa8]'
             }`}
           >
             {t.label}
@@ -248,7 +248,7 @@ function BulletinCard({ bulletin: b, onDelete, onTogglePin, onOpenDoc }: {
 
   return (
     <div
-      className="group relative border-[3px] border-black bg-[#191619]
+      className="group relative border border-white/[0.08] rounded bg-[#191619]
                  shadow-[3px_4px_0_rgba(0,0,0,0.8)] hover:shadow-[5px_6px_0_rgba(0,0,0,0.9)]
                  transition-all duration-150 hover:z-10 overflow-hidden"
       style={{ transform: `rotate(${rotation}deg)` }}
@@ -275,7 +275,7 @@ function BulletinCard({ bulletin: b, onDelete, onTogglePin, onOpenDoc }: {
         </div>
 
         {/* Title */}
-        <div className="text-[13px] text-[#e7dfd3] font-bold mb-1 leading-tight">
+        <div className="text-[13px] text-[#e8e6f0] font-bold mb-1 leading-tight">
           {b.title}
         </div>
 
@@ -304,14 +304,14 @@ function BulletinCard({ bulletin: b, onDelete, onTogglePin, onOpenDoc }: {
 
         {/* Footer: author + links */}
         <div className="flex items-center gap-2 text-[10px] text-[#8d8188]">
-          <span className={b.author_type === 'agent' ? 'text-[#6bc5e8]' : ''}>
+          <span className={b.author_type === 'agent' ? 'text-[#4ecdc4]' : ''}>
             {b.author_name}
           </span>
           <div className="flex-1" />
           {b.linked_file && (
             <button
               onClick={() => onOpenDoc?.(b.linked_file!)}
-              className="hover:text-[#6bc5e8] transition-colors"
+              className="hover:text-[#4ecdc4] transition-colors"
               title={b.linked_file}
             >
               📄
@@ -322,14 +322,14 @@ function BulletinCard({ bulletin: b, onDelete, onTogglePin, onOpenDoc }: {
               href={b.linked_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-[#6bc5e8] transition-colors"
+              className="hover:text-[#4ecdc4] transition-colors"
               title={b.linked_url}
             >
               🔗
             </a>
           )}
           {b.linked_task_id && (
-            <span className="text-[#6bc5e8]" title={`Task ${b.linked_task_id}`}>
+            <span className="text-[#4ecdc4]" title={`Task ${b.linked_task_id}`}>
               📋
             </span>
           )}
@@ -399,11 +399,11 @@ function CreateBulletinModal({ onClose, onCreated }: {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
          onClick={onClose}>
       <div
-        className="w-[480px] border-[3px] border-black bg-[#191619]
+        className="w-[480px] border border-white/[0.08] rounded bg-[#191619]
                    shadow-[6px_8px_0_rgba(0,0,0,0.9)]"
         onClick={e => e.stopPropagation()}
       >
-        <div className="border-b-[3px] border-black bg-[#1e1a20] px-5 py-3 flex items-center justify-between">
+        <div className="border-b border-white/[0.08] bg-[#1e1a20] px-5 py-3 flex items-center justify-between">
           <span className="text-[13px] uppercase tracking-wider">新公告</span>
           <button onClick={onClose} className="text-[#8d8188] hover:text-[#c0392b] text-[14px]">×</button>
         </div>
@@ -420,9 +420,9 @@ function CreateBulletinModal({ onClose, onCreated }: {
                   className={`px-2 py-0.5 text-[10px] border transition-colors ${
                     form.category === c.key
                       ? 'border-current'
-                      : 'border-[#3a3340] text-[#6a6068] hover:text-[#c8bdb8]'
+                      : 'border-[#3a3340] text-[#4a4a60] hover:text-[#8a8aa8]'
                   }`}
-                  style={form.category === c.key ? { color: 'color' in c ? c.color : '#e7dfd3' } : {}}
+                  style={form.category === c.key ? { color: 'color' in c ? c.color : '#e8e6f0' } : {}}
                 >
                   {c.label}
                 </button>
@@ -436,8 +436,8 @@ function CreateBulletinModal({ onClose, onCreated }: {
             <input
               value={form.title}
               onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-              className="w-full bg-[#0e0c10] border border-[#3a3340] px-3 py-1.5 text-[12px]
-                         text-[#e7dfd3] outline-none focus:border-[#6bc5e8]"
+              className="w-full bg-[#09090b] border border-[#3a3340] px-3 py-1.5 text-[12px]
+                         text-[#e8e6f0] outline-none focus:border-[#4ecdc4]"
               placeholder="公告标题..."
               autoFocus
             />
@@ -449,8 +449,8 @@ function CreateBulletinModal({ onClose, onCreated }: {
             <textarea
               value={form.content}
               onChange={e => setForm(p => ({ ...p, content: e.target.value }))}
-              className="w-full bg-[#0e0c10] border border-[#3a3340] px-3 py-1.5 text-[12px]
-                         text-[#e7dfd3] outline-none focus:border-[#6bc5e8] resize-none h-24"
+              className="w-full bg-[#09090b] border border-[#3a3340] px-3 py-1.5 text-[12px]
+                         text-[#e8e6f0] outline-none focus:border-[#4ecdc4] resize-none h-24"
               placeholder="详细内容（可选）..."
             />
           </div>
@@ -462,8 +462,8 @@ function CreateBulletinModal({ onClose, onCreated }: {
               <select
                 value={form.priority}
                 onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
-                className="bg-[#0e0c10] border border-[#3a3340] px-2 py-1 text-[11px]
-                           text-[#e7dfd3] outline-none"
+                className="bg-[#09090b] border border-[#3a3340] px-2 py-1 text-[11px]
+                           text-[#e8e6f0] outline-none"
               >
                 <option value="low">Low</option>
                 <option value="normal">Normal</option>
@@ -488,8 +488,8 @@ function CreateBulletinModal({ onClose, onCreated }: {
               <input
                 value={form.linked_file}
                 onChange={e => setForm(p => ({ ...p, linked_file: e.target.value }))}
-                className="w-full bg-[#0e0c10] border border-[#3a3340] px-2 py-1 text-[11px]
-                           text-[#e7dfd3] outline-none"
+                className="w-full bg-[#09090b] border border-[#3a3340] px-2 py-1 text-[11px]
+                           text-[#e8e6f0] outline-none"
                 placeholder="path/to/file.md"
               />
             </div>
@@ -498,8 +498,8 @@ function CreateBulletinModal({ onClose, onCreated }: {
               <input
                 value={form.linked_url}
                 onChange={e => setForm(p => ({ ...p, linked_url: e.target.value }))}
-                className="w-full bg-[#0e0c10] border border-[#3a3340] px-2 py-1 text-[11px]
-                           text-[#e7dfd3] outline-none"
+                className="w-full bg-[#09090b] border border-[#3a3340] px-2 py-1 text-[11px]
+                           text-[#e8e6f0] outline-none"
                 placeholder="https://..."
               />
             </div>
@@ -508,13 +508,13 @@ function CreateBulletinModal({ onClose, onCreated }: {
           {/* Submit */}
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={onClose}
-                    className="px-4 py-1.5 text-[11px] text-[#8d8188] hover:text-[#e7dfd3]">
+                    className="px-4 py-1.5 text-[11px] text-[#8d8188] hover:text-[#e8e6f0]">
               cancel
             </button>
             <button
               onClick={handleSubmit}
               disabled={saving || !form.title.trim()}
-              className="px-4 py-1.5 text-[11px] border-[2px] border-black bg-[#1e1a20]
+              className="px-4 py-1.5 text-[11px] border border-white/[0.08] bg-[#1e1a20]
                          shadow-[2px_3px_0_rgba(0,0,0,0.8)] hover:bg-[#2a2530]
                          active:translate-x-[2px] active:translate-y-[2px] active:shadow-none
                          disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider"
