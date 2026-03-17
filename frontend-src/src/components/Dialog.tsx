@@ -9,11 +9,11 @@ const DIALOG_TONES: Record<DialogTone, { headerBg: string; title: string }> = {
   },
   info: {
     headerBg: '#1e1a20',
-    title: '#6bc5e8',
+    title: '#4ecdc4',
   },
   success: {
     headerBg: '#0f1a18',
-    title: '#3abfa0',
+    title: '#4ecdc4',
   },
   danger: {
     headerBg: '#3a1520',
@@ -21,7 +21,7 @@ const DIALOG_TONES: Record<DialogTone, { headerBg: string; title: string }> = {
   },
   neutral: {
     headerBg: '#1e1a20',
-    title: '#e7dfd3',
+    title: '#e8e6f0',
   },
 }
 
@@ -55,11 +55,11 @@ export function DialogShell({
       <div
         role="dialog"
         aria-modal="true"
-        className={`w-full border-[3px] border-black bg-[#141018] ${widthClassName} ${panelClassName}`}
+        className={`w-full border border-white/[0.08] rounded bg-[#141018] ${widthClassName} ${panelClassName}`}
         style={{ boxShadow: '6px 7px 0 rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.02) inset' }}
       >
         <div
-          className="border-b-[3px] border-black px-5 py-3 flex items-start justify-between gap-4"
+          className="border-b border-white/[0.08] px-5 py-3 flex items-start justify-between gap-4"
           style={{ background: palette.headerBg }}
         >
           <div className="min-w-0">
@@ -67,7 +67,7 @@ export function DialogShell({
               {title}
             </div>
             {subtitle && (
-              <div className="text-[11px] text-[#4a4048] mt-1">
+              <div className="text-[11px] text-[#4a4a60] mt-1">
                 {subtitle}
               </div>
             )}
@@ -76,7 +76,7 @@ export function DialogShell({
             <button
               type="button"
               onClick={onClose}
-              className="text-[#4a4048] hover:text-[#e7dfd3] text-[18px] leading-none shrink-0"
+              className="text-[#4a4a60] hover:text-[#e8e6f0] text-[18px] leading-none shrink-0"
             >
               ×
             </button>
@@ -84,7 +84,7 @@ export function DialogShell({
         </div>
         <div className={bodyClassName}>{children}</div>
         {footer && (
-          <div className="border-t-[3px] border-black">
+          <div className="border-t border-white/[0.08]">
             {footer}
           </div>
         )}

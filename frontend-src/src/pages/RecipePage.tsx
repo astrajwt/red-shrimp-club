@@ -52,7 +52,7 @@ export default function RecipePage() {
 
   return (
     <div
-      className="h-full overflow-auto bg-[#0e0c10] text-[#e7dfd3] px-6 py-5"
+      className="h-full overflow-auto bg-[#09090b] text-[#e8e6f0] px-6 py-5"
       style={{
         fontFamily: '"Share Tech Mono", "Courier New", monospace',
         backgroundImage:
@@ -63,13 +63,13 @@ export default function RecipePage() {
       <div className="max-w-[900px] mx-auto">
         <div className="mb-6 flex items-end justify-between gap-4">
           <div>
-            <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-1">shared skills</div>
+            <div className="text-[11px] text-[#4ecdc4] uppercase tracking-widest mb-1">shared skills</div>
             <div className="text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-2">recipe</div>
           </div>
           <button
             type="button"
             onClick={openSettings}
-            className="border-[3px] border-black bg-[#1a2535] text-[#6bc5e8] px-3 py-2 text-[16px] leading-none hover:bg-[#243548]"
+            className="border border-white/[0.08] rounded bg-[#1a2535] text-[#4ecdc4] px-3 py-2 text-[16px] leading-none hover:bg-[#243548]"
             title="recipe settings"
           >
             ⚙
@@ -96,7 +96,7 @@ export default function RecipePage() {
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
-                className="border-[2px] border-black bg-[#1e1a20] text-[#9a8888] px-3 py-1.5 text-[11px] uppercase hover:text-[#e7dfd3]"
+                className="border border-white/[0.08] bg-[#1e1a20] text-[#9a8888] px-3 py-1.5 text-[11px] uppercase hover:text-[#e8e6f0]"
               >
                 cancel
               </button>
@@ -104,7 +104,7 @@ export default function RecipePage() {
                 type="button"
                 onClick={saveSettings}
                 disabled={savingSettings}
-                className="border-[3px] border-black bg-[#c0392b] text-black px-4 py-1.5 text-[11px] uppercase hover:bg-[#e04050] disabled:opacity-40"
+                className="border border-white/[0.08] rounded bg-[#c0392b] text-black px-4 py-1.5 text-[11px] uppercase hover:bg-[#e04050] disabled:opacity-40"
               >
                 {savingSettings ? 'saving...' : 'save'}
               </button>
