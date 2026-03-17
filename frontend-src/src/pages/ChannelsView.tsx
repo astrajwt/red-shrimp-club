@@ -162,6 +162,18 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, is
     })
   }, [isVisible, activeId])
 
+  // ── Real-time task updates ─────────────────────────────────────────
+  useEffect(() => {
+    if (!activeId) return
+    const reload = () => tasksApi.list(activeId).then(({ tasks: t }) => setTasks(t)).catch(() => {})
+    const unsubs = [
+      socketClient.on('task:created',   () => reload()),
+      socketClient.on('task:updated',   () => reload()),
+      socketClient.on('task:completed', () => reload()),
+    ]
+    return () => unsubs.forEach(fn => fn())
+  }, [activeId])
+
   // ── Real-time messages ─────────────────────────────────────────────
   useEffect(() => {
     return socketClient.on('message', ({ channelId, message }) => {
