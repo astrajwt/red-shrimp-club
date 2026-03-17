@@ -226,24 +226,9 @@ async function main() {
   // Start scheduler AFTER server is up
   await scheduler.start()
 
-  // ── Vault git pull — sync remote changes every 30s ─────────────
-  const vaultRoot = process.env.OBSIDIAN_ROOT
-  if (vaultRoot && existsSync(resolve(vaultRoot, '.git'))) {
-    const pullVault = () => {
-      execFile('git', ['-C', vaultRoot, 'pull', '--ff-only', '--no-edit'], { timeout: 15000 }, (err, stdout, stderr) => {
-        if (err) {
-          if (!stderr?.includes('Already up to date')) {
-            console.error(`[vault-sync] git pull failed: ${stderr || err.message}`)
-          }
-        } else if (stdout && !stdout.includes('Already up to date')) {
-          console.log(`[vault-sync] pulled: ${stdout.trim()}`)
-        }
-      })
-    }
-    pullVault()
-    setInterval(pullVault, 30_000)
-    console.log(`[vault-sync] Auto-pull every 30s from ${vaultRoot}`)
-  }
+  // ── Vault git pull — disabled ─────────────────────────────────
+  // const vaultRoot = process.env.OBSIDIAN_ROOT
+  // TODO: re-enable when vault sync strategy is settled
 
   // ── Rolling cleanup — keep DB lean ─────────────────────────────
   const rollingCleanup = async () => {

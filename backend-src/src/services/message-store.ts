@@ -64,6 +64,7 @@ export async function createStoredMessage(params: CreateStoredMessageParams) {
     senderName,
     senderType,
     content: msg.content as string,
+    mentions,
   }).catch(() => {})
 
   // Only notify agents for human messages.

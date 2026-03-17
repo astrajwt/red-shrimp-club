@@ -706,7 +706,6 @@ function resolveRoleSeed(input: InitialMemoryTemplateInput): string {
 
 export function buildInitialMemoryIndex(input: InitialMemoryTemplateInput): string {
   const knowledgeLines = uniqueNonEmpty([
-    input.machineName ? `- Machine: **${input.machineName}**` : '',
     `- Vault: \`~/JwtVault\` — 导航见 \`00_hub/00_INDEX.md\``,
     `- 规范唯一来源: \`00_hub/02_CONVENTIONS.md\`（命名、frontmatter、路由）`,
   ])

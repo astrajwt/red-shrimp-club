@@ -1,7 +1,8 @@
 // Red Shrimp Lab — Settings Page
 // Cron Jobs · Danger Zone
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { registerPushNotifications, unregisterPushNotifications, isPushEnabled } from '../lib/push'
 import {
   cronApi,
   agentsApi,
@@ -874,6 +875,81 @@ function FeishuSection() {
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
+function NotificationSection() {
+  const [pushEnabled, setPushEnabled] = useState<boolean | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    isPushEnabled().then(setPushEnabled).catch(() => setPushEnabled(false))
+  }, [])
+
+  const handleEnable = useCallback(async () => {
+    setLoading(true)
+    setMsg(null)
+    try {
+      const ok = await registerPushNotifications()
+      setPushEnabled(ok)
+      setMsg(ok ? '✓ 推送已开启' : '✕ 未能开启（请检查系统通知权限）')
+    } catch {
+      setMsg('✕ 开启失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const handleDisable = useCallback(async () => {
+    setLoading(true)
+    setMsg(null)
+    try {
+      await unregisterPushNotifications()
+      setPushEnabled(false)
+      setMsg('通知已关闭')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return (
+    <section className="mb-8 border-[3px] border-[#1e1c22] bg-[#12101a]" style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.8)' }}>
+      <div className="border-b-[3px] border-[#1e1c22] px-5 py-3">
+        <div className="text-[11px] text-[#6bc5e8] uppercase tracking-widest mb-0.5">push notifications</div>
+        <div className="text-[18px]">通知设置</div>
+      </div>
+      <div className="px-5 py-4 space-y-3">
+        <div className="text-[12px] text-[#6a6070]">
+          仅推送 @chrono 提及和任务完成。iOS 需先「添加到主屏幕」再点下方按钮开启。
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-[12px]">
+            状态：<span className={pushEnabled ? 'text-[#3abfa0]' : 'text-[#6a6070]'}>
+              {pushEnabled === null ? '检测中...' : pushEnabled ? '已开启' : '未开启'}
+            </span>
+          </div>
+          {pushEnabled ? (
+            <button
+              onClick={handleDisable}
+              disabled={loading}
+              className="border-[2px] border-[#3a3040] bg-[#0e0c10] text-[#8a7090] px-4 py-1.5 text-[11px] uppercase hover:border-[#c0392b] hover:text-[#e04050] disabled:opacity-40"
+            >
+              {loading ? '...' : '关闭通知'}
+            </button>
+          ) : (
+            <button
+              onClick={handleEnable}
+              disabled={loading}
+              className="border-[2px] border-[#c0392b] bg-[#1a0808] text-[#c0392b] px-4 py-1.5 text-[11px] uppercase hover:bg-[#200c0c] hover:text-[#e04050] disabled:opacity-40"
+            >
+              {loading ? '...' : '开启通知'}
+            </button>
+          )}
+        </div>
+        {msg && <div className={`text-[11px] ${msg.startsWith('✓') ? 'text-[#3abfa0]' : 'text-[#c0392b]'}`}>{msg}</div>}
+      </div>
+    </section>
+  )
+}
+
 export default function SettingsPage() {
   const [vaultGitUrl, setVaultGitUrlState] = useState('')
 
@@ -900,6 +976,7 @@ export default function SettingsPage() {
           <div className="text-[32px] leading-none border-b-[3px] border-[#c0392b] pb-2">settings</div>
         </div>
 
+        <NotificationSection />
         <VaultSection />
         <FeishuSection />
         <RecipeSection vaultGitUrl={vaultGitUrl} />

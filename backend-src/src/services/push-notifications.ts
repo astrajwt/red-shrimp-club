@@ -94,35 +94,26 @@ async function sendToSubscriptions(
 // ── High-level notification functions ──
 
 /** Notify channel members about a new message (except sender) */
+// Only push for messages that @mention chrono or are replies to chrono's messages
+const PUSH_MENTION_TARGET = 'chrono'
+
 export async function notifyNewMessage(params: {
   channelId: string
   senderId: string
   senderName: string
   senderType: string
   content: string
+  mentions?: unknown[]
 }): Promise<void> {
-  // Get human members of this channel (except the sender)
-  const members = await query<{ user_id: string }>(
-    `SELECT user_id FROM channel_members
-     WHERE channel_id = $1 AND member_type = 'human' AND user_id != $2`,
-    [params.channelId, params.senderId]
-  )
+  const mentionTarget = PUSH_MENTION_TARGET.toLowerCase()
+  const hasMention = params.content.toLowerCase().includes(`@${mentionTarget}`) ||
+    (params.mentions ?? []).some((m: any) =>
+      (m?.name ?? m?.username ?? '').toLowerCase() === mentionTarget
+    )
 
-  if (members.length === 0) {
-    // Broadcast to all subscriptions if no specific members (e.g. public channel)
-    const subs = await getAllSubscriptions()
-    if (subs.length === 0) return
-    await sendToSubscriptions(subs, {
-      title: `${params.senderName}`,
-      body: params.content.length > 120 ? params.content.slice(0, 117) + '...' : params.content,
-      tag: `msg-${params.channelId}`,
-      url: `/?channel=${params.channelId}`,
-    })
-    return
-  }
+  if (!hasMention) return
 
-  const userIds = members.map(m => m.user_id)
-  const subs = await getSubscriptionsForUsers(userIds)
+  const subs = await getAllSubscriptions()
   if (subs.length === 0) return
 
   await sendToSubscriptions(subs, {
@@ -133,7 +124,7 @@ export async function notifyNewMessage(params: {
   })
 }
 
-/** Notify about task status changes */
+/** Notify about task status changes — only for completed tasks */
 export async function notifyTaskUpdate(params: {
   taskId: string
   channelId: string
@@ -141,19 +132,13 @@ export async function notifyTaskUpdate(params: {
   status: string
   agentId?: string
 }): Promise<void> {
-  const statusLabels: Record<string, string> = {
-    'reviewing': '等待审核',
-    'completed': '已完成',
-    'in_progress': '进行中',
-    'open': '已创建',
-  }
+  if (params.status !== 'completed') return
 
-  // Get all human subscribers (personal use, just notify everyone)
   const subs = await getAllSubscriptions()
   if (subs.length === 0) return
 
   await sendToSubscriptions(subs, {
-    title: `任务${statusLabels[params.status] ?? params.status}`,
+    title: '任务已完成',
     body: params.title.length > 120 ? params.title.slice(0, 117) + '...' : params.title,
     tag: `task-${params.taskId}`,
     url: `/?page=tasks`,

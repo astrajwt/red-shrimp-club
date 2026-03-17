@@ -237,9 +237,12 @@ export default function OnboardingPage({ onComplete }: Props) {
   const [loadingVaultDirs, setLoadingVaultDirs] = useState(false)
   const [vaultError, setVaultError] = useState<string | null>(null)
 
+  const LOCAL_MACHINE_ID = '__local__'
   const onlineMachines = machines.filter(machine => machine.status === 'online')
   const onlineMachineIds = new Set(onlineMachines.map(machine => machine.id))
-  const allStaffHaveMachine = STAFF.every(staff => onlineMachineIds.has(staffMachineConfig[staff.id]))
+  const allStaffHaveMachine = STAFF.every(staff =>
+    staffMachineConfig[staff.id] === LOCAL_MACHINE_ID || onlineMachineIds.has(staffMachineConfig[staff.id])
+  )
 
   const refreshMachines = async () => {
     setRefreshingMachines(true)
@@ -338,7 +341,7 @@ export default function OnboardingPage({ onComplete }: Props) {
           description:  `${staff.subtitle} — ${staff.tagline}`,
           systemPrompt: staff.prompt,
           runtime,
-          machineId:    staffMachineConfig[staff.id] || undefined,
+          machineId:    (staffMachineConfig[staff.id] && staffMachineConfig[staff.id] !== LOCAL_MACHINE_ID) ? staffMachineConfig[staff.id] : undefined,
         })
         // Auto-start the agent
         try { await agentsApi.start(agent.id) } catch {}
@@ -446,8 +449,8 @@ export default function OnboardingPage({ onComplete }: Props) {
                 )}
                 <div className="text-[11px] text-[#6a5040] mt-2">
                   {onlineMachines.length > 0
-                    ? `online machines: ${onlineMachines.length}`
-                    : '至少一台 machine 显示为 online 后，才能继续创建初始 agents。'}
+                    ? `online machines: ${onlineMachines.length}（也可用本机）`
+                    : '没有远程 machine？直接点下一步，agent 将跑在本机。'}
                 </div>
               </div>
             </div>
@@ -455,22 +458,20 @@ export default function OnboardingPage({ onComplete }: Props) {
 
           <button
             onClick={() => {
-              // Auto-select the first online machine for all agents
-              if (onlineMachines.length > 0) {
-                const firstMachineId = onlineMachines[0].id
-                setStaffMachineConfig(prev => {
-                  const next = { ...prev }
-                  for (const staff of STAFF) {
-                    if (!next[staff.id] || !onlineMachineIds.has(next[staff.id])) {
-                      next[staff.id] = firstMachineId
-                    }
+              // Auto-select local machine for all agents if no machine selected
+              setStaffMachineConfig(prev => {
+                const next = { ...prev }
+                for (const staff of STAFF) {
+                  if (!next[staff.id] || (!onlineMachineIds.has(next[staff.id]) && next[staff.id] !== LOCAL_MACHINE_ID)) {
+                    const firstMachineId = onlineMachines[0]?.id ?? LOCAL_MACHINE_ID
+                    next[staff.id] = firstMachineId
                   }
-                  return next
-                })
-              }
+                }
+                return next
+              })
               setPhase('intro')
             }}
-            disabled={onlineMachines.length === 0 || refreshingMachines}
+            disabled={refreshingMachines}
             className="border-[3px] border-[#8b4010] bg-[#100a06] text-[#c8860a] px-10 py-3 text-[13px] uppercase tracking-widest hover:bg-[#1a0e08] hover:border-[#c0392b] hover:text-[#e0a830] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ boxShadow: '3px 4px 0 rgba(0,0,0,0.95)' }}
           >
@@ -553,7 +554,8 @@ export default function OnboardingPage({ onComplete }: Props) {
                         color: staff.color,
                       }}
                     >
-                      <option value="" disabled>{onlineMachines.length === 0 ? 'no online machine available' : 'select machine'}</option>
+                      <option value="" disabled>select machine</option>
+                      <option value={LOCAL_MACHINE_ID}>本机 (local)</option>
                       {onlineMachines.map(machine => (
                         <option key={machine.id} value={machine.id}>
                           {(machine.hostname ?? machine.name)} · {machine.status}
@@ -561,7 +563,7 @@ export default function OnboardingPage({ onComplete }: Props) {
                       ))}
                     </select>
                     <div className="text-[9px] mt-1 opacity-60" style={{ color: staff.descColor }}>
-                      每位初始 agent 都必须绑定到一台 machine；不再走自动分配
+                      选"本机"则直接跑在本地；也可绑定远程 machine
                     </div>
                   </div>
 
@@ -571,7 +573,7 @@ export default function OnboardingPage({ onComplete }: Props) {
           </div>
           <div className="text-[11px] text-[#6a5040] mb-4">
             {onlineMachines.length === 0
-              ? '先连接至少一台 online machine，再回来创建初始 agents。'
+              ? '没有远程 machine？每个 agent 选"本机 (local)"即可。'
               : '先为三位初始 agent 分别选择 online machine，创建后每个 agent 只绑定一台机器。'}
           </div>
           <div className="flex items-center gap-3">

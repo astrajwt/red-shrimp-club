@@ -57,9 +57,13 @@ export default function App() {
   const serviceReachableRef = useRef(true)
   const currentNav = NAV.find(item => item.id === page)
 
-  // Check if onboarding needed (no agents yet)
+  // Check if onboarding needed (no agents yet, or ?onboard=1 forced)
   useEffect(() => {
     if (!user) return
+    if (new URLSearchParams(window.location.search).get('onboard') === '1') {
+      setOnboarding(true)
+      return
+    }
     agentsApi.list()
       .then(agents => {
         setOnboarding(agents.length === 0)
@@ -68,8 +72,11 @@ export default function App() {
   }, [user])
 
   // Register push notifications after login
+  // iOS requires user gesture to trigger permission prompt — skip auto-register on iOS
   useEffect(() => {
     if (!user) return
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    if (isIOS) return  // iOS: user must tap "开启通知" in Settings
     registerPushNotifications().catch(() => {})
   }, [user])
 

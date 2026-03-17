@@ -290,9 +290,7 @@ export default function AgentsPage() {
   const handleCreate = async () => {
     if (!createForm.name.trim()) return
     if (!createForm.machineId) {
-      setCreateError(machines.length === 0
-        ? 'No machine available. Create or reconnect a machine first.'
-        : 'Machine is required. Pick exactly one machine for this agent.')
+      setCreateError('Machine is required. Pick a machine or select 本机 (local).')
       return
     }
     setCreating(true)
@@ -304,7 +302,7 @@ export default function AgentsPage() {
         role: createForm.role,
         runtime: createForm.runtime,
         reasoningEffort: createForm.reasoningEffort || undefined,
-        machineId: createForm.machineId || undefined,
+        machineId: (createForm.machineId && createForm.machineId !== '__local__') ? createForm.machineId : undefined,
         workspacePath: createForm.workspacePath.trim() || undefined,
         description: createForm.description.trim() || undefined,
         parentAgentId: createForm.parentAgentId || undefined,
@@ -570,7 +568,8 @@ export default function AgentsPage() {
                 }}
                 className="rsl-control rsl-select w-full border-[3px] border-black bg-[#0e0c10] text-[#e7dfd3] px-3 py-2 text-[13px] outline-none"
               >
-                <option value="" disabled>{machines.length === 0 ? 'no machine available' : 'select machine'}</option>
+                <option value="" disabled>select machine</option>
+                <option value="__local__">本机 (local)</option>
                 {machines.map(machine => (
                   <option key={machine.id} value={machine.id}>
                     {(machine.hostname ?? machine.name)} · {machine.status}
