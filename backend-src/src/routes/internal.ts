@@ -824,6 +824,52 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true, doc }
   })
 
+  // ── GET /internal/agent/:agentId/tasks/server ───────────────────
+  // Returns all tasks across all channels on this agent's server (for weekly reports / ops overview)
+  app.get('/:agentId/tasks/server', async (req) => {
+    const { agentId } = req.params as { agentId: string }
+    const { status } = req.query as { status?: string }
+
+    const agentRow = await queryOne<{ server_id: string }>(
+      `SELECT server_id FROM agents WHERE id = $1`, [agentId]
+    )
+    if (!agentRow) return { tasks: [] }
+
+    let sql = `SELECT t.id, t.number AS "taskNumber", t.title,
+                      c.name AS "channelName",
+                      CASE
+                        WHEN t.status IN ('open', 'claimed') THEN 'todo'
+                        WHEN t.status = 'reviewing' THEN 'in_review'
+                        WHEN t.status = 'completed' THEN 'done'
+                        ELSE t.status
+                      END AS status,
+                      t.claimed_by_name AS "claimedByName",
+                      t.created_by_name AS "createdByName",
+                      t.created_at AS "createdAt",
+                      t.updated_at AS "updatedAt"
+               FROM tasks t
+               JOIN channels c ON c.id = t.channel_id
+               WHERE c.server_id = $1`
+    const params: unknown[] = [agentRow.server_id]
+
+    if (status && status !== 'all') {
+      if (status === 'todo') {
+        sql += ` AND t.status IN ('open', 'claimed')`
+      } else if (status === 'in_review') {
+        sql += ` AND t.status = 'reviewing'`
+      } else if (status === 'done') {
+        sql += ` AND t.status = 'completed'`
+      } else {
+        sql += ` AND t.status = $${params.length + 1}`
+        params.push(status)
+      }
+    }
+    sql += ` ORDER BY c.name, t.number`
+
+    const tasks = await query(sql, params)
+    return { tasks }
+  })
+
   // ── GET /internal/agent/:agentId/tasks/overdue ──────────────────
   // Returns tasks that have exceeded their estimated_minutes or been in_progress > 7 days
   app.get('/:agentId/tasks/overdue', async (req) => {

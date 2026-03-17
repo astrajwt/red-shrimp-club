@@ -409,6 +409,52 @@ ${formatted}`
   }
 );
 server.tool(
+  "list_all_tasks",
+  "List ALL tasks across the entire server (all channels). Use this for weekly reports, ops overview, or when you need a full picture of task status. Returns tasks grouped by channel with their number, title, status, and assignee.",
+  {
+    status: z.enum(["all", "todo", "in_progress", "in_review", "done"]).default("all").describe("Filter by status (default: all)")
+  },
+  async ({ status }) => {
+    try {
+      const params = new URLSearchParams();
+      if (status !== "all") params.set("status", status);
+      const res = await fetch(
+        `${serverUrl}/internal/agent/${agentId}/tasks/server?${params}`,
+        { method: "GET", headers: commonHeaders }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        return { content: [{ type: "text", text: `Error: ${data.error}` }] };
+      }
+      if (!data.tasks || data.tasks.length === 0) {
+        return { content: [{ type: "text", text: "No tasks found." }] };
+      }
+      // Group by channel
+      const byChannel = {};
+      for (const t of data.tasks) {
+        if (!byChannel[t.channelName]) byChannel[t.channelName] = [];
+        byChannel[t.channelName].push(t);
+      }
+      const lines = [];
+      for (const [ch, tasks] of Object.entries(byChannel)) {
+        lines.push(`### #${ch}`);
+        for (const t of tasks) {
+          const assignee = t.claimedByName ? ` → @${t.claimedByName}` : "";
+          lines.push(`  #t${t.taskNumber} [${t.status}] "${t.title}"${assignee}`);
+        }
+      }
+      return {
+        content: [{
+          type: "text",
+          text: `## All Tasks (${data.tasks.length} total)\n\n${lines.join("\n")}`
+        }]
+      };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+    }
+  }
+);
+server.tool(
   "create_tasks",
   "Create one or more tasks on a channel's task board. Tasks are assigned immediately when created. If assignee_agent_id is omitted, the task is assigned to the calling agent. The assignee can be given as agent id, plain name, or @mention.",
   {

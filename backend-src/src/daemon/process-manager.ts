@@ -767,7 +767,8 @@ Available MCP chat tools:
 - \`mcp__chat__list_server\`
 - \`mcp__chat__read_history\`
 - \`mcp__chat__get_human_messages\`  — get all messages sent by humans on a given date (for daily report summarization)
-- \`mcp__chat__list_tasks\`
+- \`mcp__chat__list_tasks\`          — list tasks in a specific channel
+- \`mcp__chat__list_all_tasks\`      — list ALL tasks across the entire server (for weekly reports/ops overview)
 - \`mcp__chat__create_tasks\`
 - \`mcp__chat__claim_tasks\`
 - \`mcp__chat__unclaim_task\`
@@ -799,10 +800,11 @@ Task rules:
   - Vault 外的文件（本地实验目录等）：直接写绝对路径文字，不要包装成 \`vault://\` 链接。
   - **禁止**：绝对路径套 \`vault://\` 前缀，例如 \`vault://${vaultRoot}/...\` 这类写法永远是错的。
 - **文档路由（必须遵守，路径来自 \`00_hub/04_ARCHITECTURE.md\`）**:
+  > **核心区分**：\`03_knowledge/\` = 有外部来源（能填 \`source:\` 字段）；\`05_notes/\` = 自己写的大段文字（无需外部来源）
   | 类型 | 路径 |
   |------|------|
-  | 文章/博客/网文阅读笔记 | \`03_knowledge/02_reading_notes/\` |
-  | 视频/课程笔记 | \`03_knowledge/01_lecture_note/{主题}/\` |
+  | 文章/博客/网文阅读笔记（有链接） | \`03_knowledge/02_reading_notes/\` |
+  | 视频/课程/书籍（体系化，建子目录） | \`03_knowledge/01_lecture_note/{主题}/\` |
   | 论文笔记 | \`03_knowledge/04_papers/\` |
   | 调研/综述（"调研总结一下"） | \`03_knowledge/05_surveys/\` |
   | 手册/操作指南 | \`03_knowledge/03_manual/\` |
@@ -811,12 +813,14 @@ Task rules:
   | 工程/开发/debug | \`02_project/{领域}/{项目名}/03_engineering/\` |
   | 性能分析 | \`02_project/{领域}/{项目名}/04_performance/\` |
   | 经验沉淀/技术决策（项目级） | \`02_project/{领域}/{项目名}/05_insights/\` |
+  | 大段摘要/个人总结（无外部来源） | \`05_notes/03_experience/\` 或 \`05_notes/01_brainwave/\` |
   | 配置手顺/复现方法/bugfix | \`05_notes/02_handbook/\` |
   | 日报/巡检/周报 | \`04_routine/agents/{名字}/logs/\` 或 \`04_routine/daily-reports/\` |
   | 经验沉淀/复盘（"沉淀一下"） | \`05_notes/03_experience/\` |
   | 灵感/随笔/闪念 | \`05_notes/01_brainwave/\` |
   | 简历/作品集 | \`01_portfolio/\` |
   - **触发词路由**：听到"**沉淀一下**" → \`05_notes/03_experience/\`；听到"**调研总结一下**" → \`03_knowledge/05_surveys/\`
+  - **判断原则**：能填 source 字段（有链接/来源）→ \`03_knowledge/\`；自己写的大段文字无外部来源 → \`05_notes/\`
   - 不确定归类时，优先放 \`05_notes/01_brainwave/\`
   - 日报、周报继续走 vault；checkpoint/raw profiler logs/benchmark dumps 保留在本地实验目录
   - **禁止写入 \`00_hub/agents/\` 目录**（agent 私有工作区，系统管理）

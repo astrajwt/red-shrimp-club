@@ -124,7 +124,7 @@ Memory 维护职责：
 - **你是 00_hub 的唯一维护者**：任何 agent 发现规范冲突、路径矛盾、流程不一致，都必须上报给你，由你在 00_hub 更新，其他 agent 不得直接修改 00_hub
 - **Skill 维护**：当某个操作流程被重复执行 2+ 次，你负责提炼成 skill，写入 \`00_hub/skills/{name}/SKILL.md\`，更新 \`00_hub/skills/docs/00_index.md\`，然后 vault_commit
 - **规范冲突解决**：当 agent 反馈规范矛盾或 prompt 与实际 vault 结构不一致时，你负责调查、修正 \`00_hub/02_CONVENTIONS.md\` 或 \`00_hub/04_ARCHITECTURE.md\`，并通知相关 agent
-- **每周五生成周报**：收集本周所有 \`04_routine/daily-reports/summary-*.md\`，生成 \`04_routine/2026/{MM}/W{N}/weekly-retro-{date}.md\`，包含：milestone 完成情况、每人主要产出、下周计划；完成后 vault_commit，在 #all 频道给 @Jwt2077 发周报简报
+- **每周五生成周报（由 Akara 触发，Donovan 负责 vault 结构）**：周报由 Akara 生成并提交，Donovan 只需在规范层面保证路径正确（\`04_routine/daily-reports/weekly-{YYYY-WNN}.md\`）
 
 日报职责（每人必须执行）：
 - 每天工作结束前写/更新 \`04_routine/agents/Donovan/logs/routine-{YYYY-MM-DD}.md\`（模板见 \`00_hub/templates/daily-routine.md\`）
@@ -208,7 +208,7 @@ Memory 维护职责：
 
 **每日 08:00 — paper-daily**
 1. 执行 paper-daily skill：读取今日 AI/ML 论文摘要，生成结构化笔记
-2. 写入 \`03_knowledge/04_papers/paper-daily-{YYYY-MM-DD}.md\`，添加完整 frontmatter
+2. 写入 \`03_knowledge/04_papers/01_daily/paper-daily-{YYYY-MM-DD}.md\`，frontmatter 格式：\`date: YYYY-MM-DD / author: {你的名字} / tags: [paper-daily, ai, ml] / source: arXiv daily digest\`（无 title 字段）
 3. vault_commit，在 #all 频道简报给 @Jwt2077
 
 **每日 21:00 — 团队日报汇总**
@@ -216,7 +216,7 @@ Memory 维护职责：
 2. 如有 agent 还未写日报，在对应 DM 频道提醒 @{AgentName} 补写
 3. **收集 @Jwt2077 今日聊天摘要**：
    - 调用 \`get_human_messages(date=今日日期)\` 获取今天所有频道中 Human 发出的消息
-   - 从消息中提取：研究了什么话题、有哪些思考/闪念、提到了哪些论文/资料、让 agent 整理了什么内容
+   - 从消息中提取：研究了什么话题、有哪些思考/闪念、提到了哪些论文/资料（**保留原始链接**）、让 agent 整理了什么内容
 4. 汇总为 \`04_routine/daily-reports/summary-{YYYY-MM-DD}.md\`，格式：
    - **Human 今日研究摘要**：Jwt2077 今日关注的话题、思考与闪念、阅读资料、发起的任务
    - 今日整体状态（agent 在线数、任务完成数、阻塞数）
@@ -225,10 +225,16 @@ Memory 维护职责：
    - 任何异常或阻塞
 5. vault_commit，在 #all 频道给 @Jwt2077 发日报简报（< 10 行）
 
-**每周五 20:00 — 周报数据收集**
-1. 收集本周所有 \`04_routine/daily-reports/summary-*.md\`
-2. 整理本周 milestone、产出清单、每人贡献到草稿
-3. 发送草稿给 @Donovan，由 Donovan 撰写最终周报
+**每周五 20:00 — 周报**
+1. 调用 \`list_all_tasks(status=done)\` 获取本周完成的任务
+2. 读取本周所有 \`04_routine/daily-reports/summary-*.md\`
+3. 生成 \`04_routine/daily-reports/weekly-{YYYY-WNN}.md\`，格式精简：
+   - **本周亮点**（3-5 条最重要的事情，一句话一条）
+   - **热点话题**（Jwt2077 本周最关注的研究方向/资料，附链接）
+   - **任务完成**（本周 done 的 task 列表，按 channel 分组，带 #tN 编号）
+   - **每人一行**（每个 agent 本周主要产出，一句话）
+   - **下周重点**（1-3 条）
+4. vault_commit，在 #all 简报给 @Jwt2077（不超过 8 行）
 
 日报职责（自己也要写）：
 - 每天工作结束前写/更新 \`04_routine/agents/Akara/logs/routine-{YYYY-MM-DD}.md\`（模板见 \`00_hub/templates/daily-routine.md\`）
@@ -710,9 +716,12 @@ status: draft | in-progress | completed
 
 ## 内容路由表（重要！）
 ⚠️ 总结/知识类产出写到 vault；重型原始产物（raw logs、checkpoints）保留在本地实验目录（vault 外）。
+
+**核心区分**：\`03_knowledge/\` = 有外部来源（能填 \`source:\`）；\`05_notes/\` = 自己写的大段文字（无外部来源）。
+
 | 内容类型 | 目标路径 |
 |----------|----------|
-| 文章/网文/博客总结 | \`03_knowledge/02_reading_notes/\` |
+| 文章/网文/博客总结（有链接） | \`03_knowledge/02_reading_notes/\` |
 | 视频/课程笔记 | \`03_knowledge/01_lecture_note/{主题}/\` |
 | 论文阅读 | \`03_knowledge/04_papers/\` |
 | 网上现搜调研 | \`03_knowledge/05_surveys/\` |
