@@ -23,7 +23,7 @@ import 'katex/dist/katex.min.css'
 
 type WorkspaceSectionKey = 'memory' | 'knowledge' | 'notes' | 'docs'
 
-export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: { requestedChannelId?: string | null; onOpenDoc?: (path: string) => void; onBack?: () => void }) {
+export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, isVisible }: { requestedChannelId?: string | null; onOpenDoc?: (path: string) => void; onBack?: () => void; isVisible?: boolean }) {
   const { user } = useAuthStore()
   const { onCompositionStart, onCompositionEnd, isComposingRef } = useImeGuard()
   const [channels, setChannels]     = useState<Channel[]>([])
@@ -144,6 +144,23 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack }: 
     setUnread(u => ({ ...u, [activeId]: 0 }))
     return () => { socketClient.leaveChannel(activeId) }
   }, [activeId])
+
+  // ── Refresh & scroll when page becomes visible ────────────────────
+  useEffect(() => {
+    if (!isVisible || !activeId) return
+    // Reload latest messages to catch anything missed while hidden
+    messagesApi.history(activeId, undefined, 100).then(msgs => {
+      setMessages(msgs)
+      setHasMoreMessages(msgs.length >= 100)
+      const maxSeq = msgs.reduce((max, m) => Math.max(max, m.seq ?? 0), 0)
+      if (maxSeq > 0) channelsApi.markRead(activeId, maxSeq).catch(() => {})
+    }).catch(() => {})
+    // Scroll to bottom after layout settles
+    requestAnimationFrame(() => {
+      const el = messagesContainerRef.current
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  }, [isVisible, activeId])
 
   // ── Real-time messages ─────────────────────────────────────────────
   useEffect(() => {

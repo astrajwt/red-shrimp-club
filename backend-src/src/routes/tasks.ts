@@ -89,7 +89,7 @@ export const taskRoutes: FastifyPluginAsync = async (app) => {
        LEFT JOIN tasks         pt ON pt.id = t.parent_task_id
        WHERE t.channel_id = $1
        GROUP BY t.id, pt.number
-       ORDER BY t.number`,
+       ORDER BY t.number DESC`,
       [channelId]
     )
     return { tasks }

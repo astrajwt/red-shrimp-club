@@ -297,7 +297,7 @@ export default function App() {
           <HomePage onNavigate={(p, d) => { setPage(p as Page) }} />
         </div>
         <div className="h-full" style={{ display: page === 'channels' ? 'block' : 'none' }}>
-          <ChannelsView requestedChannelId={requestedChannelId} onOpenDoc={openDoc} onBack={isMobile ? () => setPage('home') : undefined} />
+          <ChannelsView requestedChannelId={requestedChannelId} onOpenDoc={openDoc} onBack={isMobile ? () => setPage('home') : undefined} isVisible={page === 'channels'} />
         </div>
         <div className="h-full" style={{ display: page === 'search' ? 'block' : 'none' }}>
           <SearchPage onOpenChannel={openChannelFromSearch} />
