@@ -132,9 +132,9 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, is
     suppressScrollRef.current = false
     setMessagesLoading(true)
     socketClient.joinChannel(activeId)
-    messagesApi.history(activeId, undefined, 100).then(msgs => {
+    messagesApi.history(activeId, undefined, 50).then(msgs => {
       setMessages(msgs)
-      setHasMoreMessages(msgs.length >= 100)
+      setHasMoreMessages(msgs.length >= 50)
       setMessagesLoading(false)
       // Mark read up to the actual latest message seq
       const maxSeq = msgs.reduce((max, m) => Math.max(max, m.seq ?? 0), 0)
@@ -149,9 +149,9 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, is
   useEffect(() => {
     if (!isVisible || !activeId) return
     // Reload latest messages to catch anything missed while hidden
-    messagesApi.history(activeId, undefined, 100).then(msgs => {
+    messagesApi.history(activeId, undefined, 50).then(msgs => {
       setMessages(msgs)
-      setHasMoreMessages(msgs.length >= 100)
+      setHasMoreMessages(msgs.length >= 50)
       const maxSeq = msgs.reduce((max, m) => Math.max(max, m.seq ?? 0), 0)
       if (maxSeq > 0) channelsApi.markRead(activeId, maxSeq).catch(() => {})
     }).catch(() => {})
@@ -205,10 +205,10 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, is
     const el = messagesContainerRef.current
     const prevScrollHeight = el?.scrollHeight ?? 0
     try {
-      const older = await messagesApi.history(activeId, messages[0].seq, 100)
+      const older = await messagesApi.history(activeId, messages[0].seq, 50)
       if (older.length > 0) {
         setMessages(prev => [...older, ...prev])
-        setHasMoreMessages(older.length >= 100)
+        setHasMoreMessages(older.length >= 50)
         requestAnimationFrame(() => {
           if (el) el.scrollTop = el.scrollHeight - prevScrollHeight
           suppressScrollRef.current = false
@@ -244,7 +244,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, is
       const { logs: older } = await agentsApi.logs(agentId, 100, agentDetailLogs[0].created_at)
       if (older.length > 0) {
         setAgentDetailLogs(prev => [...older, ...prev])
-        setHasMoreLogs(older.length >= 100)
+        setHasMoreLogs(older.length >= 50)
       } else {
         setHasMoreLogs(false)
       }

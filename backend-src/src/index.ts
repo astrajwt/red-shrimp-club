@@ -49,6 +49,15 @@ async function main() {
   // ── Fastify ──────────────────────────────────────────────────────
   const app = Fastify({ logger: { level: 'info' } })
 
+  // Gzip compression — skip socket.io and agent long-poll endpoints
+  await app.register(import('@fastify/compress'), {
+    global: true,
+    encodings: ['gzip', 'deflate'],
+    customTypes: /^text\/|\/(javascript|json|css|html|xml|svg)/,
+    requestEncodings: ['gzip', 'deflate'],
+    onUnsupportedRequestEncoding: (_encoding, _req, reply) => { reply.code(415) },
+  })
+
   // CORS
   await app.register(import('@fastify/cors'), {
     origin: process.env.CORS_ORIGIN ?? '*',
