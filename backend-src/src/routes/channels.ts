@@ -230,6 +230,24 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
     return members
   })
 
+  // ── DELETE /api/channels/:id ──────────────────────────────────────
+  app.delete('/:id', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+
+    // Prevent deleting the "all" channel
+    const ch = await queryOne<{ name: string }>('SELECT name FROM channels WHERE id = $1', [id])
+    if (!ch) return reply.code(404).send({ error: 'Channel not found' })
+    if (ch.name === 'all') return reply.code(403).send({ error: 'Cannot delete the default channel' })
+
+    // Cascade: delete messages, members, reads, then channel
+    await query('DELETE FROM messages WHERE channel_id = $1', [id])
+    await query('DELETE FROM channel_members WHERE channel_id = $1', [id])
+    await query('DELETE FROM channel_reads WHERE channel_id = $1', [id])
+    await query('DELETE FROM channel_sequences WHERE channel_id = $1', [id])
+    await query('DELETE FROM channels WHERE id = $1', [id])
+    return { ok: true }
+  })
+
   // ── POST /api/channels/:id/read ───────────────────────────────────
   // Mark channel as read up to a given seq
   app.post('/:id/read', { preHandler: [app.authenticate] }, async (req) => {

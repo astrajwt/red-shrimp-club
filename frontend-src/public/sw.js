@@ -1,7 +1,7 @@
 // Red Shrimp Lab — Service Worker
 // Handles push notifications and basic offline caching
 
-const CACHE_NAME = 'redshrimp-v3'
+const CACHE_NAME = 'redshrimp-v4'
 const PRECACHE_URLS = ['/', '/index.html']
 
 // ── Install ──

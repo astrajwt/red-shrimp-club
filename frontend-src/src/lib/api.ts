@@ -123,6 +123,7 @@ export const channelsApi = {
   invite:    (channelId: string, agentId?: string, userId?: string) =>
     post(`/channels/${channelId}/invite`, { agentId, userId }),
   members:   (channelId: string) => get<ChannelMember[]>(`/channels/${channelId}/members`),
+  delete:    (channelId: string) => del<{ ok: boolean }>(`/channels/${channelId}`),
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
@@ -475,12 +476,23 @@ export interface Bulletin {
   updated_at: string
 }
 
+export interface DashboardRecentDoc {
+  id: string
+  doc_path: string
+  doc_name: string
+  status: string
+  created_at: string
+  task_title: string
+  task_number: number | null
+}
+
 export interface DashboardData {
   leaders: DashboardAgent[]
   activeTasks: DashboardTask[]
   recentActivity: DashboardActivity[]
   bookmarks: Bulletin[]
   stickies: Bulletin[]
+  recentDocs: DashboardRecentDoc[]
 }
 
 export interface DashboardAgent {

@@ -294,7 +294,7 @@ export default function App() {
       {/* ── Page content — pages stay mounted to preserve scroll position ── */}
       <div className="flex-1 min-h-0 overflow-hidden relative">
         <div className="h-full" style={{ display: page === 'home' ? 'block' : 'none' }}>
-          <HomePage onNavigate={(p, d) => { setPage(p as Page) }} />
+          <HomePage onNavigate={(p, d) => { if (p === 'memory' && d?.file) { openDoc(d.file) } else { setPage(p as Page) } }} />
         </div>
         <div className="h-full" style={{ display: page === 'channels' ? 'block' : 'none' }}>
           <ChannelsView requestedChannelId={requestedChannelId} onOpenDoc={openDoc} onBack={isMobile ? () => setPage('home') : undefined} isVisible={page === 'channels'} />

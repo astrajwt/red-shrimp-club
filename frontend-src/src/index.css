@@ -162,26 +162,30 @@ body {
   animation: agent-blink 1.5s ease-in-out infinite;
 }
 
-/* Chat markdown: tighten spacing for inline chat context */
+/* Chat markdown: full styling for marked HTML output */
 .chat-markdown p { margin-bottom: 0.25rem; }
 .chat-markdown p:last-child { margin-bottom: 0; }
-.chat-markdown ul, .chat-markdown ol { margin-bottom: 0.25rem; }
-.chat-markdown pre { margin: 0.25rem 0; }
-.chat-markdown blockquote { margin: 0.25rem 0; }
+.chat-markdown strong { font-weight: 700; color: #e7dfd3; }
+.chat-markdown em { font-style: italic; color: #c8bdb8; }
 
-/* Inline code styling */
-.chat-markdown .chat-code-inline {
-  background: #1a1614;
+/* Lists */
+.chat-markdown ul { list-style: disc inside; margin-left: 0.5rem; margin-bottom: 0.25rem; }
+.chat-markdown ol { list-style: decimal inside; margin-left: 0.5rem; margin-bottom: 0.25rem; }
+.chat-markdown li { margin-bottom: 0.125rem; }
+
+/* Code blocks — dark green terminal look */
+.chat-markdown pre {
+  margin: 0.25rem 0;
+  background: #0a0809;
   border: 1px solid #2a2622;
   border-radius: 0.25rem;
-  padding: 0.125rem 0.25rem;
+  padding: 0.5rem 0.75rem;
   font-size: 12px;
-  color: #f0b35e;
+  color: #7ecfa8;
+  overflow-x: auto;
+  white-space: pre;
 }
-
-/* Reset inline code styles when inside a code block */
-.chat-markdown pre code,
-.chat-markdown pre .chat-code-inline {
+.chat-markdown pre code {
   background: none;
   border: none;
   padding: 0;
@@ -190,15 +194,78 @@ body {
   border-radius: 0;
 }
 
-/* KaTeX dark theme overrides */
-.katex { color: #e7dfd3; font-size: 1em; }
-.katex .base { color: #e7dfd3; }
+/* Inline code */
+.chat-markdown code {
+  background: #1a1614;
+  border: 1px solid #2a2622;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  font-size: 12px;
+  color: #f0b35e;
+}
+.chat-markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #7ecfa8;
+}
+
+/* Links */
+.chat-markdown a {
+  color: #6bc5e8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.chat-markdown a:hover { color: #f0b35e; }
+
+/* Headings */
+.chat-markdown h1 { font-size: 15px; font-weight: 700; color: #e7dfd3; margin: 0.5rem 0 0.25rem; }
+.chat-markdown h2 { font-size: 14px; font-weight: 700; color: #e7dfd3; margin: 0.375rem 0 0.25rem; }
+.chat-markdown h3 { font-size: 13px; font-weight: 700; color: #c8bdb8; margin: 0.25rem 0 0.125rem; }
+.chat-markdown h4, .chat-markdown h5, .chat-markdown h6 { font-size: 13px; font-weight: 600; color: #c8bdb8; margin: 0.25rem 0 0.125rem; }
+
+/* Blockquote */
+.chat-markdown blockquote {
+  border-left: 3px solid #4a4048;
+  padding-left: 0.5rem;
+  margin: 0.25rem 0 0.25rem 0.25rem;
+  color: #8a7e88;
+  font-style: italic;
+}
+
+/* Horizontal rule */
+.chat-markdown hr { border: none; border-top: 1px solid #2a2622; margin: 0.5rem 0; }
+
+/* Tables */
+.chat-markdown table { border-collapse: collapse; border: 1px solid #2a2622; font-size: 12px; margin: 0.25rem 0; }
+.chat-markdown th { border: 1px solid #2a2622; padding: 0.25rem 0.5rem; background: #1a1614; text-align: left; color: #c8bdb8; }
+.chat-markdown td { border: 1px solid #2a2622; padding: 0.25rem 0.5rem; }
+
+/* Images */
+.chat-markdown img {
+  max-width: 360px;
+  max-height: 260px;
+  border: 2px solid black;
+  object-fit: contain;
+  cursor: pointer;
+  margin: 0.5rem 0;
+}
+
+/* KaTeX dark theme overrides (chat context) */
+.chat-markdown .katex { color: #e7dfd3; font-size: 1em; }
+.chat-markdown .katex .base { color: #e7dfd3; }
+.chat-markdown .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; padding: 0.25em 0; }
+.chat-markdown .katex-display > .katex { color: #f0b35e; }
+
+/* KaTeX in document viewer (light background) */
+.katex { color: #1a1a1a; font-size: 1em; }
+.katex .base { color: #1a1a1a; }
 .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; padding: 0.25em 0; }
-.katex-display > .katex { color: #f0b35e; }
+.katex-display > .katex { color: #c0392b; }
 .katex .katex-html { color: inherit; }
 .katex .mord, .katex .mbin, .katex .mrel, .katex .mop, .katex .mopen, .katex .mclose, .katex .mpunct { color: inherit; }
-.katex .sqrt > .root { color: #6bc5e8; }
-.katex .frac-line { border-bottom-color: #6a6068; }
+.katex .sqrt > .root { color: #2980b9; }
+.katex .frac-line { border-bottom-color: #333; }
 
 /* Thin scrollbars */
 ::-webkit-scrollbar       { width: 4px; height: 4px; }

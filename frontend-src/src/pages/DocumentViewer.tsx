@@ -220,6 +220,7 @@ function buildAssetUrl(src: string, currentFilePath?: string): string {
 export default function DocumentViewer({ filePath, onClose, embedded = false, onNavigate }: Props) {
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [outlineOpen, setOutlineOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [linkedTasks, setLinkedTasks] = useState<Task[]>([])
@@ -235,6 +236,7 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
     setContent(null)
     setBacklinks([])
     setResolvedPath(filePath)
+    setOutlineOpen(false)
 
     tasksApi.list().then(({ tasks }) => {
       const linked = tasks.filter(t =>
@@ -284,10 +286,14 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
   const outline = isMarkdown && displayBody
     ? displayBody.split('\n')
         .filter(l => /^#{1,3} /.test(l))
-        .map(l => ({
-          level: l.match(/^(#+)/)?.[1].length ?? 1,
-          text:  l.replace(/^#+\s+/, ''),
-        }))
+        .map(l => {
+          const text = l.replace(/^#+\s+/, '')
+          return {
+            level: l.match(/^(#+)/)?.[1].length ?? 1,
+            text,
+            slug: slugify(text),
+          }
+        })
     : []
 
   // Build markdown components with wikilink click handler
@@ -305,12 +311,31 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
       <div className="border-b-[3px] border-black bg-[#141018] px-5 py-2 flex items-center gap-2 text-[12px] text-[#4a4048] shrink-0">
         {pathParts.map((part, i) => (
           <span key={i} className="flex items-center gap-2">
-            <span className="text-[#6bc5e8]">{part}</span>
+            <button
+              onClick={() => {
+                const dirPath = pathParts.slice(0, i + 1).join('/')
+                onNavigate?.(dirPath)
+              }}
+              className="text-[#6bc5e8] hover:text-[#f0b35e] hover:underline transition-colors cursor-pointer"
+              title={pathParts.slice(0, i + 1).join('/')}
+            >
+              {part}
+            </button>
             <span>/</span>
           </span>
         ))}
         <span className="text-[#e7dfd3]">{fileName}</span>
         <div className="ml-auto flex gap-2">
+          {embedded && outline.length > 0 && (
+            <button
+              onClick={() => setOutlineOpen(o => !o)}
+              className={`border-[2px] border-black px-2 py-0.5 uppercase text-[10px] transition-colors ${
+                outlineOpen ? 'bg-[#1e1a20] text-[#6bc5e8] border-[#6bc5e8]' : 'bg-[#141018] text-[#4a4048] hover:text-[#6bc5e8]'
+              }`}
+            >
+              toc
+            </button>
+          )}
           <span className="border-[2px] border-black bg-[#0f1a18] text-[#3abfa0] px-2 py-0.5 uppercase text-[10px]">read-only</span>
           <span className="border-[2px] border-black bg-[#1a2535] text-[#6bc5e8] px-2 py-0.5 uppercase text-[10px]">vault</span>
           {onClose && !embedded && (
@@ -325,14 +350,50 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
       </div>
 
       <div className="flex flex-1 overflow-hidden min-h-0">
-        {/* Outline + links sidebar — hidden in embedded mode (tree is in MemoryBrowser) */}
-        {!embedded && (
+        {/* Outline sidebar */}
+        {embedded ? (
+          /* Embedded mode: collapsible outline strip */
+          outline.length > 0 && (
+            outlineOpen ? (
+              <aside className="w-[180px] shrink-0 border-r-[3px] border-black bg-[#141018] flex flex-col overflow-hidden transition-all duration-200">
+                <div className="border-b-[3px] border-black px-3 py-2 flex items-center justify-between shrink-0">
+                  <span className="text-[10px] text-[#6bc5e8] uppercase tracking-widest">outline</span>
+                  <button onClick={() => setOutlineOpen(false)} className="text-[12px] text-[#4a4048] hover:text-[#6bc5e8] transition-colors">◂</button>
+                </div>
+                <div className="flex-1 overflow-auto py-1">
+                  {outline.map((h, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        const el = document.getElementById(h.slug)
+                        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }}
+                      className={`w-full text-left px-3 py-1 text-[11px] cursor-pointer hover:text-[#6bc5e8] hover:bg-[#1e1a20] border-l-[2px] transition-colors truncate
+                        ${h.level === 1
+                          ? 'text-[#c8bdb8] border-[#c0392b] pl-3'
+                          : h.level === 2
+                          ? 'text-[#9a8888] border-transparent pl-5'
+                          : 'text-[#6a5858] border-transparent pl-7'}`}
+                    >
+                      {h.text}
+                    </button>
+                  ))}
+                </div>
+              </aside>
+            ) : null
+          )
+        ) : (
+          /* Standalone mode: always-visible sidebar */
           <aside className="w-[200px] shrink-0 border-r-[3px] border-black bg-[#141018] flex flex-col overflow-auto">
             <div className="border-b-[3px] border-black px-3 py-2 text-[11px] text-[#4a4048] uppercase">outline</div>
             {outline.map((h, i) => (
-              <div
+              <button
                 key={i}
-                className={`px-3 py-1 text-[12px] cursor-pointer hover:text-[#6bc5e8] border-l-[2px]
+                onClick={() => {
+                  const el = document.getElementById(h.slug)
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+                className={`w-full text-left px-3 py-1 text-[12px] cursor-pointer hover:text-[#6bc5e8] hover:bg-[#1e1a20] border-l-[2px] transition-colors
                   ${h.level === 1
                     ? 'text-[#c8bdb8] border-[#c0392b] pl-3'
                     : h.level === 2
@@ -340,7 +401,7 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
                     : 'text-[#6a5858] border-transparent pl-7'}`}
               >
                 {h.text}
-              </div>
+              </button>
             ))}
             {linkedTasks.length > 0 && (
               <div className="border-t-[3px] border-black mt-3 px-3 py-2">
@@ -602,19 +663,31 @@ function buildMdComponents(
   onNavigate?: (path: string) => void,
   currentFilePath?: string,
 ): React.ComponentProps<typeof ReactMarkdown>['components'] {
+  const textOf = (node: React.ReactNode): string => {
+    if (typeof node === 'string') return node
+    if (typeof node === 'number') return String(node)
+    if (Array.isArray(node)) return node.map(textOf).join('')
+    if (node && typeof node === 'object' && 'props' in node) return textOf((node as any).props.children)
+    return ''
+  }
+
   return {
-    h1: ({ children }) => (
-      <h1 style={{ fontSize: 26, fontWeight: 'bold', lineHeight: 1.25, marginTop: 8, marginBottom: 8 }}>{children}</h1>
-    ),
-    h2: ({ children }) => (
-      <h2 style={{ fontSize: 20, fontWeight: 'bold', borderTop: '3px solid rgba(0,0,0,0.25)', paddingTop: 12, marginTop: 24, marginBottom: 8 }}>{children}</h2>
-    ),
-    h3: ({ children }) => (
-      <h3 style={{ fontSize: 16, fontWeight: 'bold', marginTop: 16, marginBottom: 6 }}>{children}</h3>
-    ),
-    h4: ({ children }) => (
-      <h4 style={{ fontSize: 14, fontWeight: 'bold', marginTop: 12, marginBottom: 4 }}>{children}</h4>
-    ),
+    h1: ({ children }) => {
+      const id = slugify(textOf(children))
+      return <h1 id={id} style={{ fontSize: 26, fontWeight: 'bold', lineHeight: 1.25, marginTop: 8, marginBottom: 8 }}>{children}</h1>
+    },
+    h2: ({ children }) => {
+      const id = slugify(textOf(children))
+      return <h2 id={id} style={{ fontSize: 20, fontWeight: 'bold', borderTop: '3px solid rgba(0,0,0,0.25)', paddingTop: 12, marginTop: 24, marginBottom: 8 }}>{children}</h2>
+    },
+    h3: ({ children }) => {
+      const id = slugify(textOf(children))
+      return <h3 id={id} style={{ fontSize: 16, fontWeight: 'bold', marginTop: 16, marginBottom: 6 }}>{children}</h3>
+    },
+    h4: ({ children }) => {
+      const id = slugify(textOf(children))
+      return <h4 id={id} style={{ fontSize: 14, fontWeight: 'bold', marginTop: 12, marginBottom: 4 }}>{children}</h4>
+    },
     p: ({ children }) => (
       <p style={{ fontSize: 15, margin: '6px 0', lineHeight: 1.75 }}>{children}</p>
     ),
@@ -711,7 +784,34 @@ function buildMdComponents(
         )
       }
 
-      if (href && !href.startsWith('#') && !isExternalAssetPath(href) && onNavigate) {
+      // Handle anchor links — scroll to heading
+      if (href?.startsWith('#')) {
+        const targetId = slugify(decodeURIComponent(href.slice(1)))
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              const el = document.getElementById(targetId)
+              el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }}
+            style={{
+              color: '#1a5a8a',
+              textDecoration: 'underline',
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 'inherit',
+            }}
+          >
+            {children}
+          </button>
+        )
+      }
+
+      if (href && !isExternalAssetPath(href) && onNavigate) {
         const targetPath = currentFilePath ? resolveVaultPath(currentFilePath, href) : href
         return (
           <button
@@ -836,4 +936,12 @@ function propertySortOrder(key: string): number {
 
 function formatPropertyLabel(key: string): string {
   return key.replace(/[-_]+/g, ' ')
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s\u4e00-\u9fff-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }

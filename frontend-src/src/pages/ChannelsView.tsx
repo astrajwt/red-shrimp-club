@@ -15,11 +15,7 @@ import { socketClient } from '../lib/socket'
 import { useAuthStore } from '../store/auth'
 import { useIsMobile } from '../lib/use-mobile'
 import DocumentViewer from './DocumentViewer'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
-import 'katex/dist/katex.min.css'
+import { marked } from 'marked'
 
 type WorkspaceSectionKey = 'memory' | 'knowledge' | 'notes' | 'docs'
 
@@ -54,6 +50,9 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, is
   const [mentionIndex, setMentionIndex] = useState(0)
   const [showInvite, setShowInvite]     = useState(false)
   const [inviting, setInviting]         = useState(false)
+  const [showMembers, setShowMembers]   = useState(false)
+  const [membersList, setMembersList]   = useState<Array<{ member_id: string; name: string; type: string }>>([])
+  const [membersLoading, setMembersLoading] = useState(false)
   const [agentPanelTab, setAgentPanelTab] = useState<'workspace' | 'tasks' | 'activity'>('workspace')
   const [agentWorkspaceSection, setAgentWorkspaceSection] = useState<WorkspaceSectionKey>('memory')
   const [agentDetailMemory, setAgentDetailMemory] = useState<AgentMemory | null>(null)
@@ -805,6 +804,60 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, is
                 )}
               </div>
             )}
+            {/* Members button */}
+            {activeChannel?.type !== 'dm' && (
+              <div className="relative">
+                <button
+                  onClick={async () => {
+                    if (showMembers) { setShowMembers(false); return }
+                    setShowMembers(true)
+                    setMembersLoading(true)
+                    try {
+                      const list = await channelsApi.members(activeId!)
+                      setMembersList(list)
+                    } catch { setMembersList([]) }
+                    setMembersLoading(false)
+                  }}
+                  className="border-[2px] border-black bg-[#1a2025] text-[#8a7e88] text-[11px] px-2 py-0.5 uppercase hover:bg-[#243038] hover:text-[#c8bdb8]"
+                  title="查看成员"
+                >
+                  members
+                </button>
+                {showMembers && (
+                  <MenuShell title="members" className="absolute top-full right-0 z-30 mt-2 min-w-[200px]">
+                    {membersLoading ? (
+                      <div className="px-3 py-2 text-[11px] text-[#4a4048]">loading...</div>
+                    ) : membersList.length === 0 ? (
+                      <div className="px-3 py-2 text-[11px] text-[#4a4048]">no members</div>
+                    ) : membersList.map(m => (
+                      <div key={m.member_id} className="flex items-center gap-2 px-3 py-1.5 text-[12px]">
+                        <span className={`w-1.5 h-1.5 shrink-0 ${m.type === 'agent' ? 'bg-[#6bc5e8]' : 'bg-[#c0392b]'}`} />
+                        <span className="text-[#c8bdb8]">{m.name}</span>
+                        <span className="text-[10px] text-[#4a4048] ml-auto">{m.type}</span>
+                      </div>
+                    ))}
+                  </MenuShell>
+                )}
+              </div>
+            )}
+            {/* Delete channel button */}
+            {activeChannel?.type !== 'dm' && activeChannel?.name !== 'all' && (
+              <button
+                onClick={async () => {
+                  if (!activeId) return
+                  if (!confirm(`确定删除频道 #${activeChName}？所有消息将被清除。`)) return
+                  try {
+                    await channelsApi.delete(activeId)
+                    setChannels(prev => prev.filter(c => c.id !== activeId))
+                    setActiveId(channels.find(c => c.name === 'all')?.id ?? channels[0]?.id ?? null)
+                  } catch (e: any) { alert(e.message) }
+                }}
+                className="border-[2px] border-black bg-[#2b1414] text-[#c0392b] text-[11px] px-2 py-0.5 uppercase hover:bg-[#3b1a1a]"
+                title="删除频道"
+              >
+                delete
+              </button>
+            )}
             {isMobile && (
               <button
                 onClick={() => setRightDrawerOpen(true)}
@@ -891,7 +944,7 @@ export default function ChannelsView({ requestedChannelId, onOpenDoc, onBack, is
                         boxShadow: '2px 3px 0 rgba(0,0,0,0.45)',
                       }}
                     >
-                      <MessageContent content={msg.content} mentions={msg.mentions} thinking={msg.thinking} onOpenDoc={onOpenDoc} />
+                      <MessageContent content={msg.content} mentions={msg.mentions} onOpenDoc={onOpenDoc} senderType={msg.sender_type} />
                       {/* Attachments */}
                       {msg.attachments?.map((att, i) =>
                         att.mime_type.startsWith('image/') ? (
@@ -1609,39 +1662,28 @@ interface FeedbackItem {
   details?: string[]
 }
 
-function ThinkingBlock({ thinking }: { thinking: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="mb-1.5">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-[11px] text-[#8a7e88] hover:text-[#c8bdb8] transition-colors"
-      >
-        <span className="inline-block transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-        <span className="italic">思考过程</span>
-      </button>
-      {open && (
-        <div className="mt-1 ml-3 pl-2 border-l-[2px] border-[#3a3035] text-[11px] text-[#7a6e78] whitespace-pre-wrap max-h-[300px] overflow-y-auto">
-          {thinking}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function MessageContent({
   content,
   mentions,
-  thinking,
   onOpenDoc,
+  senderType,
 }: {
   content: string
   mentions?: MessageMention[]
-  thinking?: string | null
   onOpenDoc?: (path: string) => void
+  senderType?: string
 }) {
   const text = content === ZERO_WIDTH ? '' : content
   if (!text) return null
+
+  // Human messages: plain text only, no regex/markdown processing
+  if (senderType === 'human') {
+    return (
+      <div className="chat-markdown whitespace-pre-wrap break-words">
+        {text}
+      </div>
+    )
+  }
 
   const mentionNames = new Set((mentions ?? []).map(m => m.name.toLowerCase()))
 
@@ -1665,7 +1707,7 @@ function MessageContent({
     )
     // 2) Backtick-wrapped paths with known extensions
     processed = processed.replace(
-      /`((?:[^`\n]+\/)+[^`\n]+?\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|webp|gif|svg|pdf))`/gm,
+      /`([^`\n]{1,200}\.(?:md|txt|json|yaml|yml|csv|png|jpg|jpeg|webp|gif|svg|pdf))`/gm,
       (_match, path) => path.startsWith('/') ? `\`${path}\`` : `[${path}](vault://${path})`
     )
     // 3) Known vault top-level dir paths — must be preceded by whitespace/colon/newline/start
@@ -1680,96 +1722,31 @@ function MessageContent({
     )
   }
 
+  // Strip ANSI escape codes before rendering
+  const clean = processed.replace(/\x1b\[[0-9;]*m/g, '')
+
+  const html = marked.parse(clean, { async: false, gfm: true, breaks: false }) as string
+
+  const handleClick = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest('a')
+    if (!a) return
+    const href = a.getAttribute('href') ?? ''
+    const vaultPath = normalizeVaultPath(href)
+    if (vaultPath && onOpenDoc) {
+      e.preventDefault()
+      onOpenDoc(vaultPath)
+    } else if (href && !href.startsWith('vault://')) {
+      e.preventDefault()
+      window.open(href, '_blank', 'noopener,noreferrer')
+    }
+  }
+
   return (
-    <div className="chat-markdown whitespace-pre-wrap break-words">
-      {thinking && <ThinkingBlock thinking={thinking} />}
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-        urlTransform={(url) => url}
-        components={{
-          p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-          strong: ({ children }) => {
-            const text = String(children)
-            if (text.startsWith('@') && mentionNames.has(text.slice(1).toLowerCase())) {
-              return <span className="text-[#6bc5e8] font-bold">{text}</span>
-            }
-            return <strong className="font-bold text-[#e7dfd3]">{children}</strong>
-          },
-          em: ({ children }) => <em className="italic text-[#c8bdb8]">{children}</em>,
-          code: ({ className, children }) => {
-            const lang = className?.replace('language-', '')
-            if (lang) {
-              return (
-                <code>
-                  <span className="text-[10px] text-[#6b6060] select-none">{lang}</span>
-                  {children}
-                </code>
-              )
-            }
-            return <code className="chat-code-inline">{children}</code>
-          },
-          pre: ({ children }) => (
-            <pre className="my-1 bg-[#0a0809] border border-[#2a2622] rounded px-3 py-2 text-[12px] text-[#7ecfa8] overflow-x-auto whitespace-pre">
-              {children}
-            </pre>
-          ),
-          a: ({ href, children }) => {
-            const vaultPath = normalizeVaultPath(href ?? '')
-            if (vaultPath && onOpenDoc) {
-              return (
-                <span
-                  className="inline-flex items-center gap-0.5 text-[#6bc5e8] hover:text-[#f0b35e] cursor-pointer group"
-                  onClick={() => onOpenDoc(vaultPath)}
-                  title={vaultPath}
-                >
-                  <svg className="w-3 h-3 shrink-0 opacity-50 group-hover:opacity-100" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M2 2h8l4 4v8H2V2zm8 1v3h3L10 3zM4 8h8v1H4V8zm0 2h6v1H4v-1z"/>
-                  </svg>
-                  <span className="underline underline-offset-2">{children}</span>
-                </span>
-              )
-            }
-            return (
-              <a href={href} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-0.5 text-[#6bc5e8] underline underline-offset-2 hover:text-[#f0b35e]">
-                {children}<span className="text-[10px] opacity-40">↗</span>
-              </a>
-            )
-          },
-          ul: ({ children }) => <ul className="list-disc list-inside ml-2 mb-1">{children}</ul>,
-          ol: ({ children }) => <ol className="list-decimal list-inside ml-2 mb-1">{children}</ol>,
-          li: ({ children }) => <li className="mb-0.5">{children}</li>,
-          blockquote: ({ children }) => (
-            <blockquote className="border-l-[3px] border-[#4a4048] pl-2 ml-1 my-1 text-[#8a7e88] italic">{children}</blockquote>
-          ),
-          h1: ({ children }) => <h1 className="text-[15px] font-bold text-[#e7dfd3] mb-1 mt-2">{children}</h1>,
-          h2: ({ children }) => <h2 className="text-[14px] font-bold text-[#e7dfd3] mb-1 mt-1.5">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-[13px] font-bold text-[#c8bdb8] mb-0.5 mt-1">{children}</h3>,
-          hr: () => <hr className="border-[#2a2622] my-2" />,
-          table: ({ children }) => (
-            <div className="overflow-x-auto my-1">
-              <table className="border-collapse border border-[#2a2622] text-[12px]">{children}</table>
-            </div>
-          ),
-          th: ({ children }) => <th className="border border-[#2a2622] px-2 py-1 bg-[#1a1614] text-left text-[#c8bdb8]">{children}</th>,
-          td: ({ children }) => <td className="border border-[#2a2622] px-2 py-1">{children}</td>,
-          img: ({ src, alt }) => (
-            <div className="my-2">
-              <img
-                src={src}
-                alt={alt || 'image'}
-                className="max-w-[360px] max-h-[260px] border-[2px] border-black object-contain cursor-pointer"
-                onClick={() => src && window.open(src, '_blank')}
-                onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-              />
-            </div>
-          ),
-        }}
-      >
-        {processed}
-      </ReactMarkdown>
-    </div>
+    <div
+      className="chat-markdown whitespace-pre-wrap break-words"
+      onClick={handleClick}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   )
 }
 

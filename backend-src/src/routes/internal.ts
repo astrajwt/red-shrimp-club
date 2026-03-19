@@ -317,14 +317,24 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     const uploadsDir = process.env.UPLOADS_DIR ?? '/var/redshrimp/uploads'
     const formatted = allMsgs.map(m => {
       let content = m.content
-      // Append attachment absolute paths so agents can read files directly
+      // Parse attachments
       const atts = typeof m.attachments === 'string' ? JSON.parse(m.attachments) : (m.attachments ?? [])
+      const imageAttachments: Array<{ filename: string; mime_type: string; path: string }> = []
       if (Array.isArray(atts) && atts.length > 0) {
-        const lines = atts.map((a: any) => {
+        const lines: string[] = []
+        for (const a of atts) {
           const fileName = a.url?.replace(/^\/uploads\//, '') ?? a.file_id + '.bin'
-          return `[attachment: ${a.filename} (${a.mime_type})] ${uploadsDir}/${fileName}`
-        })
-        content = content + '\n' + lines.join('\n')
+          const filePath = `${uploadsDir}/${fileName}`
+          if (a.mime_type?.startsWith('image/')) {
+            imageAttachments.push({ filename: a.filename, mime_type: a.mime_type, path: filePath })
+          } else {
+            lines.push(`[attachment: ${a.filename} (${a.mime_type})] ${filePath}`)
+          }
+        }
+        if (lines.length > 0) content = content + '\n' + lines.join('\n')
+        if (imageAttachments.length > 0) {
+          content = content + '\n' + imageAttachments.map(img => `[image: ${img.filename}]`).join(' ')
+        }
       }
       return {
         channel_name: m.channel_name,
@@ -333,6 +343,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
         sender_type: m.sender_type,
         content,
         timestamp: m.created_at,
+        image_attachments: imageAttachments.length > 0 ? imageAttachments : undefined,
         // Tell the agent exactly how to reply
         reply_to: m.channel_type === 'dm'
           ? { dm_to: m.sender_name }
@@ -392,26 +403,41 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
 
     if (after) {
       sql = `SELECT m.id, m.sender_name AS "senderName", m.sender_type AS "senderType",
-                    m.content, m.seq, m.created_at AS "createdAt"
+                    m.content, m.attachments, m.seq, m.created_at AS "createdAt"
              FROM messages m WHERE m.channel_id = $1 AND m.seq > $2
              ORDER BY m.seq LIMIT $3`
       params = [ch.id, Number(after), lim]
     } else if (before) {
       sql = `SELECT m.id, m.sender_name AS "senderName", m.sender_type AS "senderType",
-                    m.content, m.seq, m.created_at AS "createdAt"
+                    m.content, m.attachments, m.seq, m.created_at AS "createdAt"
              FROM messages m WHERE m.channel_id = $1 AND m.seq < $2
              ORDER BY m.seq DESC LIMIT $3`
       params = [ch.id, Number(before), lim]
     } else {
       sql = `SELECT m.id, m.sender_name AS "senderName", m.sender_type AS "senderType",
-                    m.content, m.seq, m.created_at AS "createdAt"
+                    m.content, m.attachments, m.seq, m.created_at AS "createdAt"
              FROM messages m WHERE m.channel_id = $1
              ORDER BY m.seq DESC LIMIT $2`
       params = [ch.id, lim]
     }
 
+    const uploadsDir = process.env.UPLOADS_DIR ?? '/var/redshrimp/uploads'
     const msgs = await query(sql, params)
-    const messages = before || !after ? msgs.reverse() : msgs
+    const messages = (before || !after ? msgs.reverse() : msgs).map((m: any) => {
+      const atts = typeof m.attachments === 'string' ? JSON.parse(m.attachments) : (m.attachments ?? [])
+      const imageAttachments: Array<{ filename: string; mime_type: string; path: string }> = []
+      if (Array.isArray(atts) && atts.length > 0) {
+        for (const a of atts) {
+          const fileName = a.url?.replace(/^\/uploads\//, '') ?? a.file_id + '.bin'
+          if (a.mime_type?.startsWith('image/')) {
+            imageAttachments.push({ filename: a.filename, mime_type: a.mime_type, path: `${uploadsDir}/${fileName}` })
+          }
+        }
+      }
+      const result: any = { id: m.id, senderName: m.senderName, senderType: m.senderType, content: m.content, seq: m.seq, createdAt: m.createdAt }
+      if (imageAttachments.length > 0) result.image_attachments = imageAttachments
+      return result
+    })
 
     // Get last read seq
     const readRow = await queryOne<{ last_read_seq: string }>(

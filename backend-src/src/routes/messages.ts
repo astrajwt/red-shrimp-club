@@ -59,7 +59,7 @@ function parseDecisionItems(content: string): ParsedDecisionItem[] {
   return items
 }
 
-const MSG_COLUMNS = `m.id, m.channel_id, m.sender_id, m.sender_type, m.sender_name, m.content, m.seq, m.attachments, m.mentions, m.thinking, m.created_at`
+const MSG_COLUMNS = `m.id, m.channel_id, m.sender_id, m.sender_type, m.sender_name, m.content, m.seq, m.attachments, m.mentions, CASE WHEN m.thinking IS NOT NULL THEN left(m.thinking, 2000) END AS thinking, m.created_at`
 
 export const messageRoutes: FastifyPluginAsync = async (app) => {
   await query(`

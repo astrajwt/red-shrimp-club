@@ -134,37 +134,12 @@ function AskPanel({ filePath }: { filePath: string | null }) {
     setMessages(prev => [...prev, { role: 'user', text: q }])
     setLoading(true)
 
-    // Add empty assistant message — filled incrementally via SSE
-    setMessages(prev => [...prev, { role: 'assistant', text: '' }])
-
     try {
-      await askApi.askStream(
-        q,
-        (fullText) => {
-          setMessages(prev => {
-            const updated = [...prev]
-            const last = updated[updated.length - 1]
-            if (last?.role === 'assistant') {
-              updated[updated.length - 1] = { ...last, text: fullText }
-            }
-            return updated
-          })
-        },
-        ctxPath ?? undefined,
-        selectedModel,
-      )
+      const { answer } = await askApi.ask(q, ctxPath ?? undefined, selectedModel)
+      setMessages(prev => [...prev, { role: 'assistant', text: answer }])
     } catch (err: any) {
       const detail = err?.body?.detail ?? err?.message ?? 'request failed'
-      setMessages(prev => {
-        const updated = [...prev]
-        const last = updated[updated.length - 1]
-        if (last?.role === 'assistant' && !last.text) {
-          updated[updated.length - 1] = { ...last, text: `⚠ ${detail}` }
-        } else {
-          updated.push({ role: 'assistant', text: `⚠ ${detail}` })
-        }
-        return updated
-      })
+      setMessages(prev => [...prev, { role: 'assistant', text: `⚠ ${detail}` }])
     } finally {
       setLoading(false)
     }

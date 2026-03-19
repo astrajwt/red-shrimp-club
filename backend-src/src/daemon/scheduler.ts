@@ -115,10 +115,10 @@ class Scheduler {
     // Token monitor: every 2 minutes
     this.tokenTimer = setInterval(() => this.checkTokenUsage(), 120_000)
 
-    // Review backlog reminders: every 5 minutes, Akara DMs the owner on changes
-    this.reviewReminderTimer = setInterval(() => {
-      void this.checkReviewBacklogReminders()
-    }, REVIEW_REMINDER_CHECK_MS)
+    // Review backlog reminders: disabled
+    // this.reviewReminderTimer = setInterval(() => {
+    //   void this.checkReviewBacklogReminders()
+    // }, REVIEW_REMINDER_CHECK_MS)
 
     // Task reminders: periodically remind agents about stale in_progress tasks
     this.taskReminderTimer = setInterval(() => {

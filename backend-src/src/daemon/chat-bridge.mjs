@@ -4,6 +4,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { readFile } from "node:fs/promises";
 function toLocalTime(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
@@ -95,15 +96,30 @@ server.tool(
           content: [{ type: "text", text: "No new messages." }]
         };
       }
-      const formatted = data.messages.map((m) => {
+      const textLines = [];
+      const imageBlocks = [];
+      for (const m of data.messages) {
         const channel = m.channel_type === "dm" ? `DM:@${m.channel_name}` : `#${m.channel_name}`;
         const senderPrefix = m.sender_type === "agent" ? "(agent) " : "";
         const time = m.timestamp ? ` (${toLocalTime(m.timestamp)})` : "";
-        return `[${channel}]${time} ${senderPrefix}@${m.sender_name}: ${m.content}`;
-      }).join("\n");
-      return {
-        content: [{ type: "text", text: formatted }]
-      };
+        textLines.push(`[${channel}]${time} ${senderPrefix}@${m.sender_name}: ${m.content}`);
+        // Collect image attachments for vision
+        if (m.image_attachments) {
+          for (const img of m.image_attachments) {
+            try {
+              const buf = await readFile(img.path);
+              imageBlocks.push({
+                type: "image",
+                data: buf.toString("base64"),
+                mimeType: img.mime_type,
+              });
+            } catch { /* skip unreadable images */ }
+          }
+        }
+      }
+      const contentBlocks = [{ type: "text", text: textLines.join("\n") }];
+      for (const img of imageBlocks) contentBlocks.push(img);
+      return { content: contentBlocks };
     } catch (err) {
       return {
         content: [{ type: "text", text: `Error: ${err.message}` }]
@@ -200,11 +216,22 @@ server.tool(
           ]
         };
       }
-      const formatted = data.messages.map((m) => {
+      const historyLines = [];
+      const historyImages = [];
+      for (const m of data.messages) {
         const senderPrefix = m.senderType === "agent" ? "(agent) " : "";
         const time = m.createdAt ? ` (${toLocalTime(m.createdAt)})` : "";
-        return `[seq:${m.seq}]${time} ${senderPrefix}@${m.senderName}: ${m.content}`;
-      }).join("\n");
+        historyLines.push(`[seq:${m.seq}]${time} ${senderPrefix}@${m.senderName}: ${m.content}`);
+        if (m.image_attachments) {
+          for (const img of m.image_attachments) {
+            try {
+              const buf = await readFile(img.path);
+              historyImages.push({ type: "image", data: buf.toString("base64"), mimeType: img.mime_type });
+            } catch { /* skip */ }
+          }
+        }
+      }
+      const formatted = historyLines.join("\n");
       let footer = "";
       if (data.historyLimited) {
         footer = `
@@ -228,16 +255,16 @@ server.tool(
         header += `
 Your last read position: seq ${data.last_read_seq}. Use read_history(channel="${channel}", after=${data.last_read_seq}) to see only unread messages.`;
       }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `${header}
+      const historyContent = [
+        {
+          type: "text",
+          text: `${header}
 
 ${formatted}${footer}`
-          }
-        ]
-      };
+        }
+      ];
+      for (const img of historyImages) historyContent.push(img);
+      return { content: historyContent };
     } catch (err) {
       return {
         content: [{ type: "text", text: `Error: ${err.message}` }]

@@ -2,7 +2,7 @@
 // Three-panel: left=file tree, center=vault viewer, right=Donovan handoff
 
 import { useEffect, useRef, useState } from 'react'
-import { obsidianApi, memoryApi, channelsApi, messagesApi, agentsApi, setupApi, type ObsidianEntry, type MemorySource } from '../lib/api'
+import { obsidianApi, memoryApi, channelsApi, messagesApi, agentsApi, setupApi, askApi, type ObsidianEntry, type MemorySource } from '../lib/api'
 import { isImeComposing } from '../lib/ime'
 import { useIsMobile } from '../lib/use-mobile'
 import DocumentViewer from './DocumentViewer'
@@ -49,7 +49,15 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
   const [selectedPath, setSelectedPath] = useState<string | null>(requestedDoc?.path ?? null)
   const [history, setHistory] = useState<string[]>([])
 
+  const [treeFocusPath, setTreeFocusPath] = useState<string | null>(null)
+
   const navigateTo = (path: string | null) => {
+    // Directory path (no file extension) — expand tree sidebar without changing document
+    if (path && !/\.[a-zA-Z0-9]+$/.test(path)) {
+      setTreeFocusPath(path)
+      setLeftCollapsed(false)
+      return
+    }
     if (selectedPath && path !== selectedPath) {
       setHistory(prev => [...prev, selectedPath])
     }
@@ -206,7 +214,7 @@ export default function MemoryBrowser({ requestedDoc }: { requestedDoc?: { path:
       </div>
       {showImport && <GitImportPanel onImported={() => { refreshTree(); setShowImport(false) }} />}
       <div className="flex-1 overflow-auto py-1">
-        <TreeNode key={treeKey} path="" depth={0} selectedPath={selectedPath} onSelect={(path) => {
+        <TreeNode key={treeKey} path="" depth={0} selectedPath={selectedPath} treeFocusPath={treeFocusPath} onSelect={(path) => {
           navigateTo(path)
           if (isMobile) setLeftCollapsed(true)
         }} />
@@ -642,29 +650,18 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
     })
   }
 
-  const sendAskToAgent = async (question: string, reason?: string) => {
-    const agentName = selectedAgent?.name ?? 'agent'
-    const status = await handoffToAgent(question)
-    setHandoffState(status)
-    replacePendingAssistantMessage(
-      reason
-        ? `已通过通信转发给 ${agentName}（${reason}），请到私聊查看回复。`
-        : `已转发给 ${agentName}，请到私聊查看回复。`
-    )
-  }
-
   const send = async () => {
     const q = input.trim()
     if (!q || sending) return
     setInput('')
     setMessages(prev => [...prev, { role: 'user', text: q }])
     setSending(true)
-    setMessages(prev => [...prev, { role: 'assistant', text: '' }])
 
     try {
-      await sendAskToAgent(q)
+      const { answer } = await askApi.ask(q, ctxPath ?? undefined)
+      setMessages(prev => [...prev, { role: 'assistant', text: answer }])
     } catch (err: any) {
-      replacePendingAssistantMessage(`⚠ ${err?.message ?? 'failed to message agent'}`)
+      setMessages(prev => [...prev, { role: 'assistant', text: `⚠ ${err?.message ?? 'request failed'}` }])
     } finally {
       setSending(false)
     }
@@ -817,10 +814,11 @@ interface TreeNodeProps {
   path: string
   depth: number
   selectedPath: string | null
+  treeFocusPath?: string | null
   onSelect: (path: string) => void
 }
 
-function TreeNode({ path, depth, selectedPath, onSelect }: TreeNodeProps) {
+function TreeNode({ path, depth, selectedPath, treeFocusPath, onSelect }: TreeNodeProps) {
   const [entries, setEntries] = useState<ObsidianEntry[]>([])
   const [expanded, setExpanded] = useState(depth === 0)
   const [loaded, setLoaded] = useState(false)
@@ -864,6 +862,7 @@ function TreeNode({ path, depth, selectedPath, onSelect }: TreeNodeProps) {
               entry={entry}
               depth={depth + 1}
               selectedPath={selectedPath}
+              treeFocusPath={treeFocusPath}
               onSelect={onSelect}
             />
           ))}
@@ -896,18 +895,23 @@ interface DirNodeProps {
   entry: ObsidianEntry
   depth: number
   selectedPath: string | null
+  treeFocusPath?: string | null
   onSelect: (path: string) => void
 }
 
-function DirNode({ entry, depth, selectedPath, onSelect }: DirNodeProps) {
+function DirNode({ entry, depth, selectedPath, treeFocusPath, onSelect }: DirNodeProps) {
   const [entries, setEntries] = useState<ObsidianEntry[]>([])
   const [expanded, setExpanded] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  // Auto-expand when selected path is inside this directory
+  // Auto-expand when selected path or tree focus path is inside this directory
+  const shouldExpand = (target: string | null) =>
+    target && (target === entry.path || target.startsWith(entry.path + '/'))
+
   useEffect(() => {
-    if (selectedPath && selectedPath.startsWith(entry.path + '/') && !expanded && !loading) {
+    const needsExpand = shouldExpand(selectedPath) || shouldExpand(treeFocusPath ?? null)
+    if (needsExpand && !expanded && !loading) {
       if (!loaded) {
         setLoading(true)
         obsidianApi.tree(entry.path)
@@ -918,7 +922,7 @@ function DirNode({ entry, depth, selectedPath, onSelect }: DirNodeProps) {
         setExpanded(true)
       }
     }
-  }, [selectedPath])
+  }, [selectedPath, treeFocusPath])
 
   const toggle = () => {
     if (!loaded && !loading) {
@@ -939,18 +943,20 @@ function DirNode({ entry, depth, selectedPath, onSelect }: DirNodeProps) {
     <div>
       <button
         onClick={toggle}
-        className="w-full flex items-center gap-1.5 text-left py-1 border-b border-[#1a1620] hover:bg-[#1e1a20] transition-colors border-l-[3px] border-l-transparent"
+        className={`w-full flex items-center gap-1.5 text-left py-1 border-b border-[#1a1620] hover:bg-[#1e1a20] transition-colors border-l-[3px] ${
+          treeFocusPath === entry.path ? 'border-l-[#6bc5e8] bg-[#1a1e2a]' : 'border-l-transparent'
+        }`}
         style={{ paddingLeft: depth * 12 + 4 }}
       >
         <span className="text-[11px] text-[#6bc5e8] shrink-0">
           {loading ? '…' : expanded ? '▾' : '▸'}
         </span>
-        <span className="text-[12px] text-[#c8bdb8] truncate">{entry.name}</span>
+        <span className={`text-[12px] truncate ${treeFocusPath === entry.path ? 'text-[#6bc5e8]' : 'text-[#c8bdb8]'}`}>{entry.name}</span>
       </button>
       {expanded && (
         <div>
           {dirs.map(d => (
-            <DirNode key={d.path} entry={d} depth={depth + 1} selectedPath={selectedPath} onSelect={onSelect} />
+            <DirNode key={d.path} entry={d} depth={depth + 1} selectedPath={selectedPath} treeFocusPath={treeFocusPath} onSelect={onSelect} />
           ))}
           {files.map(f => (
             <button

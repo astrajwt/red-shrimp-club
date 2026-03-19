@@ -213,7 +213,19 @@ export const bulletinRoutes: FastifyPluginAsync = async (app) => {
       [serverId]
     )
 
-    return { leaders, activeTasks, recentActivity, bookmarks, stickies }
+    // Get recently created/updated docs from task_documents
+    const recentDocs = await query(
+      `SELECT td.id, td.doc_path, td.doc_name, td.status, td.created_at,
+              t.title as task_title, t.number as task_number
+       FROM task_documents td
+       JOIN tasks t ON t.id = td.task_id
+       WHERE t.channel_id IN (SELECT id FROM channels WHERE server_id = $1)
+       ORDER BY td.created_at DESC
+       LIMIT 15`,
+      [serverId]
+    ).catch(() => [])
+
+    return { leaders, activeTasks, recentActivity, bookmarks, stickies, recentDocs }
   })
 }
 

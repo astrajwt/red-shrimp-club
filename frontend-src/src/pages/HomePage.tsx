@@ -2,7 +2,7 @@
 // Leader Lanes (3 peer-level leaders) + Quick Links + Recent Activity
 
 import { useEffect, useState, useCallback } from 'react'
-import { bulletinApi, type DashboardData, type DashboardAgent, type DashboardTask, type Bulletin } from '../lib/api'
+import { bulletinApi, type DashboardData, type DashboardAgent, type DashboardTask, type DashboardRecentDoc, type Bulletin } from '../lib/api'
 
 const LEADER_ROLES = ['coordinator', 'tech-lead', 'ops']
 
@@ -306,6 +306,60 @@ export default function HomePage({ onNavigate }: Props) {
             </div>
           </div>
         </section>
+
+        {/* ── Starred Docs (vault bookmarks) ─────────────────── */}
+        {data.bookmarks.filter(b => b.linked_file).length > 0 && (
+          <section>
+            <div className="text-[11px] uppercase tracking-[0.12em] text-[#8d8188] mb-2">starred docs</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {data.bookmarks.filter(b => b.linked_file).map(b => (
+                <div
+                  key={b.id}
+                  onClick={() => onNavigate?.('memory', { file: b.linked_file })}
+                  className="group border-[2px] border-black bg-[#191619] px-3 py-2 cursor-pointer
+                             hover:bg-[#1e1a20] transition-colors shadow-[2px_3px_0_rgba(0,0,0,0.6)]"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] text-[#f0b35e] shrink-0">★</span>
+                    <span className="text-[12px] text-[#e7dfd3] font-bold truncate">{b.title}</span>
+                  </div>
+                  <div className="text-[10px] text-[#4a4048] truncate mt-0.5">{b.linked_file}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Recent Docs ──────────────────────────────────── */}
+        {(data.recentDocs ?? []).length > 0 && (
+          <section>
+            <div className="text-[11px] uppercase tracking-[0.12em] text-[#8d8188] mb-2">recent docs</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {(data.recentDocs ?? []).map(doc => (
+                <div
+                  key={doc.id}
+                  onClick={() => onNavigate?.('memory', { file: doc.doc_path })}
+                  className="group border-[2px] border-black bg-[#191619] px-3 py-2 cursor-pointer
+                             hover:bg-[#1e1a20] transition-colors shadow-[2px_3px_0_rgba(0,0,0,0.6)]"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] text-[#6bc5e8] shrink-0">📄</span>
+                    <span className="text-[12px] text-[#e7dfd3] truncate">{doc.doc_name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {doc.task_number && (
+                      <span className="text-[10px] text-[#c0392b]">#{doc.task_number}</span>
+                    )}
+                    <span className="text-[10px] text-[#4a4048] truncate">{doc.task_title}</span>
+                    <span className="text-[10px] text-[#4a4048] ml-auto shrink-0">
+                      {new Date(doc.created_at).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Leader Lanes ───────────────────────────────────── */}
         <section>

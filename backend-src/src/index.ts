@@ -153,7 +153,9 @@ async function main() {
       cacheControl: false,
       setHeaders(res, filePath) {
         if (filePath.includes('/assets/')) {
+          // Browser caches immutably (hash in filename), but tell Cloudflare not to cache
           res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+          res.setHeader('CDN-Cache-Control', 'no-store')
         } else {
           res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
         }
@@ -161,7 +163,7 @@ async function main() {
     })
     // SPA catch-all: serve index.html for non-API, non-file routes
     app.setNotFoundHandler(async (req, reply) => {
-      if (req.url.startsWith('/api/') || req.url.startsWith('/internal/') || req.url.startsWith('/uploads/') || req.url.startsWith('/socket.io') || req.url.startsWith('/daemon/')) {
+      if (req.url.startsWith('/api/') || req.url.startsWith('/internal/') || req.url.startsWith('/uploads/') || req.url.startsWith('/socket.io') || req.url.startsWith('/daemon/') || req.url.startsWith('/assets/')) {
         return reply.code(404).send({ error: 'Not found' })
       }
       reply.header('Cache-Control', 'no-cache, no-store, must-revalidate')
