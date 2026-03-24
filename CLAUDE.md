@@ -83,7 +83,7 @@ The daemon manages AI agent lifecycles (like systemd for agents):
 
 See `DEPLOY-SECRETS.md` (not checked in) for deployment info.
 
-**Architecture**: Local deployment — backend runs as `npx tsx src/index.ts`, frontend built to `frontend-src/dist/`. Public access via Cloudflare Tunnel (shrimp.red).
+**Architecture**: Local deployment — backend runs as `npx tsx src/index.ts`, frontend built to `frontend-src/dist/`. Public access via Cloudflare Tunnel.
 
 ### Notes
 - Environment variables reference for credentials — never hardcode secrets

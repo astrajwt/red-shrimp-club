@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 DEPLOY-SECRETS.md
+.gemini/
+MEMORY.md
+.claude/

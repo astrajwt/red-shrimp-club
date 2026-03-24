@@ -21,8 +21,8 @@ export default function SettingsPage() {
 
         {/* Profile */}
         <Section title="profile" color="#c0392b">
-          <Row label="display name" value="Jwt2077" />
-          <Row label="email" value="jwt2077@example.com" />
+          <Row label="display name" value="admin" />
+          <Row label="email" value="admin@example.com" />
           <Row label="role" value="owner" dimValue />
           <RowAction label="change password" action="update →" />
         </Section>

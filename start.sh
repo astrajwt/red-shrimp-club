@@ -38,7 +38,7 @@ echo "[start] Backend PID: $BACKEND_PID"
 sleep 2
 if kill -0 "$BACKEND_PID" 2>/dev/null; then
   echo "[start] Backend running at http://127.0.0.1:3001"
-  echo "[start] Public:  https://shrimp.red"
+  echo "[start] Public:  https://<your-domain>"
 else
   echo "[start] ERROR: Backend failed to start. Check $LOG_FILE"
   tail -20 "$LOG_FILE"
