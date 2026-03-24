@@ -1,8 +1,30 @@
 node_modules/
 dist/
-.env
 *.log
+
+# Environment & secrets
+.env
+.env.local
+.env.dev
 DEPLOY-SECRETS.md
+
+# Database dumps & backups
+*.dump
+*.sql.bak
+*.backup
+
+# Backup files
+*.bak
+
+# AI assistants
 .gemini/
-MEMORY.md
 .claude/
+MEMORY.md
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
