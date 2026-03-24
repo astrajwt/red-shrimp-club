@@ -6,7 +6,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { query, queryOne } from '../db/client.js'
 import { processManager } from '../daemon/process-manager.js'
-import { heartbeatChecker } from '../daemon/heartbeat-checker.js'
 import { scheduler } from '../daemon/scheduler.js'
 import { resolveVaultRoot } from '../services/agent-workspace.js'
 import { execSync } from 'child_process'
@@ -35,14 +34,6 @@ const OBSIDIAN_MIME_TYPES: Record<string, string> = {
 }
 
 export const daemonRoutes: FastifyPluginAsync = async (app) => {
-
-  // ── POST /api/daemon/heartbeat/trigger ──────────────────────────
-  // Manually trigger a heartbeat check for all agents (or one agent)
-  app.post('/heartbeat/trigger', { preHandler: [app.authenticate] }, async (req) => {
-    const { agentId } = req.body as { agentId?: string }
-    heartbeatChecker.triggerNow(agentId).catch(() => {})
-    return { ok: true, message: 'Heartbeat check triggered' }
-  })
 
   // ── GET /api/daemon/health ────────────────────────────────────────
   app.get('/health', async () => {
@@ -113,9 +104,10 @@ export const daemonRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/daemon/cron ────────────────────────────────────────
   app.get('/cron', { preHandler: [app.authenticate] }, async () => {
     const jobs = await query(
-      `SELECT cj.*, a.name AS agent_name
+      `SELECT cj.*, a.name AS agent_name, ch.name AS channel_name
        FROM cron_jobs cj
        JOIN agents a ON a.id = cj.agent_id
+       LEFT JOIN channels ch ON ch.id = cj.channel_id
        ORDER BY cj.created_at`
     )
     return { jobs }

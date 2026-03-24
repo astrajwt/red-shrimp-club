@@ -21552,7 +21552,7 @@ server.tool(
     description: external_exports.string().optional().describe("Short description of the agent purpose"),
     role: external_exports.enum(["general", "coordinator", "tech-lead", "ops", "developer", "profiler", "investigator", "observer", "exp-kernel", "exp-training", "exp-inference"]).default("general").describe("Agent role"),
     runtime: external_exports.enum(["claude", "codex", "kimi", "gemini"]).default("claude").describe("LLM runtime to use"),
-    modelId: external_exports.string().optional().describe("Model ID override (e.g. 'claude-sonnet-4-6', 'claude-opus-4-6', 'gemini-3.1-pro', 'gemini-3-flash'). Auto-selected if omitted.")
+    modelId: external_exports.string().optional().describe("Model ID override (e.g. 'claude-sonnet-4-6', 'claude-opus-4-6'). Auto-selected if omitted.")
   },
   async ({ name, description, role, runtime, modelId }) => {
     try {

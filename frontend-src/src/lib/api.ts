@@ -149,13 +149,14 @@ export const searchApi = {
 
 export const agentsApi = {
   list:   () => get<Agent[]>('/agents'),
+  hierarchy: () => get<AgentHierarchy>('/agents/hierarchy'),
   get:    (id: string) => get<Agent>(`/agents/${id}`),
   memory: (id: string) => get<AgentMemory>(`/agents/${id}/memory`),
   authoredDocs: (id: string) => get<{ docs: AgentAuthoredDoc[] }>(`/agents/${id}/authored-docs`),
   todos:  (id: string) => get<{ todos: AgentTodo[] }>(`/agents/${id}/todos`),
   updateNote: (id: string, note: string) => patch<{ agent: { id: string; note: string | null } }>(`/agents/${id}/note`, { note }),
   updateModel: (id: string, modelId: string) => patch<{ agent: { id: string; model_id: string } }>(`/agents/${id}/model`, { modelId }),
-  create: (data: { name: string; modelId: string; description?: string; role?: string; workspacePath?: string; runtime?: string; machineId?: string; systemPrompt?: string; parentAgentId?: string; reasoningEffort?: string }) =>
+  create: (data: { name: string; modelId: string; description?: string; role?: string; workspacePath?: string; runtime?: string; machineId?: string; systemPrompt?: string; parentAgentId?: string; reasoningEffort?: string; customApiKey?: string; customBaseUrl?: string }) =>
     post<{ agent: Agent }>('/agents', data),
   reconnectAll: () =>
     post<{ ok: boolean; count: number; results: Array<{ agentId: string; name: string; ok: boolean; message?: string; error?: string }> }>('/agents/reconnect-all'),
@@ -542,6 +543,7 @@ export interface Channel {
   display_name?: string | null
   joined?: boolean
   created_at: string
+  last_message_at?: string | null
 }
 
 export interface ChannelMember {
@@ -651,6 +653,23 @@ export interface Agent {
   parent_agent_id: string | null
   description: string | null
   note?: string | null
+}
+
+export interface AgentHierarchyEdge {
+  id: string
+  from_agent_id: string
+  to_agent_id: string
+  relation_kind: string
+  relation_layer: 'tree' | 'graph'
+  label: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+export interface AgentHierarchy {
+  serverId: string
+  nodes: Agent[]
+  edges: AgentHierarchyEdge[]
+  roots: string[]
 }
 
 export interface Machine {
@@ -853,6 +872,7 @@ export interface CronJob {
   cron_expr: string
   prompt: string
   channel_id: string | null
+  channel_name: string | null
   model_override: string | null
   enabled: boolean
   created_at: string
@@ -862,6 +882,7 @@ export interface ModelRegistry {
   anthropic:  ModelInfo[]
   moonshot:   ModelInfo[]
   openai:     ModelInfo[]
+  google?:    ModelInfo[]
   zhipu?:     ModelInfo[]
   dashscope?: ModelInfo[]
 }

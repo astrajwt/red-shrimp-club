@@ -18,6 +18,7 @@ const manifestPath = join(sharedSkillsRoot, 'manifest.json')
 const runtimeTargets = [
   { runtime: 'codex', dir: join(homedir(), '.codex', 'skills') },
   { runtime: 'claude', dir: join(homedir(), '.claude', 'skills') },
+  { runtime: 'gemini', dir: join(homedir(), '.gemini', 'skills') },
 ] as const
 
 type RuntimeName = typeof runtimeTargets[number]['runtime']

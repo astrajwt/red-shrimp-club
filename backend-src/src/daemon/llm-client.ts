@@ -29,7 +29,7 @@ export interface CompletionResponse {
   provider: Provider
 }
 
-type Provider = 'anthropic' | 'moonshot' | 'moonshot' | 'openai' | 'zhipu' | 'dashscope'
+type Provider = 'anthropic' | 'moonshot' | 'openai' | 'google' | 'zhipu' | 'dashscope'
 
 // ─── Provider config ──────────────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ const BACKOFF_RETRIES  = 6
 
 function resolveProvider(model: string): Provider {
   if (model.startsWith('claude'))     return 'anthropic'
+  if (model.startsWith('gemini'))     return 'google'
   if (model.startsWith('moonshot'))   return 'moonshot'
   if (model.startsWith('glm'))        return 'zhipu'
   if (model.startsWith('qwen') || model.startsWith('codeplan')) return 'dashscope'
@@ -56,6 +57,7 @@ function resolveProvider(model: string): Provider {
 const PROVIDER_CONFIG: Record<string, { baseURL: string; envKey: string }> = {
   moonshot:   { baseURL: 'https://api.moonshot.cn/v1',                envKey: 'MOONSHOT_API_KEY' },
   openai:     { baseURL: 'https://api.openai.com/v1',                envKey: 'OPENAI_API_KEY' },
+  google:     { baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', envKey: 'GOOGLE_API_KEY' },
   zhipu:      { baseURL: 'https://open.bigmodel.cn/api/paas/v4',     envKey: 'ZHIPU_API_KEY' },
   dashscope:  { baseURL: 'https://coding.dashscope.aliyuncs.com/v1', envKey: 'DASHSCOPE_API_KEY' },
 }
@@ -119,6 +121,7 @@ class LLMClient {
       case 'anthropic':
         yield* this.streamClaude(model, req)
         break
+      case 'google':
       case 'moonshot':
       case 'openai':
       case 'zhipu':
@@ -140,6 +143,7 @@ class LLMClient {
       case 'anthropic':
         result = await withRetry(() => this.callClaude(model, req))
         break
+      case 'google':
       case 'moonshot':
       case 'openai':
       case 'zhipu':
@@ -188,7 +192,7 @@ class LLMClient {
   private async callOpenAICompat(
     model: string,
     req: CompletionRequest,
-    provider: 'moonshot' | 'openai' | 'zhipu' | 'dashscope'
+    provider: 'google' | 'moonshot' | 'openai' | 'zhipu' | 'dashscope'
   ): Promise<CompletionResponse> {
     const cfg = PROVIDER_CONFIG[provider]
     const baseURL = process.env[`${provider.toUpperCase()}_BASE_URL`] ?? cfg.baseURL
@@ -260,7 +264,7 @@ class LLMClient {
   private async *streamOpenAICompat(
     model: string,
     req: CompletionRequest,
-    provider: 'moonshot' | 'openai' | 'zhipu' | 'dashscope'
+    provider: 'google' | 'moonshot' | 'openai' | 'zhipu' | 'dashscope'
   ): AsyncGenerator<string> {
     const cfg = PROVIDER_CONFIG[provider]
     const baseURL = process.env[`${provider.toUpperCase()}_BASE_URL`] ?? cfg.baseURL
@@ -351,6 +355,11 @@ class LLMClient {
       zhipu: [
         { id: 'glm-5',   label: 'GLM-5 (744B MoE)',  tier: 'premium'  },
         { id: 'glm-4.7', label: 'GLM-4.7',            tier: 'standard' },
+      ],
+      google: [
+        { id: 'gemini-3.1-pro',   label: 'Gemini 3.1 Pro',   tier: 'premium'  },
+        { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro',   tier: 'premium'  },
+        { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', tier: 'standard' },
       ],
       dashscope: [
         { id: 'qwen3.5',        label: 'Qwen 3.5',         tier: 'premium'  },

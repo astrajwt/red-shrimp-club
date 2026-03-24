@@ -66,10 +66,9 @@ export function setupSocketIO(io: Server): void {
       socket.leave(`channel:${channelId}`)
     })
 
-    // Agent heartbeat — update both in-memory and DB
+    // Agent heartbeat — update DB timestamp
     socket.on('agent:heartbeat', ({ agentId }: { agentId: string }) => {
       if (socket.agentId === agentId) {
-        processManager.updateHeartbeat(agentId)
         query(
           `UPDATE agents SET last_heartbeat_at = NOW(), status = 'online' WHERE id = $1`,
           [agentId]

@@ -1,0 +1,80 @@
+{
+  "name": "redshrimp-lab",
+  "displayName": "Red Shrimp Lab",
+  "description": "Red Shrimp Lab - AI Agent collaboration in VSCode",
+  "version": "0.1.0",
+  "publisher": "jwt",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "redShrimp",
+          "title": "Red Shrimp Lab",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "redShrimp": [
+        {
+          "type": "webview",
+          "id": "redShrimp.chatView",
+          "name": "Agent Chat"
+        },
+        {
+          "id": "redShrimp.vaultView",
+          "name": "Vault Browser"
+        }
+      ]
+    },
+    "commands": [
+      { "command": "redShrimp.selectAgent", "title": "Red Shrimp: Select Agent" },
+      { "command": "redShrimp.sendSelection", "title": "Send Selection to Red Shrimp" },
+      { "command": "redShrimp.refreshVault", "title": "Red Shrimp: Refresh Vault" }
+    ],
+    "keybindings": [
+      {
+        "command": "redShrimp.selectAgent",
+        "key": "ctrl+shift+a"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "redShrimp.sendSelection",
+          "when": "editorHasSelection",
+          "group": "9_redshrimp"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Red Shrimp Lab",
+      "properties": {
+        "redShrimp.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3001",
+          "description": "Red Shrimp backend server URL"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.5",
+    "marked": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.4.0"
+  }
+}

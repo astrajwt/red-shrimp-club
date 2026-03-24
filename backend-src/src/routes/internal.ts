@@ -6,8 +6,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import fs from 'fs'
 import path from 'path'
 import { query, queryOne } from '../db/client.js'
-import { emitTaskAllCompleted, emitTaskCompleted, emitTaskDocAdded } from '../daemon/events.js'
-import { processManager } from '../daemon/process-manager.js'
+import { emitTaskAllCompleted, emitTaskCompleted, emitTaskDocAdded, emitTaskUpdated } from '../daemon/events.js'
+import { processManager, type AgentConfig } from '../daemon/process-manager.js'
 import { appendTodoNote, createTodoBundle } from '../services/todo-intake.js'
 import { initAgentWorkspace, type AgentRole } from '../daemon/workspace-init.js'
 import { resolveServerUrl } from '../server-url.js'
@@ -28,6 +28,7 @@ import {
 import { createStoredMessage } from '../services/message-store.js'
 import { drainThinking } from '../services/thinking-buffer.js'
 import { resolveAgentWorkspacePath } from '../services/agent-workspace.js'
+import { scheduler } from '../daemon/scheduler.js'
 
 const EXPLICIT_ASSIGNMENT_ERROR = 'Tasks must be explicitly assigned by a human. claim_tasks/unclaim_task are disabled.'
 
@@ -134,7 +135,6 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     const agentId = (req.params as { agentId?: string } | undefined)?.agentId
     if (!agentId) return
 
-    processManager.updateHeartbeat(agentId)
     await query(
       "UPDATE agents SET status = 'running', last_heartbeat_at = NOW() WHERE id = $1",
       [agentId]
@@ -199,10 +199,57 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
         }
       }
     } else if (channel) {
-      // Agents may only send into channels they already belong to.
-      const ch = await getScopedChannel(agentId, channel)
-      if (!ch) return reply.code(404).send({ error: `Channel "${channel}" not found` })
-      channelId = ch.id
+      // Handle DM:@name format — treat as dm_to
+      const dmMatch = channel.match(/^DM:@(.+)$/i)
+      if (dmMatch) {
+        const peerName = dmMatch[1]
+        // Find existing DM with this peer
+        const existingDm = await queryOne<{ id: string }>(
+          `SELECT c.id FROM channels c
+           JOIN channel_members cm1 ON cm1.channel_id = c.id AND cm1.agent_id = $1
+           JOIN channel_members cm2 ON cm2.channel_id = c.id
+             AND (cm2.user_id IN (SELECT id FROM users WHERE LOWER(name) = LOWER($2))
+               OR cm2.agent_id IN (SELECT id FROM agents WHERE LOWER(name) = LOWER($2)))
+           WHERE c.type = 'dm' LIMIT 1`,
+          [agentId, peerName]
+        )
+        if (existingDm) {
+          channelId = existingDm.id
+        } else {
+          // Fall back to dm_to logic — find/create DM
+          const target = await queryOne<{ id: string; type: string }>(
+            `SELECT u.id, 'user' AS type FROM users u
+             JOIN server_members sm ON sm.user_id = u.id
+             JOIN agents a ON a.server_id = sm.server_id AND a.id = $2
+             WHERE LOWER(u.name) = LOWER($1)
+             UNION ALL
+             SELECT a2.id, 'agent' AS type FROM agents a2
+             JOIN agents a ON a.server_id = a2.server_id AND a.id = $2
+             WHERE LOWER(a2.name) = LOWER($1) AND a2.id != $2
+             LIMIT 1`,
+            [peerName, agentId]
+          )
+          if (!target) return reply.code(404).send({ error: `User/agent "${peerName}" not found` })
+          const [ch] = await query(
+            `INSERT INTO channels (server_id, name, type)
+             SELECT a.server_id, $1, 'dm' FROM agents a WHERE a.id = $2 LIMIT 1
+             RETURNING *`,
+            [`dm-${Date.now()}`, agentId]
+          )
+          channelId = ch.id
+          await query('INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [channelId, agentId])
+          if (target.type === 'user') {
+            await query('INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [channelId, target.id])
+          } else {
+            await query('INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [channelId, target.id])
+          }
+        }
+      } else {
+        // Regular channel — agents may only send into channels they already belong to.
+        const ch = await getScopedChannel(agentId, channel)
+        if (!ch) return reply.code(404).send({ error: `Channel "${channel}" not found` })
+        channelId = ch.id
+      }
     } else {
       return reply.code(400).send({ error: 'channel or dm_to required' })
     }
@@ -258,6 +305,24 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     )
     const readMap = Object.fromEntries(readPositions.map(r => [r.channel_id, Number(r.last_read_seq)]))
 
+    // For channels without a read position, initialize to (max_seq - 5) so
+    // agents joining a channel or starting fresh only see the latest messages
+    for (const chId of channelIds) {
+      if (readMap[chId] === undefined) {
+        const maxSeqRow = await queryOne<{ max_seq: string }>(
+          `SELECT COALESCE(MAX(seq), 0) AS max_seq FROM messages WHERE channel_id = $1`, [chId]
+        )
+        const defaultRead = Math.max(0, Number(maxSeqRow?.max_seq ?? 0) - 10)
+        readMap[chId] = defaultRead
+        // Persist so future calls don't repeat this
+        await query(
+          `INSERT INTO agent_channel_reads (agent_id, channel_id, last_read_seq) VALUES ($1, $2, $3)
+           ON CONFLICT (agent_id, channel_id) DO NOTHING`,
+          [agentId, chId, defaultRead]
+        )
+      }
+    }
+
     // Get unread messages
     let allMsgs: any[] = []
     for (const chId of channelIds) {
@@ -298,8 +363,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
         }
         if (allMsgs.length > 0) break
 
-        // Update heartbeat during long poll
-        processManager.updateHeartbeat(agentId)
+        // Update DB timestamp during long poll
         await query("UPDATE agents SET last_heartbeat_at = NOW() WHERE id = $1", [agentId])
       }
     }
@@ -441,7 +505,7 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
 
     // Get last read seq
     const readRow = await queryOne<{ last_read_seq: string }>(
-      'SELECT last_read_seq FROM channel_reads WHERE user_id = $1 AND channel_id = $2',
+      'SELECT last_read_seq FROM agent_channel_reads WHERE agent_id = $1 AND channel_id = $2',
       [agentId, ch.id]
     )
 
@@ -553,6 +617,15 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
 
     if (!tasks?.length) {
       return reply.code(400).send({ error: 'tasks[] required' })
+    }
+
+    const caller = await queryOne<{ role: string | null }>(
+      `SELECT role FROM agents WHERE id = $1`,
+      [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Agent not found' })
+    if (caller.role !== 'coordinator') {
+      return reply.code(403).send({ error: 'Only coordinator agents can create tasks' })
     }
 
     const ch = await getScopedChannel(agentId, channel)
@@ -750,6 +823,12 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ error: `Unsupported status: ${status}` })
     }
 
+    if (status === 'done') {
+      return reply.code(403).send({
+        error: 'Assigned agents cannot mark tasks done directly. Submit in_review and use reviewer approval to complete.',
+      })
+    }
+
     const task = await queryOne<{
       id: string
       status: string
@@ -774,14 +853,27 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
 
     const allowedTransitions: Record<string, string[]> = {
       todo: ['in_progress'],
-      in_progress: ['in_review', 'done'],
-      in_review: ['in_progress', 'done'],
+      in_progress: ['in_review'],
+      in_review: ['in_progress'],
       done: [],
     }
     if (!allowedTransitions[currentStatus]?.includes(status)) {
       return reply.code(409).send({
         error: `Invalid transition: ${currentStatus} -> ${status}`,
       })
+    }
+
+    // WF-02/WF-03: Cannot move to in_review without linked documents
+    if (status === 'in_review') {
+      const docs = await query(
+        'SELECT id FROM task_documents WHERE task_id = $1 LIMIT 1',
+        [task.id]
+      )
+      if (docs.length === 0) {
+        return reply.code(409).send({
+          error: 'Cannot move to in_review: no documents linked. Use link_task_doc first.',
+        })
+      }
     }
 
     const nextInternalStatus = toInternalTaskStatus(
@@ -808,7 +900,165 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // ── Auto-notify reviewer (Akara) when task moves to in_review ──
+    if (nextInternalStatus === 'reviewing') {
+      try {
+        const reviewer = await queryOne<{ id: string; name: string }>(
+          `SELECT a.id, a.name FROM agents a
+           JOIN channel_members cm ON cm.agent_id = a.id AND cm.channel_id = $1
+           WHERE a.role IN ('ops', 'coordinator')
+           ORDER BY CASE a.role WHEN 'ops' THEN 0 ELSE 1 END
+           LIMIT 1`,
+          [ch.id]
+        )
+        if (reviewer) {
+          const agentRow = await queryOne<{ name: string }>(`SELECT name FROM agents WHERE id = $1`, [agentId])
+          const agentName = agentRow?.name ?? 'Agent'
+          await createStoredMessage({
+            channelId: ch.id,
+            senderId: agentId,
+            senderType: 'agent',
+            senderName: agentName,
+            content: `@${reviewer.name} #t${task_number} 已提交审查，请 review。`,
+          }).catch(() => {})
+        }
+      } catch { /* best effort */ }
+    }
+
     return { ok: true }
+  })
+
+  // ── POST /internal/agent/:agentId/tasks/review-accept ───────────
+  // ops/coordinator agent approves a reviewing task → completed
+  app.post('/:agentId/tasks/review-accept', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { channel, task_number } = req.body as { channel: string; task_number: number }
+
+    const caller = await queryOne<{ id: string; name: string; role: string | null }>(
+      `SELECT id, name, role FROM agents WHERE id = $1`, [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Agent not found' })
+    if (caller.role !== 'ops' && caller.role !== 'coordinator') {
+      return reply.code(403).send({ error: 'Only ops or coordinator agents can review tasks' })
+    }
+
+    const ch = await getScopedChannel(agentId, channel)
+    if (!ch) return reply.code(404).send({ error: `Channel "${channel}" not found` })
+
+    const [task] = await query(
+      `UPDATE tasks
+       SET status = 'completed',
+           completed_at = NOW(),
+           review_feedback = NULL,
+           review_feedback_at = NULL,
+           review_feedback_by_name = NULL
+       WHERE channel_id = $1 AND number = $2 AND status = 'reviewing'
+       RETURNING *`,
+      [ch.id, task_number]
+    )
+    if (!task) return reply.code(409).send({ error: `Task #t${task_number} is not in reviewing status` })
+
+    // Record accept feedback
+    await query(
+      `INSERT INTO task_feedbacks (task_id, reviewer_id, reviewer_type, reviewer_name, verdict)
+       VALUES ($1, $2, 'agent', $3, 'accept')`,
+      [task.id, agentId, caller.name]
+    ).catch(() => {})
+
+    emitTaskCompleted(agentId, task.id, ch.id)
+    const openTasks = await query(
+      `SELECT id FROM tasks WHERE channel_id = $1 AND status != 'completed'`,
+      [ch.id]
+    )
+    if (openTasks.length === 0) {
+      emitTaskAllCompleted(agentId, ch.id)
+    }
+
+    return { ok: true, message: `#t${task_number} approved and completed.` }
+  })
+
+  // ── POST /internal/agent/:agentId/tasks/review-reject ───────────
+  // ops/coordinator agent rejects a reviewing task → in_progress + DM notification
+  app.post('/:agentId/tasks/review-reject', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { channel, task_number, feedback } = req.body as {
+      channel: string; task_number: number; feedback: string
+    }
+
+    if (!feedback?.trim()) {
+      return reply.code(400).send({ error: 'Rejection feedback is required' })
+    }
+
+    const caller = await queryOne<{ id: string; name: string; role: string | null }>(
+      `SELECT id, name, role FROM agents WHERE id = $1`, [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Agent not found' })
+    if (caller.role !== 'ops' && caller.role !== 'coordinator') {
+      return reply.code(403).send({ error: 'Only ops or coordinator agents can review tasks' })
+    }
+
+    const ch = await getScopedChannel(agentId, channel)
+    if (!ch) return reply.code(404).send({ error: `Channel "${channel}" not found` })
+
+    const [task] = await query(
+      `UPDATE tasks
+       SET status = 'in_progress',
+           completed_at = NULL,
+           review_feedback = $3,
+           review_feedback_at = NOW(),
+           review_feedback_by_name = $4
+       WHERE channel_id = $1 AND number = $2 AND status = 'reviewing' AND claimed_by_id IS NOT NULL
+       RETURNING *`,
+      [ch.id, task_number, feedback.trim(), caller.name]
+    )
+    if (!task) return reply.code(409).send({ error: `Task #t${task_number} is not in reviewing status or has no assignee` })
+
+    emitTaskUpdated(agentId, task.id, ch.id)
+
+    // Record reject feedback
+    await query(
+      `INSERT INTO task_feedbacks (task_id, reviewer_id, reviewer_type, reviewer_name, verdict, reason_text)
+       VALUES ($1, $2, 'agent', $3, 'reject', $4)`,
+      [task.id, agentId, caller.name, feedback.trim()]
+    ).catch(() => {})
+
+    // DM the assigned agent with rejection details
+    if (task.claimed_by_id) {
+      try {
+        const agentRow = await queryOne<{ id: string; server_id: string }>(
+          'SELECT id, server_id FROM agents WHERE id = $1', [task.claimed_by_id]
+        )
+        if (agentRow) {
+          let dmChannel = await queryOne<{ id: string }>(
+            `SELECT c.id FROM channels c
+             JOIN channel_members cm1 ON cm1.channel_id = c.id AND cm1.agent_id = $1
+             JOIN channel_members cm2 ON cm2.channel_id = c.id AND cm2.agent_id = $2
+             WHERE c.type = 'dm' LIMIT 1`,
+            [task.claimed_by_id, agentId]
+          )
+          if (!dmChannel) {
+            const [newCh] = await query(
+              `INSERT INTO channels (server_id, name, type) VALUES ($1, $2, 'dm') RETURNING id`,
+              [agentRow.server_id, `dm-${Date.now()}`]
+            )
+            dmChannel = newCh
+            await query('INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [newCh.id, task.claimed_by_id])
+            await query('INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [newCh.id, agentId])
+          }
+
+          const rejectionContent = `#t${task.number} "${task.title}" 被驳回，请继续修改。\n\n驳回理由：${feedback.trim()}`
+          await createStoredMessage({
+            channelId: dmChannel.id,
+            senderId: agentId,
+            senderType: 'agent',
+            senderName: caller.name,
+            content: rejectionContent,
+          }).catch(() => {})
+        }
+      } catch { /* best effort DM */ }
+    }
+
+    return { ok: true, message: `#t${task_number} rejected — assignee notified.` }
   })
 
   // ── POST /internal/agent/:agentId/tasks/mark-discussed ──────────
@@ -1388,49 +1638,121 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
+  // ── POST /:agentId/invite-to-channel ────────────────────────────
+  // Let an agent invite other agents/humans into a channel
+  app.post('/:agentId/invite-to-channel', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { channel, members } = req.body as {
+      channel: string            // '#channel-name'
+      members: string[]          // agent names, @mentions, or IDs
+    }
+
+    if (!channel?.trim()) return reply.code(400).send({ error: 'channel required' })
+    if (!members?.length) return reply.code(400).send({ error: 'members required (array of names or IDs)' })
+
+    const caller = await queryOne<{ id: string; server_id: string }>(
+      'SELECT id, server_id FROM agents WHERE id = $1', [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Agent not found' })
+
+    // Resolve channel
+    const channelName = channel.replace(/^#/, '')
+    const ch = await queryOne<{ id: string }>(
+      `SELECT id FROM channels WHERE server_id = $1 AND name = $2 LIMIT 1`,
+      [caller.server_id, channelName]
+    )
+    if (!ch) return reply.code(404).send({ error: `Channel "${channel}" not found` })
+
+    const invited: string[] = []
+    const failed: string[] = []
+
+    for (const ref of members) {
+      const cleanRef = ref.replace(/^@/, '').trim()
+      if (!cleanRef) { failed.push(ref); continue }
+
+      // Try agent first (by ID or name)
+      const agent = await queryOne<{ id: string; name: string }>(
+        `SELECT id, name FROM agents WHERE server_id = $1 AND (id::text = $2 OR LOWER(name) = LOWER($2))`,
+        [caller.server_id, cleanRef]
+      )
+      if (agent) {
+        await query(
+          `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [ch.id, agent.id]
+        )
+        invited.push(`@${agent.name}`)
+        continue
+      }
+
+      // Try human
+      const human = await queryOne<{ id: string; name: string }>(
+        `SELECT u.id, u.name FROM users u
+         JOIN server_members sm ON sm.user_id = u.id AND sm.server_id = $1
+         WHERE LOWER(u.name) = LOWER($2)`,
+        [caller.server_id, cleanRef]
+      )
+      if (human) {
+        await query(
+          `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [ch.id, human.id]
+        )
+        invited.push(`@${human.name}`)
+        continue
+      }
+
+      failed.push(ref)
+    }
+
+    return { ok: true, channel, invited, failed }
+  })
+
   app.post('/:agentId/create-agent', async (req, reply) => {
     const { agentId } = req.params as { agentId: string }
-    const { name, description, role, modelId, runtime, parentAgentId } = req.body as {
+    const { name, description, role, modelId, runtime, parentAgentId, machineId } = req.body as {
       name: string
       description?: string
       role?: string
       modelId?: string
       runtime?: string
       parentAgentId?: string
+      machineId?: string
     }
 
     if (!name?.trim()) return reply.code(400).send({ error: 'name required' })
 
     // Get creator agent's server
-    const creator = await queryOne<{ id: string; server_id: string; role: string }>(
-      'SELECT id, server_id, role FROM agents WHERE id = $1',
+    const creator = await queryOne<{ id: string; server_id: string; role: string; machine_id: string | null }>(
+      'SELECT id, server_id, role, machine_id FROM agents WHERE id = $1',
       [agentId]
     )
     if (!creator) return reply.code(404).send({ error: 'Creator agent not found' })
 
-    // Only coordinators can create agents
-    if (creator.role !== 'coordinator' && creator.role !== 'general') {
-      return reply.code(403).send({ error: 'Only coordinator agents can create new agents' })
+    // Only coordinators and tech-leads can create agents
+    if (creator.role !== 'coordinator' && creator.role !== 'tech-lead') {
+      return reply.code(403).send({ error: 'Only coordinator/tech-lead agents can create new agents' })
     }
 
     const resolvedRuntime = runtime ?? 'claude'
-    const resolvedModelId = modelId ?? (resolvedRuntime === 'kimi' ? 'kimi-code/kimi-for-coding' : resolvedRuntime === 'codex' ? 'gpt-5.4' : 'claude-sonnet-4-6')
-    const resolvedProvider = resolvedModelId.startsWith('claude') ? 'anthropic' : (resolvedModelId.startsWith('kimi') || resolvedModelId.startsWith('moonshot')) ? 'moonshot' : 'openai'
+    const resolvedModelId = modelId ?? (resolvedRuntime === 'kimi' ? 'kimi-code/kimi-for-coding' : resolvedRuntime === 'codex' ? 'gpt-5.4' : resolvedRuntime === 'gemini' ? 'gemini-3.1-pro' : 'claude-sonnet-4-6')
+    const resolvedProvider = resolvedModelId.startsWith('claude') ? 'anthropic' : resolvedModelId.startsWith('gemini') ? 'google' : (resolvedModelId.startsWith('kimi') || resolvedModelId.startsWith('moonshot')) ? 'moonshot' : 'openai'
 
     const resolvedWorkspace = resolveAgentWorkspacePath(name)
 
     // Default parent to the creating agent (Donovan)
     const resolvedParent = parentAgentId ?? agentId
 
+    const resolvedMachineId = machineId ?? creator.machine_id
+
     const [agent] = await query(
       `INSERT INTO agents
-        (server_id, name, description, model_id, model_provider, runtime, workspace_path, role, parent_agent_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        (server_id, name, description, model_id, model_provider, runtime, workspace_path, role, parent_agent_id, machine_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
       [
         creator.server_id, name.trim(), description ?? null,
         resolvedModelId, resolvedProvider, resolvedRuntime,
         resolvedWorkspace, role ?? 'general', resolvedParent,
+        resolvedMachineId,
       ]
     )
 
@@ -1480,7 +1802,426 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
       teamContext: 'Red Shrimp Lab — AI Infra Research Agent Swarm',
     }).catch(err => console.error(`[workspace] Init failed for ${agent.name}:`, err.message))
 
-    return { ok: true, agent: { id: agent.id, name: agent.name, role: agent.role } }
+    return { ok: true, agent: { id: agent.id, name: agent.name, role: agent.role, workspace: resolvedWorkspace } }
+  })
+
+  // ── DELETE /:agentId/delete-agent ──────────────────────────────
+  // Lets a coordinator/ops agent delete another agent
+  app.delete('/:agentId/delete-agent', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { targetAgentId } = req.body as { targetAgentId: string }
+
+    if (!targetAgentId?.trim()) return reply.code(400).send({ error: 'targetAgentId required' })
+
+    // Verify caller exists and has permission
+    const caller = await queryOne<{ id: string; role: string }>(
+      'SELECT id, role FROM agents WHERE id = $1',
+      [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Caller agent not found' })
+    if (caller.role !== 'coordinator' && caller.role !== 'ops') {
+      return reply.code(403).send({ error: 'Only coordinator/ops agents can delete agents' })
+    }
+
+    // Verify target exists
+    const target = await queryOne<{ id: string; name: string }>(
+      'SELECT id, name FROM agents WHERE id = $1',
+      [targetAgentId]
+    )
+    if (!target) return reply.code(404).send({ error: 'Target agent not found' })
+
+    // Prevent self-deletion
+    if (targetAgentId === agentId) {
+      return reply.code(400).send({ error: 'Cannot delete yourself' })
+    }
+
+    // Stop the agent process if running
+    try { processManager.stop(targetAgentId) } catch { /* may not be running */ }
+
+    // Delete in dependency order
+    await query('DELETE FROM agent_logs WHERE agent_id = $1', [targetAgentId])
+    await query('DELETE FROM agent_runs WHERE agent_id = $1', [targetAgentId])
+    await query('DELETE FROM channel_members WHERE agent_id = $1', [targetAgentId])
+    await query('DELETE FROM agents WHERE id = $1', [targetAgentId])
+
+    return { ok: true, deleted: { id: target.id, name: target.name } }
+  })
+
+  // ── POST /:agentId/restart-agent ──────────────────────────────
+  // Lets a coordinator/tech-lead/ops agent restart another agent
+  app.post('/:agentId/restart-agent', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { targetAgentId } = req.body as { targetAgentId: string }
+
+    if (!targetAgentId?.trim()) return reply.code(400).send({ error: 'targetAgentId required' })
+
+    // Verify caller exists and has permission
+    const caller = await queryOne<{ id: string; role: string }>(
+      'SELECT id, role FROM agents WHERE id = $1',
+      [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Caller agent not found' })
+    if (caller.role !== 'coordinator' && caller.role !== 'tech-lead' && caller.role !== 'ops') {
+      return reply.code(403).send({ error: 'Only coordinator/tech-lead/ops agents can restart agents' })
+    }
+
+    // Get target agent
+    const target = await queryOne<{ id: string; name: string; status: string }>(
+      'SELECT id, name, status FROM agents WHERE id = $1',
+      [targetAgentId]
+    )
+    if (!target) return reply.code(404).send({ error: 'Target agent not found' })
+
+    // Stop if running
+    try { await processManager.stop(targetAgentId) } catch { /* may not be running */ }
+
+    // Get full agent config for restart
+    const agentRow = await queryOne<any>(
+      `SELECT * FROM agents WHERE id = $1`,
+      [targetAgentId]
+    )
+    if (!agentRow) return reply.code(404).send({ error: 'Agent record not found after stop' })
+
+    // Resolve machine name
+    let machineName: string | undefined
+    if (agentRow.machine_id) {
+      const machineRow = await queryOne<{ name: string }>('SELECT name FROM machines WHERE id = $1', [agentRow.machine_id])
+      machineName = machineRow?.name || process.env.MACHINE_NAME?.trim() || undefined
+    } else {
+      machineName = process.env.MACHINE_NAME?.trim() || undefined
+    }
+
+    const serverUrl = resolveServerUrl(req)
+    const apiKey = `agent_${agentRow.id}_${Date.now()}`
+
+    const config: AgentConfig = {
+      id:              agentRow.id,
+      name:            agentRow.name,
+      machineId:       agentRow.machine_id ?? 'local',
+      machineName,
+      serverUrl,
+      apiKey,
+      workspacePath:   agentRow.workspace_path ?? process.cwd(),
+      runtime:         agentRow.runtime ?? 'claude',
+      modelId:         agentRow.model_id,
+      reasoningEffort: agentRow.reasoning_effort ?? undefined,
+      sessionId:       agentRow.session_id ?? undefined,
+      role:            agentRow.role ?? undefined,
+      customApiKey:    agentRow.custom_api_key ?? undefined,
+      customBaseUrl:   agentRow.custom_base_url ?? undefined,
+    }
+
+    try {
+      await processManager.spawn(config)
+      await query(`UPDATE agents SET status = 'starting' WHERE id = $1`, [targetAgentId])
+    } catch (err: any) {
+      await query(`UPDATE agents SET status = 'error' WHERE id = $1`, [targetAgentId])
+      return reply.code(500).send({ error: `Failed to restart: ${err.message}` })
+    }
+
+    return { ok: true, agent: { id: target.id, name: target.name, pid: null } }
+  })
+
+  // ── POST /:agentId/create-channel ──────────────────────────────
+  // Create a channel with specific members (agents + humans)
+  app.post('/:agentId/create-channel', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { name, description, member_names } = req.body as {
+      name: string
+      description?: string
+      member_names?: string[]
+    }
+
+    if (!name?.trim()) return reply.code(400).send({ error: 'name required' })
+
+    // Get caller agent's server
+    const caller = await queryOne<{ id: string; server_id: string; name: string }>(
+      'SELECT id, server_id, name FROM agents WHERE id = $1',
+      [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Agent not found' })
+
+    // Create channel
+    const channelName = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    const [channel] = await query(
+      `INSERT INTO channels (server_id, name, description, type)
+       VALUES ($1, $2, $3, 'channel')
+       RETURNING *`,
+      [caller.server_id, channelName, description ?? null]
+    )
+
+    // Add the calling agent as member
+    await query(
+      `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [channel.id, agentId]
+    )
+
+    const addedMembers: string[] = [caller.name]
+
+    // Add requested members
+    if (member_names && member_names.length > 0) {
+      for (const memberName of member_names) {
+        const cleanName = memberName.replace(/^@/, '').trim()
+        if (!cleanName) continue
+
+        // Try agent first
+        const agent = await queryOne<{ id: string; name: string }>(
+          `SELECT id, name FROM agents WHERE server_id = $1 AND LOWER(name) = LOWER($2)`,
+          [caller.server_id, cleanName]
+        )
+        if (agent) {
+          await query(
+            `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [channel.id, agent.id]
+          )
+          if (!addedMembers.includes(agent.name)) addedMembers.push(agent.name)
+          continue
+        }
+
+        // Try human user
+        const user = await queryOne<{ id: string; name: string }>(
+          `SELECT u.id, u.name FROM users u
+           JOIN server_members sm ON sm.user_id = u.id AND sm.server_id = $1
+           WHERE LOWER(u.name) = LOWER($2)`,
+          [caller.server_id, cleanName]
+        )
+        if (user) {
+          await query(
+            `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [channel.id, user.id]
+          )
+          if (!addedMembers.includes(user.name)) addedMembers.push(user.name)
+        }
+      }
+    }
+
+    return { ok: true, channel: { id: channel.id, name: channel.name }, members: addedMembers }
+  })
+
+  // ── POST /:agentId/wake-agent — Wake a sleeping agent without stopping it first
+  app.post('/:agentId/wake-agent', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { targetAgentId, message } = req.body as { targetAgentId: string; message?: string }
+
+    if (!targetAgentId?.trim()) return reply.code(400).send({ error: 'targetAgentId required' })
+
+    const caller = await queryOne<{ id: string; role: string; server_id: string }>(
+      'SELECT id, role, server_id FROM agents WHERE id = $1', [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Caller not found' })
+    if (!['coordinator', 'tech-lead', 'ops'].includes(caller.role)) {
+      return reply.code(403).send({ error: 'Only coordinator/tech-lead/ops can wake agents' })
+    }
+
+    const target = await queryOne<any>(
+      'SELECT * FROM agents WHERE id = $1', [targetAgentId]
+    )
+    if (!target) return reply.code(404).send({ error: 'Target agent not found' })
+
+    // Check if already running
+    if (processManager.isRunning(targetAgentId)) {
+      return { ok: true, agent: target.name, status: 'already_running' }
+    }
+
+    // Resolve machine name
+    let machineName: string | undefined
+    if (target.machine_id) {
+      const machineRow = await queryOne<{ name: string }>('SELECT name FROM machines WHERE id = $1', [target.machine_id])
+      machineName = machineRow?.name || process.env.MACHINE_NAME?.trim() || undefined
+    } else {
+      machineName = process.env.MACHINE_NAME?.trim() || undefined
+    }
+
+    const serverUrl = resolveServerUrl(req)
+    const apiKey = `agent_${target.id}_${Date.now()}`
+
+    const config: AgentConfig = {
+      id:              target.id,
+      name:            target.name,
+      machineId:       target.machine_id ?? 'local',
+      machineName,
+      serverUrl,
+      apiKey,
+      workspacePath:   target.workspace_path ?? process.cwd(),
+      runtime:         target.runtime ?? 'claude',
+      modelId:         target.model_id,
+      reasoningEffort: target.reasoning_effort ?? undefined,
+      sessionId:       target.session_id ?? undefined,
+      role:            target.role ?? undefined,
+      customApiKey:    target.custom_api_key ?? undefined,
+      customBaseUrl:   target.custom_base_url ?? undefined,
+    }
+
+    try {
+      await processManager.spawn(config)
+      await query(`UPDATE agents SET status = 'starting' WHERE id = $1`, [targetAgentId])
+    } catch (err: any) {
+      return reply.code(500).send({ error: `Failed to wake: ${err.message}` })
+    }
+
+    return { ok: true, agent: target.name, status: 'woken' }
+  })
+
+  // ── POST /:agentId/add-channel-member — Add member(s) to an existing channel
+  app.post('/:agentId/add-channel-member', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { channel_name, member_names } = req.body as {
+      channel_name: string
+      member_names: string[]
+    }
+
+    if (!channel_name?.trim()) return reply.code(400).send({ error: 'channel_name required' })
+    if (!member_names?.length) return reply.code(400).send({ error: 'member_names required' })
+
+    // Get caller agent's server
+    const caller = await queryOne<{ id: string; server_id: string; name: string }>(
+      'SELECT id, server_id, name FROM agents WHERE id = $1',
+      [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Agent not found' })
+
+    // Find the channel
+    const cleanChannelName = channel_name.replace(/^#/, '').toLowerCase().trim()
+    const channel = await queryOne<{ id: string; name: string }>(
+      `SELECT id, name FROM channels WHERE server_id = $1 AND LOWER(name) = LOWER($2)`,
+      [caller.server_id, cleanChannelName]
+    )
+    if (!channel) return reply.code(404).send({ error: `Channel "${channel_name}" not found` })
+
+    const addedMembers: string[] = []
+    const notFound: string[] = []
+
+    for (const memberName of member_names) {
+      const cleanName = memberName.replace(/^@/, '').trim()
+      if (!cleanName) continue
+
+      // Try agent first
+      const agent = await queryOne<{ id: string; name: string }>(
+        `SELECT id, name FROM agents WHERE server_id = $1 AND LOWER(name) = LOWER($2)`,
+        [caller.server_id, cleanName]
+      )
+      if (agent) {
+        await query(
+          `INSERT INTO channel_members (channel_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [channel.id, agent.id]
+        )
+        addedMembers.push(agent.name)
+        continue
+      }
+
+      // Try human user
+      const user = await queryOne<{ id: string; name: string }>(
+        `SELECT u.id, u.name FROM users u
+         JOIN server_members sm ON sm.user_id = u.id AND sm.server_id = $1
+         WHERE LOWER(u.name) = LOWER($2)`,
+        [caller.server_id, cleanName]
+      )
+      if (user) {
+        await query(
+          `INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [channel.id, user.id]
+        )
+        addedMembers.push(user.name)
+      } else {
+        notFound.push(cleanName)
+      }
+    }
+
+    return { ok: true, channel: channel.name, added: addedMembers, not_found: notFound }
+  })
+
+  // ── POST /:agentId/update-agent-role — Change an agent's role
+  app.post('/:agentId/update-agent-role', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { target_agent_name, role } = req.body as { target_agent_name: string; role: string }
+
+    if (!target_agent_name?.trim()) return reply.code(400).send({ error: 'target_agent_name required' })
+    if (!role?.trim()) return reply.code(400).send({ error: 'role required' })
+
+    // Permission check: only coordinator/tech-lead/ops can change roles
+    const caller = await queryOne<{ id: string; server_id: string; role: string }>(
+      'SELECT id, server_id, role FROM agents WHERE id = $1', [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Caller not found' })
+    if (!['coordinator', 'tech-lead', 'ops'].includes(caller.role)) {
+      return reply.code(403).send({ error: `Role ${caller.role} cannot change agent roles` })
+    }
+
+    // Find target agent
+    const cleanName = target_agent_name.replace(/^@/, '').trim()
+    const target = await queryOne<{ id: string; name: string; role: string }>(
+      `SELECT id, name, role FROM agents WHERE server_id = $1 AND LOWER(name) = LOWER($2)`,
+      [caller.server_id, cleanName]
+    )
+    if (!target) return reply.code(404).send({ error: `Agent "${target_agent_name}" not found` })
+
+    const oldRole = target.role
+    await query(`UPDATE agents SET role = $1 WHERE id = $2`, [role.trim(), target.id])
+    return { ok: true, agent: target.name, old_role: oldRole, new_role: role.trim() }
+  })
+
+  // ── POST /:agentId/update-agent-model — Update agent model_id (internal)
+  app.post('/:agentId/update-agent-model', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { target_agent_name, model_id } = req.body as {
+      target_agent_name: string
+      model_id: string
+    }
+    if (!target_agent_name?.trim() || !model_id?.trim()) {
+      return reply.code(400).send({ error: 'target_agent_name and model_id required' })
+    }
+    const target = await queryOne<{ id: string; name: string }>(
+      `SELECT id, name FROM agents WHERE LOWER(name) = LOWER($1) OR id::text = $1`,
+      [target_agent_name.trim()]
+    )
+    if (!target) return reply.code(404).send({ error: `Agent "${target_agent_name}" not found` })
+    await query(
+      `UPDATE agents SET model_id = $1 WHERE id = $2`,
+      [model_id.trim(), target.id]
+    )
+    return { ok: true, agent: target.name, model_id: model_id.trim() }
+  })
+
+  // ── POST /:agentId/set-agent-parent — Set parent/supervisor for an agent
+  app.post('/:agentId/set-agent-parent', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { target_agent_name, parent_agent_name } = req.body as {
+      target_agent_name: string
+      parent_agent_name: string | null
+    }
+
+    if (!target_agent_name?.trim()) return reply.code(400).send({ error: 'target_agent_name required' })
+
+    const caller = await queryOne<{ id: string; server_id: string; role: string }>(
+      'SELECT id, server_id, role FROM agents WHERE id = $1', [agentId]
+    )
+    if (!caller) return reply.code(404).send({ error: 'Caller not found' })
+    if (!['coordinator', 'tech-lead', 'ops'].includes(caller.role)) {
+      return reply.code(403).send({ error: `Role ${caller.role} cannot set agent hierarchy` })
+    }
+
+    const cleanTarget = target_agent_name.replace(/^@/, '').trim()
+    const target = await queryOne<{ id: string; name: string }>(
+      `SELECT id, name FROM agents WHERE server_id = $1 AND LOWER(name) = LOWER($2)`,
+      [caller.server_id, cleanTarget]
+    )
+    if (!target) return reply.code(404).send({ error: `Agent "${target_agent_name}" not found` })
+
+    let parentId: string | null = null
+    let parentName: string | null = null
+    if (parent_agent_name) {
+      const cleanParent = parent_agent_name.replace(/^@/, '').trim()
+      const parent = await queryOne<{ id: string; name: string }>(
+        `SELECT id, name FROM agents WHERE server_id = $1 AND LOWER(name) = LOWER($2)`,
+        [caller.server_id, cleanParent]
+      )
+      if (!parent) return reply.code(404).send({ error: `Parent agent "${parent_agent_name}" not found` })
+      parentId = parent.id
+      parentName = parent.name
+    }
+
+    await query(`UPDATE agents SET parent_agent_id = $1 WHERE id = $2`, [parentId, target.id])
+    return { ok: true, agent: target.name, parent: parentName ?? '(none)' }
   })
 
   // ── POST /:agentId/bulletins — Agent publishes a bulletin ─────────────────
@@ -1561,4 +2302,97 @@ export const internalRoutes: FastifyPluginAsync = async (app) => {
       return { ok: true, message: 'vault commit scheduled' }
     },
   )
+
+  // ── Chrono (Cron Jobs) ────────────────────────────────────────────
+
+  // GET /internal/agent/:agentId/cron — list all cron jobs
+  app.get('/:agentId/cron', async (req) => {
+    const jobs = await query(
+      `SELECT cj.id, cj.agent_id, a.name AS agent_name, cj.cron_expr, cj.prompt,
+              cj.channel_id, ch.name AS channel_name, cj.enabled, cj.last_run_at, cj.created_at
+       FROM cron_jobs cj
+       JOIN agents a ON a.id = cj.agent_id
+       LEFT JOIN channels ch ON ch.id = cj.channel_id
+       ORDER BY cj.created_at`
+    )
+    return { jobs }
+  })
+
+  // POST /internal/agent/:agentId/cron — create a cron job
+  app.post('/:agentId/cron', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string }
+    const { target_agent, cron_expr, prompt, channel } = req.body as {
+      target_agent?: string  // agent name or ID; defaults to self
+      cron_expr: string
+      prompt: string
+      channel?: string       // #channel-name
+    }
+
+    if (!cron_expr?.trim() || !prompt?.trim()) {
+      return reply.code(400).send({ error: 'cron_expr and prompt are required' })
+    }
+
+    // Resolve target agent (default: self)
+    let targetAgentId = agentId
+    if (target_agent?.trim()) {
+      const found = await queryOne<{ id: string }>(
+        `SELECT id FROM agents WHERE LOWER(name) = LOWER($1) OR id::text = $1`, [target_agent.trim()]
+      )
+      if (!found) return reply.code(404).send({ error: `Agent "${target_agent}" not found` })
+      targetAgentId = found.id
+    }
+
+    // Resolve channel
+    let channelId: string | null = null
+    if (channel?.trim()) {
+      const ch = await getScopedChannel(agentId, channel.trim())
+      if (!ch) return reply.code(404).send({ error: `Channel "${channel}" not found` })
+      channelId = ch.id
+    }
+
+    const [job] = await query(
+      `INSERT INTO cron_jobs (agent_id, cron_expr, prompt, channel_id)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [targetAgentId, cron_expr.trim(), prompt.trim(), channelId]
+    )
+    await scheduler.reloadCronJobs()
+
+    const targetName = target_agent?.trim() || (await queryOne<{ name: string }>('SELECT name FROM agents WHERE id = $1', [targetAgentId]))?.name || targetAgentId
+    return {
+      ok: true,
+      job_id: job.id,
+      message: `Cron job created: "${cron_expr.trim()}" → ${targetName}${channelId ? ` in ${channel}` : ''}`,
+    }
+  })
+
+  // PATCH /internal/agent/:agentId/cron/:jobId — update a cron job
+  app.patch('/:agentId/cron/:jobId', async (req, reply) => {
+    const { jobId } = req.params as { agentId: string; jobId: string }
+    const { enabled, cron_expr, prompt } = req.body as {
+      enabled?: boolean; cron_expr?: string; prompt?: string
+    }
+
+    const existing = await queryOne('SELECT 1 FROM cron_jobs WHERE id = $1', [jobId])
+    if (!existing) return reply.code(404).send({ error: 'Cron job not found' })
+
+    const [job] = await query(
+      `UPDATE cron_jobs
+       SET enabled   = COALESCE($1, enabled),
+           cron_expr = COALESCE($2, cron_expr),
+           prompt    = COALESCE($3, prompt)
+       WHERE id = $4 RETURNING *`,
+      [enabled ?? null, cron_expr ?? null, prompt ?? null, jobId]
+    )
+    await scheduler.reloadCronJobs()
+    return { ok: true, job }
+  })
+
+  // DELETE /internal/agent/:agentId/cron/:jobId — delete a cron job
+  app.delete('/:agentId/cron/:jobId', async (req, reply) => {
+    const { jobId } = req.params as { agentId: string; jobId: string }
+    const [deleted] = await query('DELETE FROM cron_jobs WHERE id = $1 RETURNING id', [jobId])
+    if (!deleted) return reply.code(404).send({ error: 'Cron job not found' })
+    await scheduler.reloadCronJobs()
+    return { ok: true, message: 'Cron job deleted' }
+  })
 }

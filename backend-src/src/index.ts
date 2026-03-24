@@ -212,12 +212,15 @@ async function main() {
       }).catch(() => {})
     }
 
-    // Persist agent:log events to database
+    // Persist agent:log events to database (truncate to keep DB lean)
     if (event.type === 'agent:log') {
       const { level, content, runId } = event.payload as { level: string; content: string; runId?: string }
+      const dbContent = content.length > 1000
+        ? content.slice(0, 500) + ` ... [truncated ${content.length} chars]`
+        : content
       query(
         `INSERT INTO agent_logs (agent_id, run_id, level, content, created_at) VALUES ($1, $2, $3, $4, $5)`,
-        [event.agentId, runId ?? null, level, content, event.timestamp]
+        [event.agentId, runId ?? null, level, dbContent, event.timestamp]
       ).catch((err: any) => {
         console.error(`[log-persist] Failed to write log for ${event.agentId}:`, err.message)
       })

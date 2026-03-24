@@ -1,12 +1,8 @@
 // Red Shrimp Lab — Scheduler
 // Responsibilities:
 //   1. Run user-defined cron jobs (stored in DB `cron_jobs` table)
-//   2. Heartbeat monitor — detect offline agents (>90s no ping)
-//   3. Token exhaustion monitor — trigger handoff at >90% of limit
+//   2. Token exhaustion monitor — compact at >80%, handoff at >90% of limit
 //
-// Inspired by nanobot's HEARTBEAT.md pattern: a lightweight "nervous system"
-// that watches all agents and takes corrective action without human input.
-
 import cron from 'node-cron'
 import { query, queryOne } from '../db/client.js'
 import { processManager } from './process-manager.js'
@@ -14,7 +10,6 @@ import {
   emitTokenHandoff,
   eventBus,
 } from './events.js'
-import { heartbeatChecker } from './heartbeat-checker.js'
 import { machineConnectionManager } from './machine-connection.js'
 import { resolveServerUrl } from '../server-url.js'
 import { createStoredMessage } from '../services/message-store.js'
@@ -76,6 +71,10 @@ class Scheduler {
 
   // Guard: prevent concurrent handoffs for the same agent
   private handoffInProgress = new Set<string>()
+  // Guard: track runs that have already been compacted at 80% (avoid re-compacting every 2min)
+  private compactedRuns = new Set<string>()
+  // Guard: prevent concurrent compaction for the same agent
+  private compactionInProgress = new Set<string>()
 
   // ── Wire process-manager event → DB status updates ───────────────────────
   private wireEventListeners() {
@@ -102,9 +101,6 @@ class Scheduler {
 
     // Auto-start agents that were previously running (local machine only)
     await this.autoStartAgents()
-
-    // Start HEARTBEAT.md file-based heartbeat checker (nanobot-style)
-    heartbeatChecker.start()
 
     // Load & schedule all enabled cron jobs from DB
     await this.reloadCronJobs()
@@ -362,6 +358,37 @@ class Scheduler {
   // and schedule a handoff to a fresh agent instance.
 
   private async checkTokenUsage() {
+    // ── 80% threshold: compact context (no handoff) ──────────────────────
+    const needsCompaction = await query<AgentRunRow & { workspace_path: string | null; model_id: string }>(
+      `SELECT ar.*, a.name AS agent_name, a.workspace_path, a.model_id
+       FROM agent_runs ar
+       JOIN agents a ON a.id = ar.agent_id
+       WHERE ar.status = 'running'
+         AND ar.tokens_limit > 0
+         AND ar.tokens_used::float / ar.tokens_limit > 0.80
+         AND ar.tokens_used::float / ar.tokens_limit <= 0.90`
+    )
+
+    for (const run of needsCompaction) {
+      if (this.compactedRuns.has(run.id)) continue
+      if (this.compactionInProgress.has(run.agent_id)) continue
+      if (this.handoffInProgress.has(run.agent_id)) continue
+      if (!run.workspace_path) continue
+
+      this.compactionInProgress.add(run.agent_id)
+      try {
+        console.log(`[scheduler] 80% token threshold — compacting context for ${run.agent_name} (${run.tokens_used}/${run.tokens_limit})`)
+        await compactAgentContext(run.agent_id, run.agent_name!, run.workspace_path, run.model_id)
+        this.compactedRuns.add(run.id)
+        console.log(`[scheduler] Context compacted for ${run.agent_name} at 80%`)
+      } catch (err: any) {
+        console.error(`[scheduler] 80% compaction failed for ${run.agent_name}: ${err.message}`)
+      } finally {
+        this.compactionInProgress.delete(run.agent_id)
+      }
+    }
+
+    // ── 90% threshold: handoff (restart with fresh context) ──────────────
     const exhausted = await query<AgentRunRow>(
       `SELECT ar.*, a.name AS agent_name
        FROM agent_runs ar
@@ -377,6 +404,9 @@ class Scheduler {
         console.log(`[scheduler] Handoff already in progress for agent ${run.agent_id}, skipping`)
         continue
       }
+
+      // Clean up compaction tracking for this run (it's about to be replaced)
+      this.compactedRuns.delete(run.id)
 
       console.log(`[scheduler] Token handoff triggered for run ${run.id} (${run.tokens_used}/${run.tokens_limit})`)
       await this.triggerHandoff(run)
@@ -550,22 +580,25 @@ class Scheduler {
       content += `\n\n完成后请将状态改为 in_review，等待人类 review。`
 
       try {
-        // DM the agent via owner DM channel if owner exists, else use server #all channel
-        let channelId: string | null = null
-
-        if (task.owner_user_id) {
-          channelId = await this.ensureHumanAgentDm(task.server_id, task.owner_user_id, task.agent_id)
-        } else {
-          const allChannel = await queryOne<{ id: string }>(
-            `SELECT id FROM channels WHERE server_id = $1 AND name = 'all' LIMIT 1`,
-            [task.server_id]
-          )
-          channelId = allChannel?.id ?? null
-        }
+        // Send reminder as chrono (system) to the task's channel, @mentioning the agent
+        // This way: agent receives it via normal delivery, human doesn't see random DMs
+        const reminderContent = `@${task.agent_name} ${content}`
+        const channelId = task.server_id
+          ? (await queryOne<{ id: string }>(
+              `SELECT channel_id AS id FROM tasks WHERE id = $1`, [task.id]
+            ))?.id ?? null
+          : null
 
         if (!channelId) continue
 
-        await this.postMessage(task.agent_id, channelId, content)
+        // Post as chrono (scheduler system identity)
+        await createStoredMessage({
+          channelId,
+          senderId: '00000000-0000-0000-0000-00000000c001',
+          senderType: 'human',
+          senderName: 'chrono',
+          content: reminderContent,
+        })
         this.taskReminderState.set(task.id, now)
 
         console.log(`[scheduler] Sent task reminder to ${task.agent_name} for #t${task.number}`)

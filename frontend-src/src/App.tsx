@@ -18,12 +18,11 @@ import TasksBoard from './pages/TasksBoard'
 import MemoryBrowser from './pages/MemoryBrowser'
 import MachinesPage from './pages/MachinesPage'
 import OnboardingPage from './pages/OnboardingPage'
-import RecipePage from './pages/RecipePage'
 import ChronoPage from './pages/ChronoPage'
 import LoginPage from './pages/LoginPage'
 import SearchPage from './pages/SearchPage'
 import HomePage from './pages/HomePage'
-type Page = 'home' | 'channels' | 'search' | 'tasks' | 'agents' | 'memory' | 'machines' | 'recipe' | 'chrono'
+type Page = 'home' | 'channels' | 'search' | 'tasks' | 'agents' | 'memory' | 'machines' | 'chrono'
 
 const NAV: { id: Page; label: string }[] = [
   { id: 'home',     label: 'home'     },
@@ -33,7 +32,6 @@ const NAV: { id: Page; label: string }[] = [
   { id: 'tasks',    label: 'tasks'    },
   { id: 'agents',   label: 'agents'   },
   { id: 'machines', label: 'machines' },
-  { id: 'recipe',   label: 'recipe'   },
   { id: 'chrono',   label: 'chrono'   },
 ]
 
@@ -54,6 +52,8 @@ export default function App() {
   const [reviewingCount, setReviewingCount] = useState(0)
   const [requestedChannelId, setRequestedChannelId] = useState<string | null>(null)
   const [requestedDoc, setRequestedDoc] = useState<{ path: string; seq: number } | null>(null)
+  const [errorToasts, setErrorToasts] = useState<{ id: number; text: string }[]>([])
+  const toastIdRef = useRef(0)
   const serviceReachableRef = useRef(true)
   const currentNav = NAV.find(item => item.id === page)
 
@@ -114,6 +114,7 @@ export default function App() {
             sender_id?: string
             sender_name?: string
             sender_type?: 'human' | 'agent'
+            content?: string
           }
         }).message
         if (!msg) return
@@ -130,20 +131,32 @@ export default function App() {
             (msg.sender_name && msg.sender_name === user.name)
           )
 
-        if (!isOwnHumanMessage) playSfxMessage()
+        // Only play sound for: human messages (not own) that @mention the current user
+        // Agent messages never trigger sound — too noisy with multi-agent system
+        const mentionsMe = user.name && new RegExp(`@${user.name}\\b`, 'i').test(msg.content ?? '')
+        if (!isOwnHumanMessage && msg.sender_type === 'human') playSfxMessage()
+        else if (msg.sender_type === 'agent' && mentionsMe) playSfxMessage()
       }),
       socketClient.on('agent:started', ({ agentId }) => {
         playSfxAgentOnline()
       }),
-      socketClient.on('agent:log', ({ level }) => {
+      socketClient.on('agent:log', ({ agentName, level, content }: any) => {
         if (level === 'ERROR') {
           playSfxError()
+          const id = ++toastIdRef.current
+          const text = `${agentName ?? 'Agent'}: ${(content ?? 'Unknown error').slice(0, 120)}`
+          setErrorToasts(prev => [...prev.slice(-4), { id, text }])
+          setTimeout(() => setErrorToasts(prev => prev.filter(t => t.id !== id)), 6000)
         }
       }),
       socketClient.on('agent:stopped', () => {}),
       socketClient.on('agent:offline', () => {}),
-      socketClient.on('agent:crashed', () => {
+      socketClient.on('agent:crashed', ({ agentName }: any) => {
         playSfxError()
+        const id = ++toastIdRef.current
+        const text = `${agentName ?? 'Agent'} crashed`
+        setErrorToasts(prev => [...prev.slice(-4), { id, text }])
+        setTimeout(() => setErrorToasts(prev => prev.filter(t => t.id !== id)), 6000)
       }),
       socketClient.on('task:completed',    () => playSfxComplete()),
       socketClient.on('task:all_completed',() => playSfxAllTasksDone()),
@@ -314,9 +327,6 @@ export default function App() {
         <div className="h-full" style={{ display: page === 'machines' ? 'block' : 'none' }}>
           <MachinesPage />
         </div>
-        <div className="h-full" style={{ display: page === 'recipe' ? 'block' : 'none' }}>
-          <RecipePage />
-        </div>
         <div className="h-full" style={{ display: page === 'chrono' ? 'block' : 'none' }}>
           <ChronoPage />
         </div>
@@ -350,6 +360,21 @@ export default function App() {
             )
           })}
         </nav>
+      )}
+      {/* Error toast notifications */}
+      {errorToasts.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+          {errorToasts.map(t => (
+            <div
+              key={t.id}
+              className="bg-[#2a1a1a] border border-[#c0392b]/40 text-[#e7dfd3] px-3 py-2 rounded text-xs animate-fade-in shadow-lg"
+              style={{ animation: 'fadeInOut 6s ease-in-out' }}
+            >
+              <span className="text-[#c0392b] font-bold mr-1">ERROR</span>
+              {t.text}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

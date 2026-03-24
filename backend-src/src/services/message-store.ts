@@ -67,10 +67,10 @@ export async function createStoredMessage(params: CreateStoredMessageParams) {
     mentions,
   }).catch(() => {})
 
-  // Only notify agents for human messages.
-  // Agent-to-agent: agents pick up via receive_message polling + @mention.
-  // This prevents chain reactions where agent A's reply wakes agent B.
-  if (senderType === 'human') {
+  // Notify agents for: (1) human messages, or (2) any message containing @all.
+  // Agent-to-agent without @all: agents pick up via receive_message polling.
+  const hasAtAll = /@all\b/i.test(content)
+  if (senderType === 'human' || hasAtAll) {
     // Append attachment info (with absolute paths) so agents can access uploaded files
     let agentContent = msg.content as string
     if (attachments.length > 0) {

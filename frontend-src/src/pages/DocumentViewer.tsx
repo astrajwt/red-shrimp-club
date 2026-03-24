@@ -452,6 +452,18 @@ export default function DocumentViewer({ filePath, onClose, embedded = false, on
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
                     rehypePlugins={[rehypeKatex]}
+                    urlTransform={(url) => {
+                      // Allow wikilink:// protocol (used for Obsidian [[wikilinks]])
+                      if (url.startsWith('wikilink://')) return url
+                      // Fall back to default sanitization for everything else
+                      const colon = url.indexOf(':')
+                      const slash = url.indexOf('/')
+                      const question = url.indexOf('?')
+                      const hash = url.indexOf('#')
+                      if (colon === -1 || (slash !== -1 && colon > slash) || (question !== -1 && colon > question) || (hash !== -1 && colon > hash)) return url
+                      if (/^(https?|ircs?|mailto|xmpp)$/i.test(url.slice(0, colon))) return url
+                      return ''
+                    }}
                     components={mdComps}
                   >
                     {processedContent}
@@ -607,19 +619,31 @@ function AssetPreview({
   className?: string
 }) {
   const resolvedUrl = buildAssetUrl(src, currentFilePath)
-  const caption = alt?.trim()
+  const rawAlt = alt?.trim() ?? ''
+  // Obsidian ![[image|700]] syntax: purely numeric alt = width hint, not a caption
+  const isWidthHint = /^\d+$/.test(rawAlt)
+  const widthPx = isWidthHint ? parseInt(rawAlt, 10) : undefined
+  const caption = isWidthHint ? '' : rawAlt
 
   if (kind === 'image') {
     return (
       <div className={className}>
         <img
           src={resolvedUrl}
-          alt={caption ?? fileLabel}
-          style={{ maxWidth: '100%', maxHeight: '75vh', border: '3px solid black', display: 'block', margin: '0 auto', background: '#f4ede0' }}
+          alt={caption || fileLabel}
+          style={{
+            maxWidth: widthPx ? `${widthPx}px` : '100%',
+            width: widthPx ? `${widthPx}px` : undefined,
+            maxHeight: '75vh',
+            border: '3px solid black',
+            display: 'block',
+            margin: '0 auto',
+            background: '#f4ede0',
+          }}
           onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
         />
         <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] opacity-70">
-          <span>{caption || fileLabel}</span>
+          {(caption || fileLabel) && <span>{caption || fileLabel}</span>}
           <a href={resolvedUrl} target="_blank" rel="noopener noreferrer" className="underline text-[#1a5a8a]">
             open raw image
           </a>

@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { obsidianApi, memoryApi, channelsApi, messagesApi, agentsApi, setupApi, askApi, type ObsidianEntry, type MemorySource } from '../lib/api'
+import { socketClient } from '../lib/socket'
 import { isImeComposing } from '../lib/ime'
 import { useIsMobile } from '../lib/use-mobile'
 import DocumentViewer from './DocumentViewer'
@@ -540,6 +541,7 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
   const [ctxPath, setCtxPath] = useState<string | null>(filePath)
   const [ctxLocked, setCtxLocked] = useState(false)
   const [vaultRoot, setVaultRoot] = useState('')
+  const [dmChannelId, setDmChannelId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId) ?? null
@@ -547,6 +549,29 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Join DM channel + listen for agent replies
+  useEffect(() => {
+    if (!dmChannelId) return
+    socketClient.joinChannel(dmChannelId)
+    const unsub = socketClient.on('message', (data) => {
+      const d = data as { channelId: string; message: { id?: string; sender_type?: string; content?: string; sender_name?: string } }
+      if (d.channelId !== dmChannelId) return
+      if (d.message?.sender_type !== 'agent') return
+      const text = d.message.content ?? ''
+      if (!text) return
+      setSending(false)
+      setMessages(prev => {
+        // Dedup by message id
+        if (d.message.id && prev.some(m => (m as any).msgId === d.message.id)) return prev
+        return [...prev, { role: 'assistant' as const, text, msgId: d.message.id } as Message & { msgId?: string }]
+      })
+    })
+    return () => {
+      unsub()
+      socketClient.leaveChannel(dmChannelId)
+    }
+  }, [dmChannelId])
 
   useEffect(() => {
     if (!ctxLocked) setCtxPath(filePath)
@@ -584,10 +609,11 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
     return null
   }
 
-  const handoffToAgent = async (question: string) => {
+  const sendToAgent = async (question: string): Promise<string> => {
     const agentId = await resolveAgentId()
     if (!question || !agentId) throw new Error('No agent available')
     const dm = await channelsApi.openDM(agentId)
+    setDmChannelId(dm.id)
     let content = question
     const normalizedVaultRoot = vaultRoot.trim().replace(/[\\/]+$/, '')
     const normalizedCtxPath = ctxPath?.replace(/^\/+/, '') ?? null
@@ -609,8 +635,10 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
           '下面是来自共享 vault 的文档上下文。',
           '不要先去你当前 workspace 里查这个路径，也不要因为本地不存在就拒绝处理。',
           '如果下面正文已经足够，请直接基于正文回答或处理。',
+          '',
           `vault 相对路径：${resolvedVaultPath}`,
-          resolvedAbsoluteVaultPath ? `宿主机绝对路径：${resolvedAbsoluteVaultPath}` : null,
+          resolvedAbsoluteVaultPath ? `文件绝对路径：${resolvedAbsoluteVaultPath}` : null,
+          resolvedAbsoluteVaultPath ? `如果需要修改此文件，直接编辑上面的绝对路径即可。` : null,
           '',
           '文档内容：',
           '```md',
@@ -623,9 +651,10 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
         content = [
           '下面这个路径来自共享 vault，不是你当前 workspace 里的本地相对路径。',
           '不要仅因为 workspace 里没有这个路径就直接拒绝。',
+          '',
           `vault 相对路径：${normalizedCtxPath}`,
-          absoluteVaultPath ? `宿主机绝对路径：${absoluteVaultPath}` : null,
-          '如果需要读文件，请优先尝试上面的宿主机绝对路径；如果还是不够，再明确说明缺什么上下文。',
+          absoluteVaultPath ? `文件绝对路径：${absoluteVaultPath}` : null,
+          absoluteVaultPath ? `如果需要修改此文件，直接编辑上面的绝对路径即可。` : null,
           '',
           `用户请求：${question}`,
         ].filter(Boolean).join('\n')
@@ -633,21 +662,7 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
     }
 
     await messagesApi.send(dm.id, content)
-    const agentName = selectedAgent?.name ?? 'agent'
-    return normalizedCtxPath ? `已发给 ${agentName}：${normalizedCtxPath}` : `已发给 ${agentName}`
-  }
-
-  const replacePendingAssistantMessage = (text: string) => {
-    setMessages(prev => {
-      const updated = [...prev]
-      const last = updated[updated.length - 1]
-      if (last?.role === 'assistant') {
-        updated[updated.length - 1] = { ...last, text }
-      } else {
-        updated.push({ role: 'assistant', text })
-      }
-      return updated
-    })
+    return dm.id
   }
 
   const send = async () => {
@@ -658,11 +673,10 @@ function AskPanel({ filePath, width, collapsed, onToggle, isMobileFullscreen }: 
     setSending(true)
 
     try {
-      const { answer } = await askApi.ask(q, ctxPath ?? undefined)
-      setMessages(prev => [...prev, { role: 'assistant', text: answer }])
+      await sendToAgent(q)
+      // Reply will arrive via socket listener above, which also sets sending=false
     } catch (err: any) {
       setMessages(prev => [...prev, { role: 'assistant', text: `⚠ ${err?.message ?? 'request failed'}` }])
-    } finally {
       setSending(false)
     }
   }

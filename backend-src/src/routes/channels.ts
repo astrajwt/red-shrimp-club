@@ -38,7 +38,8 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
 
     const rows = await query(
       `SELECT c.id, c.name, c.description, c.type, c.server_id,
-              (cm.user_id IS NOT NULL OR cm.agent_id IS NOT NULL) AS joined
+              (cm.user_id IS NOT NULL OR cm.agent_id IS NOT NULL) AS joined,
+              (SELECT MAX(m.created_at) FROM messages m WHERE m.channel_id = c.id) AS last_message_at
        FROM channels c
        JOIN servers s ON s.id = c.server_id
        JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $1
@@ -46,7 +47,9 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
          ON cm.channel_id = c.id AND (cm.user_id = $1 OR cm.agent_id = $1)
        WHERE c.type = 'channel'
          AND ($2::uuid IS NULL OR c.server_id = $2::uuid)
-       ORDER BY CASE WHEN c.name = 'all' THEN 0 ELSE 1 END, c.name`,
+       ORDER BY CASE WHEN c.name = 'all' THEN 0 ELSE 1 END,
+                (SELECT MAX(m.created_at) FROM messages m WHERE m.channel_id = c.id) DESC NULLS LAST,
+                c.created_at DESC`,
       [caller.sub, targetServerId]
     )
     return rows
@@ -80,13 +83,34 @@ export const channelRoutes: FastifyPluginAsync = async (app) => {
       `SELECT c.id, c.name, c.type,
               -- Get the other participant's name as channel display name
               COALESCE(u.name, a.name) AS display_name,
-              true AS joined
+              true AS joined,
+              (SELECT MAX(m.created_at) FROM messages m WHERE m.channel_id = c.id) AS last_message_at
        FROM channels c
        JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $1
        JOIN channel_members cm2 ON cm2.channel_id = c.id AND (cm2.user_id != $1 OR cm2.agent_id IS NOT NULL)
        LEFT JOIN users u  ON u.id  = cm2.user_id
        LEFT JOIN agents a ON a.id  = cm2.agent_id
-       WHERE c.type = 'dm'`,
+       WHERE c.type = 'dm'
+
+       UNION
+
+       SELECT c.id, c.name, c.type,
+              a1.name || ' ↔ ' || a2.name AS display_name,
+              false AS joined,
+              (SELECT MAX(m.created_at) FROM messages m WHERE m.channel_id = c.id) AS last_message_at
+       FROM channels c
+       JOIN channel_members cm1 ON cm1.channel_id = c.id AND cm1.agent_id IS NOT NULL
+       JOIN channel_members cm2 ON cm2.channel_id = c.id AND cm2.agent_id IS NOT NULL
+         AND cm2.agent_id != cm1.agent_id
+       JOIN agents a1 ON a1.id = cm1.agent_id
+       JOIN agents a2 ON a2.id = cm2.agent_id
+       JOIN server_members sm ON sm.user_id = $1 AND a1.server_id = sm.server_id
+       WHERE c.type = 'dm'
+         AND NOT EXISTS (
+           SELECT 1 FROM channel_members cmh WHERE cmh.channel_id = c.id AND cmh.user_id IS NOT NULL
+         )
+         AND cm1.agent_id < cm2.agent_id
+       ORDER BY last_message_at DESC NULLS LAST`,
       [caller.sub]
     )
     return dms

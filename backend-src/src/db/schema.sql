@@ -157,6 +157,8 @@ CREATE TABLE IF NOT EXISTS agents (
 
 ALTER TABLE agents
   ADD COLUMN IF NOT EXISTS current_project_id UUID;
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS custom_api_key TEXT;
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS custom_base_url TEXT;
 
 -- Add agent FK to channel_members
 ALTER TABLE channel_members

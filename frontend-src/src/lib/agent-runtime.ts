@@ -1,6 +1,6 @@
 import type { ModelInfo, ModelRegistry } from './api'
 
-export type AgentRuntime = 'claude' | 'codex' | 'kimi'
+export type AgentRuntime = 'claude' | 'codex' | 'kimi' | 'gemini'
 type AgentProvider = keyof ModelRegistry
 
 // Codex runtime aggregates multiple providers (OpenAI + Zhipu GLM + Dashscope Qwen)
@@ -8,12 +8,14 @@ const PROVIDERS_BY_RUNTIME: Record<AgentRuntime, AgentProvider[]> = {
   claude: ['anthropic'],
   codex:  ['openai', 'zhipu', 'dashscope'],
   kimi:   ['moonshot'],
+  gemini: ['google'],
 }
 
 const DEFAULT_MODELS: Record<AgentRuntime, ModelInfo> = {
   claude: { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', tier: 'standard' },
   codex:  { id: 'gpt-5.4',           label: 'GPT-5.4',           tier: 'premium' },
   kimi:   { id: 'kimi-code/kimi-for-coding', label: 'Kimi Code', tier: 'standard' },
+  gemini: { id: 'gemini-2.5-flash',  label: 'Gemini 2.5 Flash',  tier: 'standard' },
 }
 
 export function defaultAgentModelForRuntime(runtime: AgentRuntime): string {
@@ -22,6 +24,7 @@ export function defaultAgentModelForRuntime(runtime: AgentRuntime): string {
 
 export function runtimeForAgentModel(modelId: string): AgentRuntime {
   if (modelId.startsWith('claude')) return 'claude'
+  if (modelId.startsWith('gemini')) return 'gemini'
   if (modelId.startsWith('moonshot') || modelId.startsWith('kimi')) return 'kimi'
   return 'codex'
 }

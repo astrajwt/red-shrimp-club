@@ -115,6 +115,8 @@ function defaultModelForRuntime(runtime: RuntimeId): string {
       return 'gpt-5.4'
     case 'kimi':
       return 'kimi-code/kimi-for-coding'
+    case 'gemini':
+      return 'gemini-2.5-flash'
     case 'claude':
     default:
       return 'claude-sonnet-4-6'
@@ -133,14 +135,106 @@ function defaultProviderForRuntime(runtime: RuntimeId): string {
       return 'openai'
     case 'kimi':
       return 'moonshot'
+    case 'gemini':
+      return 'google'
     case 'claude':
     default:
       return 'anthropic'
   }
 }
 
+type AgentEdgeBlueprint = {
+  from: string
+  to: string
+  relation_kind: string
+  relation_layer: 'tree' | 'graph'
+  label: string
+}
+
+const DEFAULT_AGENT_EDGE_BLUEPRINTS: AgentEdgeBlueprint[] = [
+  { from: 'Donovan', to: 'Donovan-codex', relation_kind: 'assistant', relation_layer: 'tree', label: 'codex copilot' },
+  { from: 'Donovan', to: 'Donovan-gemini', relation_kind: 'assistant', relation_layer: 'tree', label: 'gemini copilot' },
+  { from: 'Brandeis', to: 'Brandeis-codex', relation_kind: 'assistant', relation_layer: 'tree', label: 'codex executor' },
+  { from: 'Brandeis', to: 'Brandeis-gemini', relation_kind: 'assistant', relation_layer: 'tree', label: 'gemini executor' },
+  { from: 'Akara', to: 'Akara-codex', relation_kind: 'assistant', relation_layer: 'tree', label: 'codex reviewer' },
+  { from: 'Sable-infer', to: 'Sable-kimi', relation_kind: 'assistant', relation_layer: 'tree', label: 'kimi worker' },
+  { from: 'Corin-kernel', to: 'Corin-kimi', relation_kind: 'assistant', relation_layer: 'tree', label: 'kimi worker' },
+  { from: 'Vega-train', to: 'Vega-kimi', relation_kind: 'assistant', relation_layer: 'tree', label: 'kimi worker' },
+  { from: 'Nova-arch', to: 'Nova-kimi', relation_kind: 'assistant', relation_layer: 'tree', label: 'kimi worker' },
+  { from: 'Donovan', to: 'Brandeis', relation_kind: 'delegates', relation_layer: 'graph', label: 'execution pipeline' },
+  { from: 'Donovan', to: 'Akara', relation_kind: 'delegates', relation_layer: 'graph', label: 'review pipeline' },
+  { from: 'Brandeis', to: 'Sable-infer', relation_kind: 'manages', relation_layer: 'graph', label: 'inference lane' },
+  { from: 'Brandeis', to: 'Corin-kernel', relation_kind: 'manages', relation_layer: 'graph', label: 'kernel lane' },
+  { from: 'Brandeis', to: 'Vega-train', relation_kind: 'manages', relation_layer: 'graph', label: 'training lane' },
+  { from: 'Brandeis', to: 'Nova-arch', relation_kind: 'manages', relation_layer: 'graph', label: 'architecture lane' },
+  { from: 'Brandeis', to: 'Rhea-test', relation_kind: 'manages', relation_layer: 'graph', label: 'test lane' },
+]
+
+async function ensureAgentEdgesSchema() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS agent_edges (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      server_id UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      from_agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      to_agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      relation_kind VARCHAR(32) NOT NULL,
+      relation_layer VARCHAR(16) NOT NULL DEFAULT 'graph',
+      label TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (relation_layer IN ('tree', 'graph')),
+      CHECK (from_agent_id <> to_agent_id)
+    )
+  `).catch(() => {})
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS agent_edges_unique_relation
+      ON agent_edges (server_id, from_agent_id, to_agent_id, relation_kind)
+  `).catch(() => {})
+  await query(`
+    CREATE INDEX IF NOT EXISTS agent_edges_server_from_idx
+      ON agent_edges (server_id, from_agent_id)
+  `).catch(() => {})
+  await query(`
+    CREATE INDEX IF NOT EXISTS agent_edges_server_to_idx
+      ON agent_edges (server_id, to_agent_id)
+  `).catch(() => {})
+}
+
+async function seedDefaultAgentEdges(serverId: string) {
+  const agents = await query<{ id: string; name: string }>(
+    `SELECT id, name FROM agents WHERE server_id = $1`,
+    [serverId]
+  )
+  if (agents.length === 0) return
+
+  const idByName = new Map(agents.map(agent => [agent.name.toLowerCase(), agent.id]))
+
+  for (const edge of DEFAULT_AGENT_EDGE_BLUEPRINTS) {
+    const fromId = idByName.get(edge.from.toLowerCase())
+    const toId = idByName.get(edge.to.toLowerCase())
+    if (!fromId || !toId) continue
+
+    await query(
+      `INSERT INTO agent_edges
+         (server_id, from_agent_id, to_agent_id, relation_kind, relation_layer, label, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+       ON CONFLICT (server_id, from_agent_id, to_agent_id, relation_kind) DO NOTHING`,
+      [
+        serverId,
+        fromId,
+        toId,
+        edge.relation_kind,
+        edge.relation_layer,
+        edge.label,
+        JSON.stringify({ seeded: true }),
+      ]
+    ).catch(() => {})
+  }
+}
+
 function providerForModel(modelId: string): string {
   if (modelId.startsWith('claude')) return 'anthropic'
+  if (modelId.startsWith('gemini')) return 'google'
   if (modelId.startsWith('moonshot') || modelId.startsWith('kimi')) return 'moonshot'
   if (modelId.startsWith('glm')) return 'zhipu'
   if (modelId.startsWith('qwen') || modelId.startsWith('codeplan')) return 'dashscope'
@@ -150,6 +244,7 @@ function providerForModel(modelId: string): string {
 function runtimeForModel(modelId: string): RuntimeId {
   const provider = providerForModel(modelId)
   if (provider === 'anthropic') return 'claude'
+  if (provider === 'google') return 'gemini'
   if (provider === 'moonshot') return 'kimi'
   return 'codex'
 }
@@ -158,6 +253,7 @@ const DEFAULT_TEAM_CONTEXT = '红虾俱乐部 (Red Shrimp Lab) — multi-agent c
 
 export const agentRoutes: FastifyPluginAsync = async (app) => {
   await query('ALTER TABLE agents ADD COLUMN IF NOT EXISTS note TEXT').catch(() => {})
+  await ensureAgentEdgesSchema()
   const agentsBaseDir = resolveAgentsBaseDir()
 
   if (process.env.OBSIDIAN_ROOT?.trim()) {
@@ -193,11 +289,13 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     session_id: string | null
     reasoning_effort: string | null
     role: string | null
+    custom_api_key: string | null
+    custom_base_url: string | null
   }
 
   const readAgentControlRow = async (id: string) =>
     queryOne<AgentControlRow>(
-      `SELECT id, name, description, runtime, model_id, machine_id, workspace_path, session_id, reasoning_effort, role
+      `SELECT id, name, description, runtime, model_id, machine_id, workspace_path, session_id, reasoning_effort, role, custom_api_key, custom_base_url
        FROM agents
        WHERE id = $1`,
       [id]
@@ -271,6 +369,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
           reasoningEffort: agent.reasoning_effort ?? undefined,
           sessionId:     agent.session_id ?? undefined,
           role:          agent.role ?? undefined,
+          customApiKey:  agent.custom_api_key ?? undefined,
+          customBaseUrl: agent.custom_base_url ?? undefined,
         }
         await processManager.spawn(config)
         await query(`UPDATE agents SET status = 'starting' WHERE id = $1`, [agent.id])
@@ -300,6 +400,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reasoningEffort: agent.reasoning_effort ?? undefined,
       sessionId:     agent.session_id ?? undefined,
       role:          agent.role ?? undefined,
+      customApiKey:  agent.custom_api_key ?? undefined,
+      customBaseUrl: agent.custom_base_url ?? undefined,
     }
 
     await processManager.spawn(config)
@@ -317,6 +419,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
               a.runtime, a.reasoning_effort, a.status, a.activity, a.activity_detail,
               a.last_heartbeat_at, a.workspace_path, a.created_at,
               a.role, a.parent_agent_id, a.machine_id, a.current_project_id,
+              a.custom_base_url,
+              (a.custom_api_key IS NOT NULL) AS has_custom_key,
               m.name AS machine_name, m.hostname AS machine_hostname, m.status AS machine_status,
               p.name AS current_project_name, p.slug AS current_project_slug
        FROM agents a
@@ -324,21 +428,116 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
        LEFT JOIN projects p ON p.id = a.current_project_id
        JOIN server_members sm ON sm.server_id = a.server_id AND sm.user_id = $1
        WHERE ($2::uuid IS NULL OR a.server_id = $2::uuid)
-       ORDER BY a.name`,
+       ORDER BY CASE a.role
+         WHEN 'coordinator' THEN 0
+         WHEN 'ops' THEN 1
+         WHEN 'tech-lead' THEN 2
+         ELSE 3
+       END, a.name`,
       [caller.sub, serverId ?? null]
     )
     return agents
   })
 
+  // ── GET /api/agents/hierarchy ────────────────────────────────────
+  app.get('/hierarchy', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const { serverId } = req.query as { serverId?: string }
+    const caller = req.user as { sub: string }
+
+    const server = serverId
+      ? await queryOne<{ id: string }>(
+        `SELECT s.id
+         FROM servers s
+         JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $1
+         WHERE s.id = $2`,
+        [caller.sub, serverId]
+      )
+      : await queryOne<{ id: string }>(
+        `SELECT s.id
+         FROM servers s
+         JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $1
+         ORDER BY s.created_at
+         LIMIT 1`,
+        [caller.sub]
+      )
+
+    if (!server) return reply.code(404).send({ error: 'Server not found' })
+
+    await seedDefaultAgentEdges(server.id)
+
+    const nodes = await query(
+      `SELECT a.id, a.name, a.description, a.note, a.model_provider, a.model_id,
+              a.runtime, a.reasoning_effort, a.status, a.activity, a.activity_detail,
+              a.last_heartbeat_at, a.workspace_path, a.created_at,
+              a.role, a.parent_agent_id, a.machine_id, a.current_project_id,
+              a.custom_base_url,
+              (a.custom_api_key IS NOT NULL) AS has_custom_key,
+              m.name AS machine_name, m.hostname AS machine_hostname, m.status AS machine_status,
+              p.name AS current_project_name, p.slug AS current_project_slug
+       FROM agents a
+       LEFT JOIN machines m ON m.id = a.machine_id
+       LEFT JOIN projects p ON p.id = a.current_project_id
+       WHERE a.server_id = $1
+       ORDER BY CASE a.role
+         WHEN 'coordinator' THEN 0
+         WHEN 'tech-lead' THEN 1
+         WHEN 'ops' THEN 2
+         ELSE 3
+       END, a.name`,
+      [server.id]
+    )
+
+    const edges = await query<{
+      id: string
+      from_agent_id: string
+      to_agent_id: string
+      relation_kind: string
+      relation_layer: 'tree' | 'graph'
+      label: string | null
+      metadata: Record<string, unknown> | null
+    }>(
+      `SELECT id, from_agent_id, to_agent_id, relation_kind, relation_layer, label, metadata
+       FROM agent_edges
+       WHERE server_id = $1
+       ORDER BY
+         CASE relation_layer WHEN 'tree' THEN 0 ELSE 1 END,
+         CASE relation_kind
+           WHEN 'assistant' THEN 0
+           WHEN 'delegates' THEN 1
+           WHEN 'manages' THEN 2
+           ELSE 9
+         END,
+         created_at`,
+      [server.id]
+    )
+
+    const treeTargets = new Set(
+      edges
+        .filter(edge => edge.relation_layer === 'tree')
+        .map(edge => edge.to_agent_id)
+    )
+    const roots = nodes
+      .filter((node: any) => !treeTargets.has(node.id))
+      .map((node: any) => node.id)
+
+    return {
+      serverId: server.id,
+      nodes,
+      edges,
+      roots,
+    }
+  })
+
   // ── POST /api/agents ──────────────────────────────────────────────
   app.post('/', { preHandler: [app.authenticate] }, async (req, reply) => {
     const caller = req.user as { sub: string }
-    let { serverId, machineId, name, description, role, modelId, modelProvider, runtime, workspacePath, systemPrompt, parentAgentId, reasoningEffort } =
+    let { serverId, machineId, name, description, role, modelId, modelProvider, runtime, workspacePath, systemPrompt, parentAgentId, reasoningEffort, customApiKey, customBaseUrl } =
       req.body as {
         serverId?: string; machineId?: string; name: string; description?: string;
         role?: string; modelId?: string; modelProvider?: string;
         runtime?: string; workspacePath?: string; systemPrompt?: string;
         parentAgentId?: string; reasoningEffort?: string;
+        customApiKey?: string; customBaseUrl?: string;
       }
 
     if (!name?.trim()) return reply.code(400).send({ error: 'name required' })
@@ -399,8 +598,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
 
     const [agent] = await query(
       `INSERT INTO agents
-         (server_id, machine_id, name, description, model_id, model_provider, runtime, workspace_path, role, parent_agent_id, reasoning_effort)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (server_id, machine_id, name, description, model_id, model_provider, runtime, workspace_path, role, parent_agent_id, reasoning_effort, custom_api_key, custom_base_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         serverId, machineId ?? null, name.trim(), description ?? null,
@@ -411,6 +610,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         role ?? 'general',
         parentAgentId ?? null,
         reasoningEffort?.trim() || 'medium',
+        customApiKey?.trim() || null,
+        customBaseUrl?.trim() || null,
       ]
     )
 
@@ -859,7 +1060,6 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     const { tokenUsage } = req.body as { tokenUsage?: number }
 
-    processManager.updateHeartbeat(id)
     await query(
       `UPDATE agents SET last_heartbeat_at = NOW() WHERE id = $1`,
       [id]

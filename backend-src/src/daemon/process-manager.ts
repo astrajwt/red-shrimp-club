@@ -2,14 +2,16 @@
 // Aligned with slock daemon logic: spawn / stop / restart / session resume / message delivery
 
 import { spawn, ChildProcess, execSync } from 'child_process'
+import path from 'path'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 import { existsSync } from 'fs'
 import { mkdir, writeFile, access } from 'fs/promises'
 import { parseLogLine, ObsidianLogWriter, LogEventEmitter, LogEntry } from './logger.js'
 import {
   emitAgentStarted, emitAgentStopped, emitAgentCrashed,
-  emitAgentOffline, emitAgentLog,
+  emitAgentLog,
 } from './events.js'
 import { buildInitialMemoryIndex } from './workspace-init.js'
 import { resolveVaultRoot } from '../services/agent-workspace.js'
@@ -19,7 +21,7 @@ import { query } from '../db/client.js'
 import { pushThinking } from '../services/thinking-buffer.js'
 
 // Supported runtimes
-export const SUPPORTED_RUNTIMES = ['claude', 'codex', 'kimi'] as const
+export const SUPPORTED_RUNTIMES = ['claude', 'codex', 'kimi', 'gemini'] as const
 export type RuntimeId = typeof SUPPORTED_RUNTIMES[number]
 
 export interface AgentConfig {
@@ -35,6 +37,8 @@ export interface AgentConfig {
   reasoningEffort?: string
   sessionId?:   string
   role?:        string    // agent role (coordinator, tech-lead, ops, etc.) — used in bootstrap prompt
+  customApiKey?:  string  // per-agent API key override
+  customBaseUrl?: string  // per-agent base URL override
 }
 
 // Matches slock daemon's AgentProc states
@@ -55,7 +59,6 @@ interface AgentProcess {
   pid:             number | null
   sessionId:       string | null         // captured from claude stdout for --resume
   status:          AgentStatus
-  lastHeartbeatAt: Date | null
   crashCount:      number                // consecutive crash counter
   prematureExitCount: number             // clean exits that ran < 15s (codex model-refresh bug)
   spawnedAt:       Date | null           // when the child was spawned
@@ -65,8 +68,6 @@ interface AgentProcess {
   lastDeliveredMessage:     DeliveredMessage | null
 }
 
-const HEARTBEAT_TIMEOUT_MS  = 300_000  // 5 min — agents may think/generate for long stretches
-const HEARTBEAT_CHECK_INTERVAL = 60_000
 const NOTIFICATION_BATCH_MS = 3000
 const WAKE_NOTIFICATION_DELAY_MS = 1500
 const DEFAULT_KIMI_CLI_MODEL = 'kimi-code/kimi-for-coding'
@@ -95,11 +96,7 @@ export class ProcessManager {
   private agents = new Map<string, AgentProcess>()
   private obsidian = new ObsidianLogWriter()
   public  logEmitter = new LogEventEmitter()
-  private heartbeatTimer: NodeJS.Timer | null = null
-
-  constructor() {
-    this.heartbeatTimer = setInterval(() => this.checkHeartbeats(), HEARTBEAT_CHECK_INTERVAL)
-  }
+  constructor() {}
 
   private persistSessionId(agentId: string, sessionId: string | null): void {
     if (!sessionId?.trim()) return
@@ -126,14 +123,20 @@ export class ProcessManager {
     ap.lastDeliveredMessage = message
 
     if (!ap.child || !ap.child.stdin?.writable) {
-      // Agent is sleeping — wake it up with the message that triggered the wake (slock-style)
-      if (ap.status === 'sleeping') {
-        emitAgentLog(agentId, 'INFO', `[唤醒] ${ap.config.name} 从 sleeping 状态被消息唤醒: [${message.channel_type === 'dm' ? 'DM' : '#' + message.channel_name}] @${message.sender_name}: ${message.content.slice(0, 80)}`)
-        const resumeConfig = ap.sessionId
+      // Agent has no running process — wake it up regardless of status
+      // (sleeping, inactive, error — any status should be wakeable via @mention)
+      if (ap.status === 'sleeping' || ap.status === 'inactive') {
+        emitAgentLog(agentId, 'INFO', `[唤醒] ${ap.config.name} 从 ${ap.status} 状态被消息唤醒: [${message.channel_type === 'dm' ? 'DM' : '#' + message.channel_name}] @${message.sender_name}: ${message.content.slice(0, 80)}`)
+        const resumeConfig = ap.status === 'sleeping' && ap.sessionId
           ? { ...ap.config, sessionId: ap.sessionId }
-          : ap.config
+          : { ...ap.config, sessionId: undefined }
         // Pass the wake message so the resume prompt includes it inline
         this.spawn(resumeConfig, message).catch(err =>
+          emitAgentLog(agentId, 'ERROR', `Wake failed: ${err.message}`)
+        )
+      } else {
+        emitAgentLog(agentId, 'WARN', `[投递] ${ap.config.name} 无运行进程 (status=${ap.status})，尝试重新启动`)
+        this.spawn({ ...ap.config, sessionId: undefined }, message).catch(err =>
           emitAgentLog(agentId, 'ERROR', `Wake failed: ${err.message}`)
         )
       }
@@ -282,6 +285,25 @@ export class ProcessManager {
       }
     }
 
+    // For new sessions (no sessionId), fast-forward read position so receive_message
+    // only returns recent messages instead of hundreds of old ones
+    if (!effectiveConfig.sessionId) {
+      try {
+        await query(
+          `INSERT INTO agent_channel_reads (agent_id, channel_id, last_read_seq)
+           SELECT $1, cm.channel_id, COALESCE((SELECT MAX(seq) FROM messages WHERE channel_id = cm.channel_id), 0) - 10
+           FROM channel_members cm WHERE cm.agent_id = $1
+           ON CONFLICT (agent_id, channel_id)
+           DO UPDATE SET last_read_seq = GREATEST(
+             agent_channel_reads.last_read_seq,
+             EXCLUDED.last_read_seq
+           )`,
+          [config.id]
+        )
+        emitAgentLog(config.id, 'INFO', `[初始化] 新 session → 已读位置快进到最新（保留最近 10 条）`)
+      } catch { /* best effort */ }
+    }
+
     const pendingNotifications = existing?.pendingNotificationCount ?? 0
     const launchPrompt = this.buildLaunchPrompt(effectiveConfig, pendingNotifications, wakeMessage, unreadSummary)
 
@@ -327,7 +349,6 @@ export class ProcessManager {
       pid: child.pid ?? null,
       sessionId: resumeSessionId ?? null,
       status: 'active',
-      lastHeartbeatAt: new Date(),
       crashCount: existing?.crashCount ?? 0,
       prematureExitCount: existing?.prematureExitCount ?? 0,
       spawnedAt: new Date(),
@@ -349,34 +370,26 @@ export class ProcessManager {
     }
 
     // Parse stdout — capture session_id for resume and log trajectory
-    // Stdout activity = process is alive, update heartbeat (slock-style)
     // Reset crash count after agent has been running stably for 30s
     const spawnedAt = Date.now()
+    let stdoutBuffer = ''
     child.stdout?.on('data', (data: Buffer) => {
-      ap.lastHeartbeatAt = new Date()
       if (Date.now() - spawnedAt > 30_000) {
         if (ap.crashCount > 0) ap.crashCount = 0
         if (ap.prematureExitCount > 0) ap.prematureExitCount = 0
       }
-      const lines = data.toString().split('\n').filter(Boolean)
+      // Buffer cross-chunk lines: append data, split on \n, keep last incomplete segment
+      stdoutBuffer += data.toString()
+      const segments = stdoutBuffer.split('\n')
+      stdoutBuffer = segments.pop() ?? ''  // last segment is incomplete (or empty if data ended with \n)
+      const lines = segments.filter(Boolean)
       for (const line of lines) {
-        // Try to parse as JSON (claude --verbose outputs JSON events)
         // Try to parse as JSON (claude/codex --verbose outputs JSON events)
         let isProtocolJson = false
         try {
           const event = JSON.parse(line)
           isProtocolJson = true  // Successfully parsed → internal protocol message
           // Capture session_id from claude init/result events
-          if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
-            ap.sessionId = event.session_id
-            ap.config.sessionId = event.session_id
-            this.persistSessionId(config.id, event.session_id)
-          }
-          if (event.type === 'result' && event.session_id) {
-            ap.sessionId = event.session_id
-            ap.config.sessionId = event.session_id
-            this.persistSessionId(config.id, event.session_id)
-          }
           if (event.session_id && typeof event.session_id === 'string') {
             ap.sessionId = event.session_id
             ap.config.sessionId = event.session_id
@@ -390,6 +403,10 @@ export class ProcessManager {
         if (isProtocolJson) {
           try {
             const event = JSON.parse(line)
+
+            // Skip input events — only log agent output (user events contain tool_result/base64, very large)
+            if (event.type === 'user' || (event.type === 'message' && event.role === 'user')) continue
+
             let logContent: string | null = null
 
             // Claude stream-json: assistant text + thinking
@@ -436,11 +453,16 @@ export class ProcessManager {
         }
 
         const parsed = parseLogLine(line)
+        let content = parsed?.content ?? line
+        // Truncation guard for non-JSON lines (prevent 65KB single lines in Obsidian logs)
+        if (content.length > 2000) {
+          content = content.slice(0, 500) + ` ... [truncated ${content.length} chars]`
+        }
         const entry: LogEntry = {
           agentId:   config.id,
           agentName: config.name,
           level:     parsed?.level ?? 'INFO',
-          content:   parsed?.content ?? line,
+          content,
           timestamp: parsed?.ts ?? new Date(),
         }
         this.obsidian.write(entry)
@@ -499,10 +521,24 @@ export class ProcessManager {
         }
         ap.prematureExitCount = 0
 
-        // Clean exit — mark sleeping
-        emitAgentLog(config.id, 'INFO', `[诊断] 正常退出 → 进入 sleeping 状态，等待下一条消息唤醒。运行时长 ${uptimeSec}s`)
-        ap.status = 'sleeping'
-        query(`UPDATE agents SET status = 'sleeping', pid = NULL WHERE id = $1`, [config.id]).catch(() => {})
+        // Clean exit — management agents auto-respawn, executor agents sleep
+        const isManagement = ['coordinator', 'tech-lead', 'ops'].includes(config.role ?? '')
+        if (isManagement) {
+          emitAgentLog(config.id, 'INFO', `[诊断] 管理员 ${config.name} 正常退出 → 5s 后自动重启（管理员保持常驻）。运行时长 ${uptimeSec}s`)
+          ap.status = 'sleeping'
+          query(`UPDATE agents SET status = 'sleeping', pid = NULL WHERE id = $1`, [config.id]).catch(() => {})
+          setTimeout(() => {
+            if (!ap.child) {
+              this.spawn(ap.config).catch(err =>
+                emitAgentLog(config.id, 'ERROR', `[重启失败] ${err.message}`)
+              )
+            }
+          }, 5_000)
+        } else {
+          emitAgentLog(config.id, 'INFO', `[诊断] 执行者 ${config.name} 正常退出 → 进入 sleeping 状态，等待 @mention 唤醒。运行时长 ${uptimeSec}s`)
+          ap.status = 'sleeping'
+          query(`UPDATE agents SET status = 'sleeping', pid = NULL WHERE id = $1`, [config.id]).catch(() => {})
+        }
       } else if (signal === 'SIGTERM' || signal === 'SIGKILL' || code === 143 || code === 137) {
         const signalName = signal ?? (code === 143 ? 'SIGTERM' : code === 137 ? 'SIGKILL' : `code ${code}`)
         if (ap.status === 'sleeping') {
@@ -638,7 +674,6 @@ export class ProcessManager {
       pid: null,
       sessionId: config.sessionId ?? null,
       status: 'sleeping',
-      lastHeartbeatAt: null,
       crashCount: 0,
       pendingNotificationCount: 0,
       notificationTimer: null,
@@ -655,36 +690,6 @@ export class ProcessManager {
 
   getStatus(agentId: string): AgentStatus | null {
     return this.agents.get(agentId)?.status ?? null
-  }
-
-  // ── Heartbeat update ──────────────────────────────────────────────
-  updateHeartbeat(agentId: string): void {
-    const proc = this.agents.get(agentId)
-    if (proc) proc.lastHeartbeatAt = new Date()
-  }
-
-  private checkHeartbeats(): void {
-    const now = new Date()
-    for (const [agentId, proc] of this.agents) {
-      if (!proc.child || !proc.lastHeartbeatAt) continue
-      const elapsed = now.getTime() - proc.lastHeartbeatAt.getTime()
-      if (elapsed > HEARTBEAT_TIMEOUT_MS) {
-        emitAgentLog(agentId, 'WARN', `[心跳超时] ${proc.config.name} 已 ${Math.round(elapsed / 1000)}s 无响应 (阈值=${HEARTBEAT_TIMEOUT_MS / 1000}s)`)
-        emitAgentOffline(agentId)
-        if (proc.pid) {
-          try {
-            process.kill(proc.pid, 0)
-            emitAgentLog(agentId, 'ERROR', `[诊断] 进程 pid=${proc.pid} 仍存活但无心跳 → 可能: LLM长时间推理/API卡住/死循环。执行强制终止`)
-            proc.child.kill('SIGKILL')
-          } catch {
-            emitAgentLog(agentId, 'INFO', `[诊断] 进程 pid=${proc.pid} 已不存在 → 安排重启`)
-            proc.child = null
-            proc.pid = null
-            this.scheduleRestart(agentId)
-          }
-        }
-      }
-    }
   }
 
   private isAlive(pid: number | null): boolean {
@@ -733,152 +738,86 @@ export class ProcessManager {
     ]
   }
 
+  /**
+   * Write .gemini/settings.json in the agent's workspace so `gemini` picks up the chat-bridge MCP server.
+   * Gemini CLI reads MCP config from <project>/.gemini/settings.json (not a CLI flag).
+   */
+  private ensureGeminiMcp(config: AgentConfig): void {
+    const dir = path.join(config.workspacePath, '.gemini')
+    const settingsPath = path.join(dir, 'settings.json')
+    const chatBridgePath = this.getChatBridgePath()
+    const desired = {
+      mcpServers: {
+        chat: {
+          command: 'node',
+          args: [
+            chatBridgePath,
+            '--agent-id', config.id,
+            '--server-url', config.serverUrl,
+            '--auth-token', config.apiKey,
+          ],
+        },
+      },
+    }
+    try {
+      fs.mkdirSync(dir, { recursive: true })
+      // Merge with existing settings if any
+      let existing: Record<string, any> = {}
+      try {
+        existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
+      } catch { /* no existing file */ }
+      existing.mcpServers = { ...existing.mcpServers, ...desired.mcpServers }
+      fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2))
+    } catch (err: any) {
+      emitAgentLog(config.id, 'WARN', `[MCP] Failed to write gemini MCP config: ${err.message}`)
+    }
+  }
+
   private buildBootstrapPrompt(config: Pick<AgentConfig, 'name' | 'machineId' | 'machineName' | 'role'>): string {
     const { name, machineId, machineName, role } = config
     const vaultRoot = resolveVaultRoot()
+    // Use realpath so gemini sandbox can match the path (symlinks confuse sandbox checks)
+    let resolvedVault: string
+    try { resolvedVault = fs.realpathSync(vaultRoot) } catch { resolvedVault = vaultRoot }
     const machineLabel = machineName ? `${machineName} (id: ${machineId})` : machineId
-    return `You are "${name}", an AI agent in Red Shrimp.
+    return `You are “${name}”, an AI agent in Red Shrimp.
+Machine: **${machineLabel}**
+Vault: \`${resolvedVault}\` (= \`~/JwtVault\`)
 
-Read \`MEMORY.md\` in your cwd first. It is your editable memory index and the main source of truth for your role, preferences, and active context. Follow any references inside it to other workspace files only as needed.
-The shared vault root is fixed at \`${vaultRoot}\` (same as \`~/JwtVault\`). Shared hub docs live under \`${vaultRoot}/00_hub\`. When you need canonical shared project/process knowledge, read from that vault path first rather than assuming it exists inside your private workspace.
-你当前运行的机器是：**${machineLabel}**。不同机器能力不同（GPU、公网访问、存储路径），在处理路由、资源申请、路径配置时请根据机器信息判断。
+Startup sequence:
+1. Read \`MEMORY.md\` (your editable memory — role, preferences, active context).
+2. Read \`KNOWLEDGE.md\` (vault route table + role rules, system-generated).
+3. Read \`${resolvedVault}/00_hub/02_CONVENTIONS.md\` for naming, frontmatter, and documentation rules.
+4. Read \`${resolvedVault}/00_hub/05_WORKFLOW.md\` for execution principles, task rules, and git/checklist workflow.
 
-Communication rules:
-- Use MCP chat tools only for communication (send_message, receive_message etc.).
-- **Bash and all file tools are fully available** — use them freely for any task.
-- The only shell restriction: do NOT call shell commands to interact with the chat system (no curl/wget to the API, no shell scripts that send messages). Use the MCP chat tools for that.
+**⚠️ @mention rule（最重要，绝对执行）**: 如果一条消息没有 @你（@${name}），就不做任何事情，直接 receive_message(block=true) 继续监听。无论群聊还是 DM，只响应明确 @你 的消息。
+
+Communication:
+- MCP chat tools for all messaging (no curl/wget to API).
+- Bash and file tools are fully available for any task.
 - Do NOT output plain text outside tool calls.
-- Do NOT announce yourself or send unprompted status updates.
-- Write important long-term state back to \`MEMORY.md\` instead of relying on chat history.
-- **⚠️ @mention rule（最重要，绝对执行）**: 如果一条消息没有 @你（@${name}），就不做任何事情，直接 receive_message(block=true) 继续监听。无论群聊还是 DM，只响应明确 @你 的消息。如果消息 @了其他 agent 但没有 @你，保持沉默。**绝对不允许因为"我也在这个频道"就主动介入**。
-
-Non-negotiable execution principles:
-- **先留痕，再结束**：只要你完成了代码修改、调研、分析、实验、排障、巡检、流程整理中的任意一种工作，就必须留下文档或结构化记录，不能只在聊天里回复结果。
-- **文档是默认产物**：除非任务只是极短的确认/问答/路由，否则默认要生成或更新 vault 文档，并在回复里给出相对路径。
-- **完成后必须提交 git**：凡是你新增或修改了 vault 文档、工作区文件、项目文档、实验记录、手册、总结，都必须在结束当前步骤前调用 \`vault_commit\`，把这次改动提交到 git，并写清楚简短描述。
-- **不能把“稍后再写文档/稍后再 push”当成完成**：没有文档留痕或没有 git commit 的工作，默认视为没完成闭环。
-- **如果任务本身要求代码实现**：除了代码结果，也要补对应的开发/实验/排障文档，再 commit。
-- **重型产物不写入 vault**：大型临时文件（model checkpoints、profiler raw logs、benchmark dumps）保留在本地实验目录（如 \`~/experiments/{project}/\`），不要写进 vault；只把可复用结论总结到 vault 文档。
-- **日报/周报仍然写入 vault**：日报、周报、总结、review、runbook、知识沉淀继续走 vault 路由。
-- **不要把重型原始产物 attach 到 vault task 文档**：task 附件只挂总结、设计、review、runbook 一类可复用文档；checkpoint / raw profiler logs 保留本地路径即可。
+- Write long-term state to \`MEMORY.md\`.
 
 Available MCP chat tools:
-- \`mcp__chat__receive_message\`
-- \`mcp__chat__send_message\`
-- \`mcp__chat__list_server\`
-- \`mcp__chat__read_history\`
-- \`mcp__chat__get_human_messages\`  — get all messages sent by humans on a given date (for daily report summarization)
-- \`mcp__chat__list_tasks\`          — list tasks in a specific channel
-- \`mcp__chat__list_all_tasks\`      — list ALL tasks across the entire server (for weekly reports/ops overview)
-- \`mcp__chat__get_team_status\`     — get all agents' status, open task counts, and current project (for task dispatch)
-- \`mcp__chat__read_agent_memory\`   — [coordinator only] read another agent's MEMORY.md to understand their current context
-- \`mcp__chat__mark_task_discussed\` — [coordinator only] unlock a task after discussion so assignee can start working
-- \`mcp__chat__create_tasks\`
-- \`mcp__chat__claim_tasks\`
-- \`mcp__chat__unclaim_task\`
-- \`mcp__chat__update_task_status\`
-- \`mcp__chat__link_task_doc\`
-- \`mcp__chat__create_sticky_note\`
-- \`mcp__chat__vault_commit\`
+receive_message, send_message, list_server, read_history, get_human_messages,
+list_tasks, list_all_tasks, get_team_status, read_agent_memory (coordinator only),
+mark_task_discussed (coordinator only), create_tasks, claim_tasks, unclaim_task,
+list_cron_jobs, create_cron_job, update_cron_job, delete_cron_job,
+update_task_status, review_accept_task (ops only), review_reject_task (ops only),
+link_task_doc, create_sticky_note, vault_commit
 ${(role === 'coordinator' || role === 'tech-lead') ? `
-Swarm（sub-agent）模式：你可以通过 Bash 调用 \`claude -p "任务描述" --print\` 生成子 agent 进程处理并行子任务。子 agent 在 DB 中通过 parent_agent_id 关联到你，在 UI 中会显示在你的 swarm 面板中。生成子 agent 前须向 Donovan 汇报。
+Sub-agent mode: \`claude -p “任务描述” --print\` to spawn one-shot sub-agents via Bash.
 ` : ''}
-Task rules:
-- Tasks are explicitly assigned. Do not rely on claim/unclaim as a normal workflow.
-- **绝对禁止抢活**: 只能执行 \`claimedByName\` 等于你名字（${name}）的任务。看到任务列表里 \`claimedByName\` 是别人名字的，一律忽略，**不得主动介入或重复执行**。
-- **查找自己的工作队列**：用 \`list_tasks(mine=true)\` 只拉取分配给自己的任务，不要用 \`list_tasks\` 拿全部任务再自己判断。
-- **分派后等待，不要重复执行**：如果你已经把某个任务分配给了下属 agent，你的职责是等待和 review，不要自己也去执行同一个任务。
-- Only update the status of tasks already assigned to you.
-- When creating a task, assign it directly to the right agent up front instead of leaving it open.
-- \`create_tasks\` accepts the assignee as an agent id, plain name, or @mention; if omitted, the task is assigned to you. You can also pass \`linked_docs\` (array of vault-relative paths) to attach documents when creating tasks.
-- Use \`link_task_doc\` to attach a vault document to an existing task. Pass the channel, task_number, and doc_path (vault-relative). Set status to "writing" while working on it, "unread" when ready for review.
-- **文档必须 attach 到 task**：写完文档后，必须用 \`link_task_doc\` 把文档路径挂到对应 task。如果没有现成 task，先用 \`create_tasks\` 创建一个再挂。
-- **任务审核流程（必须遵守，不能跳过）**：
-  1. **开工前**：确认是否有对应 task。没有则先用 \`create_tasks\` 创建，再开始工作。不许无 task 开工。
-  2. 工作过程中，把 task 状态设为 \`in_progress\`。
-  3. 完成后，用 \`link_task_doc\` 把产出文档 attach 到 task，再把 task 状态改为 \`in_review\`（**不要直接设为 done**），并通知 @Donovan review。
-  4. 如果 Donovan 驳回（reject），Donovan 会协助你一起优化，直到通过 review。
-  5. 只有 Donovan 或 @Jwt2077 才能把 task 标为 \`done\`。
-- All doc paths must be vault-root-relative (e.g. \`03_knowledge/02_reading_notes/xxx.md\`), NOT workspace-relative.
-- **Vault 绝对路径**: \`${vaultRoot}\`。读写 vault 文件时用绝对路径：\`${vaultRoot}/{vault相对路径}\`。例如 \`${vaultRoot}/03_knowledge/02_reading_notes/xxx.md\`。
-- **消息中引用路径的写法（必须遵守）**:
-  - Vault 内的文件：只写 vault 相对路径，如 \`03_knowledge/02_reading_notes/xxx.md\`，系统会自动转成可点击链接。不要加 \`vault://\` 前缀，不要用绝对路径。
-  - Vault 外的文件（本地实验目录等）：直接写绝对路径文字，不要包装成 \`vault://\` 链接。
-  - **禁止**：绝对路径套 \`vault://\` 前缀，例如 \`vault://${vaultRoot}/...\` 这类写法永远是错的。
-- **文档路由（必须遵守，路径来自 \`00_hub/04_ARCHITECTURE.md\`）**:
-  > **核心区分**：\`03_knowledge/\` = 有外部来源（能填 \`source:\` 字段）；\`05_notes/\` = 自己写的大段文字（无需外部来源）
-  | 类型 | 路径 |
-  |------|------|
-  | 文章/博客/网文阅读笔记（有链接） | \`03_knowledge/02_reading_notes/\` |
-  | 视频/课程/书籍（体系化，建子目录） | \`03_knowledge/01_lecture_note/{主题}/\` |
-  | 论文笔记 | \`03_knowledge/04_papers/\` |
-  | 调研/综述（"调研总结一下"） | \`03_knowledge/05_surveys/\` |
-  | 手册/操作指南 | \`03_knowledge/03_manual/\` |
-  | 项目架构分析/源码走读 | \`02_project/{领域}/{项目名}/01_codewalk/\` |
-  | 实验记录 | \`02_project/{领域}/{项目名}/02_experiments/\` |
-  | 工程/开发/debug | \`02_project/{领域}/{项目名}/03_engineering/\` |
-  | 性能分析 | \`02_project/{领域}/{项目名}/04_performance/\` |
-  | 经验沉淀/技术决策（项目级） | \`02_project/{领域}/{项目名}/05_insights/\` |
-  | 大段摘要/个人总结（无外部来源） | \`05_notes/03_experience/\` 或 \`05_notes/01_brainwave/\` |
-  | 配置手顺/复现方法/bugfix | \`05_notes/02_handbook/\` |
-  | 日报/巡检/周报 | \`04_routine/agents/{名字}/logs/\` 或 \`04_routine/daily-reports/\` |
-  | 经验沉淀/复盘（"沉淀一下"） | \`05_notes/03_experience/\` |
-  | 灵感/随笔/闪念 | \`05_notes/01_brainwave/\` |
-  | 简历/作品集 | \`01_portfolio/\` |
-  - **触发词路由**：听到"**沉淀一下**" → \`05_notes/03_experience/\`；听到"**调研总结一下**" → \`03_knowledge/05_surveys/\`
-  - **判断原则**：能填 source 字段（有链接/来源）→ \`03_knowledge/\`；自己写的大段文字无外部来源 → \`05_notes/\`
-  - 不确定归类时，优先放 \`05_notes/01_brainwave/\`
-  - 日报、周报继续走 vault；checkpoint/raw profiler logs/benchmark dumps 保留在本地实验目录
-  - **禁止写入 \`00_hub/agents/\` 目录**（agent 私有工作区，系统管理）
-- **文件命名（必须遵守，来自 \`00_hub/02_CONVENTIONS.md\`）**:
-  - 格式：\`{前缀}-{YYYY-MM-DD}-{标题}.md\`
-  - 前缀：\`exp\` / \`debug\` / \`dev\` / \`bugfix\` / \`paper\` / \`survey\` / \`procedure\` / \`decision\` / \`flash\` / \`retro\`
-  - 标题：kebab-case，不超过 5 词，必须具体（禁止 notes/summary/misc/experiment-1）
-- **留痕规则（所有总结性工作必须遵守）**:
-  - 任何学习、调研、分析、总结、阅读笔记等产出 **必须写入 vault 文件**，不能只在聊天里回复。
-  - 每个文档顶部写 YAML frontmatter（来自 \`00_hub/02_CONVENTIONS.md\`，**无需写 title**）：
-  - 阅读笔记（02_reading_notes）用简化版：
-\`\`\`yaml
----
-date: YYYY-MM-DD
-author: {你的名字}
-tags: [tag1, tag2]
-source: {文章标题 / URL}
----
-\`\`\`
-  - 实验/工程/调研等通用产出：
-\`\`\`yaml
----
-date: YYYY-MM-DD
-agent: {你的名字}
-type: exp | dev | debug | survey | decision | insight | experience
-task: "#tNN"         # 关联任务编号（无则省略）
-tags: [tag1, tag2]
-triggers: []         # 检索触发词
-project: ""          # 所属项目名（无则省略）
-status: draft | in-progress | completed
----
-\`\`\`
-  - 写完文档后在聊天里附上 vault 相对路径，格式：\`文档路径：03_knowledge/02_reading_notes/xxx.md\`
-  - 如果任务关联了 task，用 \`link_task_doc\` 把文档挂到 task 上。
-- **Git 规则（必须遵守）**:
-  - After writing or updating vault documents, call \`vault_commit\` with a short description to commit changes to git.
-  - 把 \`vault_commit\` 当作任务收尾动作的一部分，而不是可选动作。
-  - 只要本轮工作产生了应保留的文件改动，就必须 commit。
-
 Working loop:
-1. Read \`MEMORY.md\`.
-2. Call \`mcp__chat__receive_message(block=true)\` to listen for work.
-3. Reply or take action as needed using \`mcp__chat__send_message\` and task tools.
-4. When you finish assigned work, move it to \`in_review\` unless it is truly trivial.
-5. **收尾 checklist（每轮结束前必须按顺序执行，不能跳过任何一项）**：
-   - [ ] 是否新增/修改了 vault 文件？→ 是则调用 \`vault_commit\`（一次提交涵盖本轮所有改动）
-   - [ ] 是否有任务完成或状态变化？→ 是则调用 \`update_task_status\`
-   - [ ] 是否有文档需要挂到 task？→ 是则调用 \`link_task_doc\`
-   - 以上全部完成后，再调用 \`mcp__chat__receive_message(block=true)\`
-6. **绝对不允许在 vault_commit 之前就调用 receive_message**：如果本轮产生了任何文件改动，必须先 commit 再回到监听。
+1. Read \`MEMORY.md\` → \`KNOWLEDGE.md\` → hub docs as needed.
+2. \`receive_message(block=true)\` to listen.
+3. Act on @-mentioned messages; use task + doc tools as needed.
+4. Finish: vault_commit → update_task_status → link_task_doc → receive_message(block=true).
+5. Never call receive_message before vault_commit if you changed files.
 
-Your process may exit between turns. Make \`receive_message(block=true)\` your last action whenever you are done with the current step.`
+详细规则（执行原则、任务规则、文件命名、Git checklist）见 \`00_hub/05_WORKFLOW.md\` 和 \`00_hub/02_CONVENTIONS.md\`。
+
+Your process may exit between turns. Make \`receive_message(block=true)\` your last action.`
   }
 
   // Slock-style resume prompt: include the wake message inline so the agent knows
@@ -887,6 +826,7 @@ Your process may exit between turns. Make \`receive_message(block=true)\` your l
     wakeMessage?: DeliveredMessage | null,
     unreadSummary?: Record<string, number>,
     supportsStdinNotification = true,
+    agentName?: string,
   ): string {
     // Case 1: Resume with a specific wake message (slock: agent:start with wakeMessage)
     if (wakeMessage) {
@@ -911,7 +851,8 @@ Your process may exit between turns. Make \`receive_message(block=true)\` your l
         }
       }
 
-      prompt += '\n\nRespond as appropriate — reply using send_message, or take action as needed. Then call receive_message(block=true) to keep listening.'
+      const nameTag = agentName ? `@${agentName}` : '@you'
+      prompt += `\n\nRemember your @mention rule: if this message does not mention ${nameTag}, stay silent — call receive_message(block=true) and keep listening. If it does mention you (or is a DM), respond using send_message or take action as needed, then call receive_message(block=true).`
 
       if (supportsStdinNotification) {
         prompt += '\n\nNote: While you are busy, you may receive [System notification: ...] messages. Finish your current step, then call receive_message to check.'
@@ -947,9 +888,20 @@ Your process may exit between turns. Make \`receive_message(block=true)\` your l
         wakeMessage,
         unreadSummary ?? (unreadCount > 0 ? { 'unknown': unreadCount } : undefined),
         supportsStdinNotification(config.runtime),
+        config.name,
       )
     }
-    return this.buildBootstrapPrompt(config)
+    // New session: embed the wake message in bootstrap prompt so the agent
+    // doesn't have to wade through hundreds of old messages to find it
+    let prompt = this.buildBootstrapPrompt(config)
+    if (wakeMessage) {
+      const channelLabel = wakeMessage.channel_type === 'dm'
+        ? `DM:@${wakeMessage.channel_name}`
+        : `#${wakeMessage.channel_name}`
+      const senderPrefix = wakeMessage.sender_type === 'agent' ? '(agent) ' : ''
+      prompt += `\n\n---\n\nYou were woken by this message — respond to it after completing your startup sequence:\n\n[${channelLabel}] ${senderPrefix}@${wakeMessage.sender_name}: ${wakeMessage.content}`
+    }
+    return prompt
   }
 
   // ── Build shell command for each runtime (matches slock daemon) ──
@@ -997,15 +949,43 @@ Your process may exit between turns. Make \`receive_message(block=true)\` your l
         } else {
           codexArgs.push('-m', 'gpt-5.4')
         }
-        if (config.reasoningEffort) {
-          codexArgs.push('-c', `model_reasoning_effort=${config.reasoningEffort}`)
-        } else {
-          codexArgs.push('-c', 'model_reasoning_effort="medium"')
+        // Codex valid values: none, minimal, low, medium, high, xhigh
+        const CODEX_EFFORT_MAP: Record<string, string> = {
+          extra_high: 'xhigh', extrahigh: 'xhigh', extra: 'high',
         }
+        const rawEffort = config.reasoningEffort?.trim() || 'medium'
+        const codexEffort = CODEX_EFFORT_MAP[rawEffort] ?? rawEffort
+        codexArgs.push('-c', `model_reasoning_effort=${codexEffort}`)
         // Extend model list timeout to avoid "failed to refresh available models" error
         codexArgs.push('-c', 'model_list_timeout_sec=60')
         codexArgs.push(prompt)
         return codexArgs
+      }
+
+      // ── Gemini CLI (Google) ──────────────────────────────────────────
+      // Gemini CLI doesn't support --input-format or --mcp-config.
+      // MCP is configured via .gemini/settings.json in the workspace (written by ensureGeminiMcp).
+      // Prompt is passed via -p (non-interactive headless mode).
+      case 'gemini': {
+        this.ensureGeminiMcp(config)
+        const vaultRoot = resolveVaultRoot()
+        const resolvedVault = fs.realpathSync(vaultRoot)
+        // Resolve workspace path to realpath (symlinks confuse gemini's directory mismatch check)
+        try { config.workspacePath = fs.realpathSync(config.workspacePath) } catch {}
+        const geminiArgs = [
+          'gemini',
+          '--output-format', 'stream-json',
+          '--model', config.modelId || 'gemini-2.5-pro',
+          '--approval-mode', 'yolo',
+          '--sandbox', 'false',
+          // Also include vault root so gemini can discover files there
+          '--include-directories', resolvedVault,
+        ]
+        if (config.sessionId) {
+          geminiArgs.push('--resume', config.sessionId)
+        }
+        geminiArgs.push('-p', prompt)
+        return geminiArgs
       }
 
       // ── Kimi CLI (Moonshot) ────────────────────────────────────────
@@ -1016,6 +996,7 @@ Your process may exit between turns. Make \`receive_message(block=true)\` your l
         const kimiArgs = [
           'kimi',
           '--print',
+          '--yolo',
           '--output-format', 'stream-json',
           '--mcp-config', mcpConfig,
         ]
@@ -1046,7 +1027,7 @@ Your process may exit between turns. Make \`receive_message(block=true)\` your l
     // Remove empty API keys (matches slock daemon)
     for (const k of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL',
                       'OPENAI_API_BASE', 'OPENAI_ORG_ID', 'OPENAI_PROJECT', 'MOONSHOT_API_KEY',
-                      'ZHIPU_API_KEY', 'DASHSCOPE_API_KEY']) {
+                      'ZHIPU_API_KEY', 'DASHSCOPE_API_KEY', 'GEMINI_API_KEY']) {
       if (!env[k] || !env[k].trim()) delete env[k]
     }
 
@@ -1089,11 +1070,23 @@ Your process may exit between turns. Make \`receive_message(block=true)\` your l
       }
     }
 
+    if (config.runtime === 'gemini') {
+      // Gemini CLI reads GEMINI_API_KEY from env
+      if (config.customApiKey) {
+        env['GEMINI_API_KEY'] = config.customApiKey
+      } else if (process.env.GEMINI_API_KEY?.trim()) {
+        env['GEMINI_API_KEY'] = process.env.GEMINI_API_KEY.trim()
+      }
+    }
+
+    // Per-agent custom API key / base URL (highest priority — overrides all above)
+    if (config.customApiKey && config.runtime !== 'gemini') env['OPENAI_API_KEY'] = config.customApiKey
+    if (config.customBaseUrl) env['OPENAI_BASE_URL'] = config.customBaseUrl
+
     return env
   }
 
   destroy(): void {
-    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     this.obsidian.close()
   }
 }

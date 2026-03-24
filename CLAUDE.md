@@ -75,21 +75,17 @@ The daemon manages AI agent lifecycles (like systemd for agents):
 - `Scheduler与心跳机制设计.md` — scheduler/heartbeat design
 - `Agent通信机制.md` — agent communication protocol
 - `前端设计规范-红弦风格.md` — UI design system (red-shrimp theme)
-- `部署方案.md` — deployment plan (design reference; actual deployment uses Tencent Cloud)
-- `部署记录.md` — actual deployment log and operational notes
+- `部署记录.md` — deployment log (local + Cloudflare Tunnel)
 - `编译部署与故障排查手册.md` — build, deploy, and troubleshooting manual
 - `dev-log/` — daily development logs
 
 ## Production Deployment
 
-See `DEPLOY-SECRETS.md` (not checked in) for server credentials and deployment commands.
+See `DEPLOY-SECRETS.md` (not checked in) for deployment info.
 
-**Architecture**: Backend runs as `npx tsx src/index.ts` via systemd, frontend built to `frontend-src/dist/` served by Nginx.
+**Architecture**: Local deployment — backend runs as `npx tsx src/index.ts`, frontend built to `frontend-src/dist/`. Public access via Cloudflare Tunnel (shrimp.red).
 
 ### Notes
-- Server DB is independent from local DB (different agent UUIDs)
-- `daemon-src/dist/chat-bridge.js` is NOT deployed — server uses `src/daemon/chat-bridge.mjs` directly
-- DB schema changes require manual migration on server
 - Environment variables reference for credentials — never hardcode secrets
 
 ## Conventions

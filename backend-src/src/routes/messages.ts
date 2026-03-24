@@ -18,7 +18,7 @@ interface ParsedDecisionItem {
 
 // Parse @mentions from message content, returns array of { name, id? }
 function parseMentions(content: string): { name: string }[] {
-  const mentionRegex = /@(\w+)/g
+  const mentionRegex = /@([\w-]+)/g
   const mentions: { name: string }[] = []
   let match
   while ((match = mentionRegex.exec(content)) !== null) {

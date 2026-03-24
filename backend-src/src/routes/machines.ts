@@ -211,9 +211,10 @@ export const machineRoutes: FastifyPluginAsync = async (app) => {
   app.get('/runtimes', { preHandler: [app.authenticate] }, async () => {
     const liveRuntimes = machineConnectionManager.getAllRuntimes()
     return [
-      { id: 'claude', name: 'Claude Code', binary: 'claude', available: liveRuntimes.includes('claude'), defaultModel: 'claude-sonnet-4-6' },
-      { id: 'codex',  name: 'Codex CLI',   binary: 'codex',  available: liveRuntimes.includes('codex'),  defaultModel: 'gpt-5.4' },
-      { id: 'kimi',   name: 'Kimi CLI',    binary: 'kimi',   available: liveRuntimes.includes('kimi'),   defaultModel: 'kimi-code/kimi-for-coding' },
+      { id: 'claude',  name: 'Claude Code', binary: 'claude',  available: liveRuntimes.includes('claude'),  defaultModel: 'claude-sonnet-4-6' },
+      { id: 'codex',   name: 'Codex CLI',   binary: 'codex',   available: liveRuntimes.includes('codex'),   defaultModel: 'gpt-5.4' },
+      { id: 'kimi',    name: 'Kimi CLI',    binary: 'kimi',    available: liveRuntimes.includes('kimi'),    defaultModel: 'kimi-code/kimi-for-coding' },
+      { id: 'gemini',  name: 'Gemini CLI',  binary: 'gemini',  available: liveRuntimes.includes('gemini'),  defaultModel: 'gemini-2.5-flash' },
     ]
   })
 }

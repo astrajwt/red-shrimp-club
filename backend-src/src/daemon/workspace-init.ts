@@ -4,7 +4,6 @@
 //   GUIDE.md       — 工作区指南（模型无关）
 //   MEMORY.md      — 短期活跃记忆（当前任务、阻塞、下一步）
 //   KNOWLEDGE.md   — 共享 Vault 入口索引（只放相对路径链接）
-//   HEARTBEAT.md   — 心跳任务列表
 // 实验笔记统一写入共享 Vault 的 05_notes/ 目录，不在 agent 私有 workspace 保留 notes/ 文件夹
 
 import { readFileSync, existsSync } from 'fs'
@@ -625,7 +624,6 @@ export async function initAgentWorkspace(
     writeIfMissing(join(workspacePath, 'GUIDE.md'),     buildGuide(cfg)),
     writeIfMissing(join(workspacePath, 'MEMORY.md'),    buildMemory(cfg)),
     writeIfMissing(join(workspacePath, 'KNOWLEDGE.md'), buildKnowledge(cfg)),
-    writeIfMissing(join(workspacePath, 'HEARTBEAT.md'), buildHeartbeat(cfg)),
     // Allow all tools — prevents Claude Code from blocking Bash/file tools
     writeIfMissing(join(workspacePath, '.claude', 'settings.json'), CLAUDE_SETTINGS_ALL_TOOLS),
   ])
@@ -645,7 +643,6 @@ export async function refreshAgentWorkspace(
     writeFile(join(workspacePath, 'GUIDE.md'), buildGuide(cfg), 'utf-8'),
     writeFile(join(workspacePath, 'MEMORY.md'), mergedMemory, 'utf-8'),
     writeFile(join(workspacePath, 'KNOWLEDGE.md'), buildKnowledge(cfg), 'utf-8'),
-    writeFile(join(workspacePath, 'HEARTBEAT.md'), buildHeartbeat(cfg), 'utf-8'),
     // Always overwrite settings to ensure permissions stay open
     writeFile(join(workspacePath, '.claude', 'settings.json'), CLAUDE_SETTINGS_ALL_TOOLS, 'utf-8'),
   ])
@@ -722,7 +719,14 @@ export function buildInitialMemoryIndex(input: InitialMemoryTemplateInput): stri
 }
 
 function roleSeedFor(role: AgentRole): string {
-  return defaultRoleSeeds[role]
+  // Try vault template first, fallback to hardcoded
+  const vaultRoot = process.env.VAULT_ROOT?.trim() || join(homedir(), 'JwtVault')
+  const templatePath = join(vaultRoot, '00_hub', 'templates', 'roles', `${role}.md`)
+  try {
+    return readFileSync(templatePath, 'utf-8')
+  } catch {
+    return defaultRoleSeeds[role]
+  }
 }
 
 function buildGuide(cfg: AgentWorkspaceConfig): string {
@@ -764,57 +768,56 @@ function buildKnowledge(cfg: AgentWorkspaceConfig): string {
   const focus = focusMap[cfg.role] ?? '任务拆解、实验设计、recipe 编排、研究资料索引'
   const commonLinks = [
     '- `00_hub/00_INDEX.md` — 全局导航',
-    '- `00_hub/02_CONVENTIONS.md` — frontmatter、命名、路由、检索规则',
+    '- `00_hub/02_CONVENTIONS.md` — **命名、frontmatter、路由规范（唯一来源）**',
     '- `00_hub/03_SPRINT.md` — 当前研究重点',
-    '- `00_hub/04_ARCHITECTURE.md` — Vault 架构',
-    '- `00_hub/05_WORKFLOW.md` — agent memory / vault / project / skill 边界',
+    '- `00_hub/04_ARCHITECTURE.md` — Vault 目录架构',
+    '- `00_hub/05_WORKFLOW.md` — **执行原则、任务规则、Git checklist（必读）**',
     '- `00_hub/skills/docs/00_index.md` — skill / principle 入口',
   ]
   const roleLinks: Partial<Record<AgentRole, string[]>> = {
     coordinator: [
       '- `00_hub/01_AGENTS.md` — 团队结构',
-      '- `02_project/{领域}/{项目名}/05_insights/` — 看项目沉淀和可复用模式',
-      '- `05_notes/03_experience/` — 经验复盘和组织改进',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/05_insights/` — 项目沉淀和可复用模式',
+      '- `03_thinking/03_notes/` — 经验复盘和组织改进',
     ],
     'tech-lead': [
-      '- `02_project/{领域}/{项目名}/03_engineering/` — 工程开发和技术方案',
-      '- `02_project/{领域}/{项目名}/02_experiments/` — 实验记录',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/03_engineering/` — 工程开发和技术方案',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/02_experiments/` — 实验记录',
       '- `00_hub/01_AGENTS.md` — 团队结构和可用 agent',
     ],
     ops: [
       '- `04_routine/` — 日报、巡检、运营记录',
-      '- `05_notes/02_handbook/` — 故障和恢复经验',
+      '- `02_knowledge/{domain}/03_references/` — 故障和恢复经验',
     ],
     investigator: [
-      '- `03_knowledge/02_reading_notes/` — 文章/网文总结',
-      '- `03_knowledge/01_lecture_note/` — 视频/课程笔记',
-      '- `03_knowledge/04_papers/` — 论文',
-      '- `03_knowledge/05_surveys/` — 网上调研',
-      '- `02_project/{领域}/{项目名}/01_codewalk/` — 项目架构和源码走读',
+      '- `02_knowledge/{domain}/01_concepts/` — 概念/阅读笔记/综述',
+      '- `02_knowledge/zz_courses/` — 课程笔记',
+      '- `02_knowledge/{domain}/04_deep-dives/` — 论文精读',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/01_codewalk/` — 项目架构和源码走读',
     ],
     developer: [
-      '- `02_project/{领域}/{项目名}/03_engineering/` — 工程开发、debug、变更',
-      '- `05_notes/02_handbook/` — 环境配置、复现步骤、常见 bug 手顺',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/03_engineering/` — 工程开发、debug、变更',
+      '- `02_knowledge/{domain}/03_references/` — 环境配置、复现步骤、常见 bug 手顺',
     ],
     profiler: [
-      '- `02_project/{领域}/{项目名}/04_performance/` — benchmark / profiling / 对比',
-      '- `05_notes/02_handbook/` — 环境和复现步骤',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/04_performance/` — benchmark / profiling / 对比',
+      '- `02_knowledge/{domain}/03_references/` — 环境和复现步骤',
     ],
     observer: [
       '- `04_routine/` — 巡检和日报',
-      '- `02_project/{领域}/{项目名}/04_performance/` — 指标和异常归档',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/04_performance/` — 指标和异常归档',
     ],
     'exp-kernel': [
-      '- `02_project/{领域}/{项目名}/02_experiments/` — 实验记录',
-      '- `05_notes/02_handbook/` — 复现方法和环境配置',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/02_experiments/` — 实验记录',
+      '- `02_knowledge/{domain}/03_references/` — 复现方法和环境配置',
     ],
     'exp-training': [
-      '- `02_project/{领域}/{项目名}/02_experiments/` — 训练实验记录',
-      '- `05_notes/02_handbook/` — 环境配置和复现步骤',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/02_experiments/` — 训练实验记录',
+      '- `02_knowledge/{domain}/03_references/` — 环境配置和复现步骤',
     ],
     'exp-inference': [
-      '- `02_project/{领域}/{项目名}/02_experiments/` — 推理实验记录',
-      '- `05_notes/02_handbook/` — 配置、复现、排障手顺',
+      '- `02_knowledge/{domain}/02_projects/{项目名}/02_experiments/` — 推理实验记录',
+      '- `02_knowledge/{domain}/03_references/` — 配置、复现、排障手顺',
     ],
   }
   const links = [...commonLinks, ...(roleLinks[cfg.role] ?? [])]
@@ -826,48 +829,36 @@ ${focus}
 
 ## Vault 入口
 ${links.join('\n')}
-- \`00_hub/02_CONVENTIONS.md\` — **命名、frontmatter、路由（规范唯一来源）**
 
-## 内容路由
-> \`03_knowledge/\` = 有外部来源（能填 \`source:\`）；\`05_notes/\` = 自己写的大段文字。
+## 内容路由（Phase 2）
+> **核心区分**：\`02_knowledge/{domain}/\` = 按领域组织的知识（有外部来源、项目产出、参考资料）；\`03_thinking/\` = 自己写的思考（无需外部来源）
 > 重型产物（checkpoints、raw logs）保留在本地实验目录（vault 外）。
 
 | 内容类型 | 目标路径 |
 |----------|----------|
-| 文章/博客（有链接） | \`03_knowledge/02_reading_notes/\` |
-| 视频/课程笔记 | \`03_knowledge/01_lecture_note/{主题}/\` |
-| 论文阅读 | \`03_knowledge/04_papers/\` |
-| 调研综述 | \`03_knowledge/05_surveys/\` |
-| 操作手册 | \`03_knowledge/03_manual/\` |
-| 项目架构/源码走读 | \`02_project/{领域}/{项目名}/01_codewalk/\` |
-| 项目工程文档 | \`02_project/{领域}/{项目名}/03_engineering/\` |
-| 实验记录 | \`02_project/{领域}/{项目名}/02_experiments/\` |
-| 性能分析 | \`02_project/{领域}/{项目名}/04_performance/\` |
-| 经验沉淀/技术决策 | \`02_project/{领域}/{项目名}/05_insights/\` |
-| 配置手顺/bugfix | \`05_notes/02_handbook/\` |
-| 日报/周报 | \`04_routine/agents/{名字}/logs/\` 或 \`04_routine/daily-reports/\` |
-| 经验复盘（"沉淀一下"） | \`05_notes/03_experience/\` |
-| 灵感/闪念（"调研总结一下" → surveys） | \`05_notes/01_brainwave/\` |
+| 概念/阅读笔记/综述（有链接） | \`02_knowledge/{domain}/01_concepts/\` |
+| 项目架构/源码走读 | \`02_knowledge/{domain}/02_projects/{项目名}/01_codewalk/\` |
+| 实验记录 | \`02_knowledge/{domain}/02_projects/{项目名}/02_experiments/\` |
+| 工程/开发/debug | \`02_knowledge/{domain}/02_projects/{项目名}/03_engineering/\` |
+| 性能分析 | \`02_knowledge/{domain}/02_projects/{项目名}/04_performance/\` |
+| 经验沉淀/技术决策（项目级） | \`02_knowledge/{domain}/02_projects/{项目名}/05_insights/\` |
+| 手册/操作指南/参考资料 | \`02_knowledge/{domain}/03_references/\` |
+| 论文精读/深度分析 | \`02_knowledge/{domain}/04_deep-dives/\` |
+| 课程/体系化学习 | \`02_knowledge/zz_courses/\` |
+| 个人项目/作品集 | \`03_thinking/01_projects/\` |
+| 灵感/随笔/闪念 | \`03_thinking/02_sparks/\` |
+| 大段总结/经验沉淀/复盘 | \`03_thinking/03_notes/\` |
+| 日报/巡检/周报 | \`04_routine/agents/{名字}/logs/\` 或 \`04_routine/daily-reports/\` |
+
+> domain 示例：\`01_ai-infra\`、\`02_inference\`、\`03_quantization\`、\`04_post-training\`、\`06_agent\` 等
+> 命名、frontmatter 模板、文件前缀 → 详见 \`00_hub/02_CONVENTIONS.md\`
+> 执行原则、任务规则、审核流程、Git checklist → 详见 \`00_hub/05_WORKFLOW.md\`
 
 ## 角色规则与行为协议
 ${roleSeedFor(cfg.role)}
 `
 }
 
-
-function buildHeartbeat(cfg: AgentWorkspaceConfig): string {
-  return `# ${cfg.agentName} 心跳任务
-
-## 待办
-<!-- 格式: - [ ] 任务描述 -->
-
-## 已完成
-<!-- 格式: - [x] 任务描述 -->
-
----
-*系统每 30 分钟检查一次。添加 \`- [ ] 任务\` 条目即可。*
-`
-}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

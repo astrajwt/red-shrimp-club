@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "chat": {
+      "command": "node",
+      "args": [
+        "/home/jwt/workspace/slock-clone/daemon-src/dist/chat-bridge.js",
+        "--agent-id",
+        "96526718-2dfe-4cf4-9ec2-46d971727f8f",
+        "--server-url",
+        "http://127.0.0.1:3001",
+        "--auth-token",
+        "agent_96526718-2dfe-4cf4-9ec2-46d971727f8f_1774246883266"
+      ]
+    }
+  }
+}

@@ -382,7 +382,7 @@ server.tool(
 
 server.tool(
   'create_tasks',
-  'Create one or more tasks on a channel\'s task board. Tasks are assigned immediately when created. New tasks start in pending_discussion state and must be unlocked by coordinator via mark_task_discussed before assignee can begin.',
+  'Create one or more tasks on a channel\'s task board. Only coordinator agents can call this. Tasks are assigned immediately when created. New tasks start in pending_discussion state and must be unlocked by coordinator via mark_task_discussed before assignee can begin.',
   {
     channel: z.string().describe("The channel to create tasks in — e.g. '#engineering'"),
     tasks: z.array(z.object({
@@ -456,7 +456,7 @@ server.tool(
 
 server.tool(
   'update_task_status',
-  'Update task progress status for a task already assigned to you. Valid transitions: todo→in_progress, in_progress→in_review, in_progress→done, in_review→in_progress, in_review→done. Note: pending_discussion tasks are locked until coordinator calls mark_task_discussed.',
+  'Update task progress status for a task already assigned to you. Valid transitions: todo→in_progress, in_progress→in_review, in_review→in_progress. Assigned agents cannot mark tasks done directly; completion must go through reviewer approval. Note: pending_discussion tasks are locked until coordinator calls mark_task_discussed.',
   {
     channel: z.string().describe("The channel — e.g. '#engineering'"),
     task_number: z.number().describe('The task number to update (e.g. 3)'),
@@ -540,6 +540,309 @@ server.tool(
       const data = await res.json() as Record<string, unknown>
       if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${(data as any).error ?? res.status}` }] }
       return { content: [{ type: 'text' as const, text: 'Vault commit scheduled.' }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+// ── Agent Lifecycle ───────────────────────────────────────────────
+
+server.tool(
+  'create_agent',
+  'Create a new AI agent in this server. Only coordinator/tech-lead can call this. The agent is registered in the database, added to #all, and its workspace is initialized.',
+  {
+    name: z.string().describe("Agent display name (e.g. 'Silas', 'dev-worker-1')"),
+    description: z.string().optional().describe('Short description of the agent purpose'),
+    role: z.enum(['general', 'coordinator', 'tech-lead', 'ops', 'developer', 'profiler', 'investigator', 'observer', 'exp-kernel', 'exp-training', 'exp-inference']).default('general').describe('Agent role'),
+    runtime: z.enum(['claude', 'codex', 'kimi', 'gemini']).default('claude').describe('LLM runtime to use'),
+    modelId: z.string().optional().describe("Model ID override (e.g. 'claude-sonnet-4-6', 'claude-opus-4-6', 'gemini-3.1-pro', 'gemini-3-flash'). Auto-selected if omitted."),
+  },
+  async ({ name, description, role, runtime, modelId }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/create-agent`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ name, description, role, runtime, modelId }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: `Agent created: @${data.agent.name} (${data.agent.role})\nID: ${data.agent.id}\nWorkspace: ${data.agent.workspace}` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'delete_agent',
+  'Delete an agent from the server. Stops its process, removes from all channels, and deletes from database. Only coordinator/ops can call this. Cannot delete yourself.',
+  {
+    target_agent_name: z.string().describe("Name or ID of the agent to delete (e.g. 'Silas' or UUID)"),
+  },
+  async ({ target_agent_name }) => {
+    try {
+      // Resolve name to ID first
+      const lookupRes = await fetch(`${serverUrl}/internal/agent/${agentId}/server`, { method: 'GET', headers: commonHeaders })
+      const lookupData = await lookupRes.json() as any
+      const found = lookupData.agents?.find((a: any) =>
+        a.name.toLowerCase() === target_agent_name.toLowerCase() || a.id === target_agent_name
+      )
+      const targetId = found?.id ?? target_agent_name
+
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/delete-agent`, {
+        method: 'DELETE', headers: commonHeaders,
+        body: JSON.stringify({ targetAgentId: targetId }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: `Agent deleted: @${data.deleted.name} (${data.deleted.id})` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'restart_agent',
+  'Restart a running agent process. Stops it and spawns a new process with the same config. Only coordinator/tech-lead/ops can call this.',
+  {
+    target_agent_name: z.string().describe("Name or ID of the agent to restart (e.g. 'Brandeis' or UUID)"),
+  },
+  async ({ target_agent_name }) => {
+    try {
+      // Resolve name to ID
+      const lookupRes = await fetch(`${serverUrl}/internal/agent/${agentId}/server`, { method: 'GET', headers: commonHeaders })
+      const lookupData = await lookupRes.json() as any
+      const found = lookupData.agents?.find((a: any) =>
+        a.name.toLowerCase() === target_agent_name.toLowerCase() || a.id === target_agent_name
+      )
+      const targetId = found?.id ?? target_agent_name
+
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/restart-agent`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ targetAgentId: targetId }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: `Agent restarted: @${data.agent.name} (pid: ${data.agent.pid ?? 'starting'})` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'wake_agent',
+  'Wake a sleeping agent. If the agent is already running, does nothing. Only coordinator/tech-lead/ops can call this.',
+  {
+    target_agent_name: z.string().describe("Name of the agent to wake (e.g. 'Sable-infer')"),
+  },
+  async ({ target_agent_name }) => {
+    try {
+      // Resolve name to ID
+      const lookupRes = await fetch(`${serverUrl}/internal/agent/${agentId}/server`, { method: 'GET', headers: commonHeaders })
+      const lookupData = await lookupRes.json() as any
+      const found = lookupData.agents?.find((a: any) =>
+        a.name.toLowerCase() === target_agent_name.toLowerCase() || a.id === target_agent_name
+      )
+      if (!found) return { content: [{ type: 'text' as const, text: `Error: Agent "${target_agent_name}" not found` }] }
+
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/wake-agent`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ targetAgentId: found.id }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: `@${data.agent}: ${data.status}` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+// ── Channel Management ───────────────────────────────────────────
+
+server.tool(
+  'create_channel',
+  'Create a new channel with specific members. Unlike create_task_room, this lets you choose exactly who to include and set a custom channel name.',
+  {
+    name: z.string().describe("Channel name (e.g. 'red-shrimp-evo'). Will be kebab-cased."),
+    description: z.string().optional().describe('Channel description'),
+    member_names: z.array(z.string()).optional().describe("Agent/human names to invite (e.g. ['Donovan', 'Brandeis', 'Jwt2077']). Creator is always included."),
+  },
+  async ({ name, description, member_names }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/create-channel`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ name, description, member_names }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      const members = data.members?.map((m: string) => `@${m}`).join(', ') ?? ''
+      return { content: [{ type: 'text' as const, text: `Channel created: #${data.channel.name}\nMembers: ${members}` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'add_channel_member',
+  'Add member(s) to an existing channel. Use this to invite agents or humans into a channel they are not yet part of.',
+  {
+    channel_name: z.string().describe("Channel name (e.g. 'red-shrimp-core' or '#red-shrimp-core')"),
+    member_names: z.array(z.string()).describe("Agent/human names to add (e.g. ['Akara', 'Jwt2077'])"),
+  },
+  async ({ channel_name, member_names }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/add-channel-member`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ channel_name, member_names }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      const added = data.added?.map((m: string) => `@${m}`).join(', ') || 'none'
+      const notFound = data.not_found?.length ? `\nNot found: ${data.not_found.join(', ')}` : ''
+      return { content: [{ type: 'text' as const, text: `Added to #${data.channel}: ${added}${notFound}` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+// ── Organization Management ─────────────────────────────────────
+
+server.tool(
+  'update_agent_role',
+  'Change an agent\'s role (coordinator/tech-lead/ops/developer/general/exp-kernel/exp-training/exp-inference/planner/reviewer/executor). Only coordinator/tech-lead/ops can call this.',
+  {
+    target_agent_name: z.string().describe("Name of the agent to update (e.g. 'Akara')"),
+    role: z.string().describe("New role (e.g. 'reviewer', 'planner', 'executor', 'coordinator', 'ops')"),
+  },
+  async ({ target_agent_name, role }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/update-agent-role`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ target_agent_name, role }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: `@${data.agent} role: ${data.old_role} → ${data.new_role}` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'set_agent_parent',
+  'Set the parent/supervisor agent for an agent (org hierarchy). Pass null parent to clear.',
+  {
+    target_agent_name: z.string().describe("Name of the agent to set parent for (e.g. 'Sable-infer')"),
+    parent_agent_name: z.string().nullable().describe("Name of the parent/supervisor agent (e.g. 'Brandeis'), or null to clear"),
+  },
+  async ({ target_agent_name, parent_agent_name }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/set-agent-parent`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ target_agent_name, parent_agent_name }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: `@${data.agent} parent set to: ${data.parent}` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+// ── Cron Job Management ──────────────────────────────────────────
+
+server.tool(
+  'create_cron_job',
+  'Create a persistent cron job in the database. The job survives agent restarts. Use standard cron expressions (e.g. "0 8 * * *" = daily 8am).',
+  {
+    cron_expr: z.string().describe('Cron expression (e.g. "0 8 * * *" for daily 8am, "0 0 * * 1" for Monday midnight)'),
+    prompt: z.string().describe('The prompt/instruction to execute on each trigger'),
+    target_agent: z.string().optional().describe('Agent name to run the job (defaults to self)'),
+    channel: z.string().optional().describe('Channel to post in (e.g. "#red-shrimp-core")'),
+  },
+  async ({ cron_expr, prompt, target_agent, channel }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/cron`, {
+        method: 'POST', headers: commonHeaders,
+        body: JSON.stringify({ cron_expr, prompt, target_agent, channel }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: `${data.message} (id: ${data.job_id})` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'list_cron_jobs',
+  'List all persistent cron jobs from the database.',
+  {},
+  async () => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/cron`, {
+        method: 'GET', headers: commonHeaders,
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      const jobs = (data.jobs ?? []) as any[]
+      if (jobs.length === 0) return { content: [{ type: 'text' as const, text: 'No cron jobs found.' }] }
+      const lines = jobs.map((j: any) =>
+        `[${j.id}] ${j.enabled ? '✓' : '✗'} ${j.cron_expr} → ${j.agent_name}${j.channel_name ? ` in #${j.channel_name}` : ''}: ${j.prompt.slice(0, 80)}${j.prompt.length > 80 ? '…' : ''}`
+      )
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'update_cron_job',
+  'Update an existing cron job (enable/disable, change schedule or prompt).',
+  {
+    job_id: z.string().describe('The cron job ID to update'),
+    enabled: z.boolean().optional().describe('Enable or disable the job'),
+    cron_expr: z.string().optional().describe('New cron expression'),
+    prompt: z.string().optional().describe('New prompt'),
+  },
+  async ({ job_id, enabled, cron_expr, prompt }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/cron/${job_id}`, {
+        method: 'PATCH', headers: commonHeaders,
+        body: JSON.stringify({ enabled, cron_expr, prompt }),
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: `Cron job ${job_id} updated.` }] }
+    } catch (err: any) {
+      return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
+    }
+  },
+)
+
+server.tool(
+  'delete_cron_job',
+  'Delete a cron job from the database permanently.',
+  {
+    job_id: z.string().describe('The cron job ID to delete'),
+  },
+  async ({ job_id }) => {
+    try {
+      const res = await fetch(`${serverUrl}/internal/agent/${agentId}/cron/${job_id}`, {
+        method: 'DELETE', headers: commonHeaders,
+      })
+      const data = await res.json() as any
+      if (!res.ok) return { content: [{ type: 'text' as const, text: `Error: ${data.error}` }] }
+      return { content: [{ type: 'text' as const, text: data.message }] }
     } catch (err: any) {
       return { content: [{ type: 'text' as const, text: `Error: ${err.message}` }] }
     }
